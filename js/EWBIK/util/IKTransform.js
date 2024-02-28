@@ -1,0 +1,295 @@
+import { Vec3, Vec3d, Vec3f } from "./vecs.js";
+import { Ray, Rayd, Rayf } from "./Ray.js";
+import { MRotation, Rot } from "./Rot.js";
+import { generateUUID } from "./uuid.js";
+
+export class IKTransform {
+    static totalTransforms = 0;
+    static LEFT = -1;
+    static RIGHT = 1;
+    static NONE = -1;
+    static X = 0;
+    static Y = 1;
+    static Z = 2;
+    id = IKTransform.totalTransforms;
+
+    chirality = IKTransform.RIGHT;
+    rotation = new Rot();
+    _inverseRotation = new Rot();
+    inverseDirty = true;
+    raysDirty = true; 
+    translate = new Vec3([0,0,0]);
+    scale = new Vec3([1,1,1]);
+    xBase = new Vec3([1,0,0]);
+    yBase = new Vec3([0,1,0]);
+    zBase = new Vec3([0,0,1]);
+
+    _xRay = new Ray(this.translate, this.xBase);
+    _yRay = new Ray(this.translate, this.yBase);
+    _zRay = new Ray(this.translate, this.zBase);
+
+    /**
+     * 
+     * @param {instanceof IKTransform or Vec3 or Ray} origin if IKTransform, other arguments are ignored and a copy is made of the input IKTransform, otherwise the origin Vec3 is treated as the origin of the newly created basis.
+     * @param {Ray or Vec3} x x direction heading or ray
+     * @param {Ray or Vec3} y y direction heading or ray
+     * @param {Ray or Vec3} z z direction heading or ray
+     */
+    constructor(origin=null, x = null, y = null, z = null, ikd = 'IKNode-'+(IKTransform.totalTransforms+1)) {
+        this.ikd = 'IKTransform'-IKTransform.totalTransforms+1;
+        IKTransform.totalNodes += 1; 
+        if (origin instanceof IKTransform) {
+            this.initializeBasisAtOrigin(origin);
+        } else if (origin instanceof Ray && x instanceof Ray && y instanceof Ray) {
+            this.initializeBasisWithRays(origin, x, y);
+        } else if (origin != null) {
+            // Assuming origin is Vec3 and x, y, z are Vec3 directions
+            this.initializeBasisWithDirections(origin, x, y, z);
+        }
+        this.refreshPrecomputed();
+    }
+
+    createPrioritzedRotation(xHeading, yHeading, zHeading) {		
+        let tempV = zHeading.copy(); 
+        tempV.setComponents(0,0,0);
+        let toYZ = new Rot(yBase, zBase, yHeading, zHeading); 
+        toYZ.applyTo(yBase, tempV);
+        let toY = new Rot(tempV, yHeading);
+        return toY.applyTo(toYZ);
+    }
+
+    initializeBasisAtOrigin(origin) {
+        this.translate = origin.copy();
+        this.setBaseVectors();
+        this.initializeRays();
+    }
+
+    initializeBasisWithRays(x, y, z) {
+        this.translate = x.p1.copy();
+        this._xRay = x.copy();
+        this._yRay = y.copy();
+        this._zRay = z.copy();
+        this.xBase.setComponents(xRay.mag(),0, 0);
+        this.yBase.setComponents(0, yRay.mag());
+        this.zBase.setComponents(0, 0, zRay.mag());
+        this.rotation = this.createPrioritzedRotation(this._xRay.heading(), this._yRay.heading(), this._zRay.heading());
+    }
+
+    initializeBasisWithDirections(origin, x, y, z) {
+        this.translate = origin.copy();
+        this._xRay = new Ray(origin.copy(), origin.addCopy(x));
+        this._yRay = new Ray(origin.copy(), origin.addCopy(y));
+        this._zRay = new Ray(origin.copy(), origin.addCopy(z));
+        this.xBase.setComponents(xRay.mag(),0, 0);
+        this.yBase.setComponents(0, yRay.mag());
+        this.zBase.setComponents(0, 0, zRay.mag());
+        this.rotation = this.createPrioritzedRotation(this._xRay.heading(), this._yRay.heading(), this._zRay.heading());
+    }
+
+
+    initializeRays() {
+        let zero = this.translate.copy();
+        zero.setComponents(0, 0, 0);
+        this._xRay = new Ray(zero.copy(), this.xBase.copy());
+        this._yRay = new Ray(zero.copy(), this.yBase.copy());
+        this._zRay = new Ray(zero.copy(), this.zBase.copy());
+    }
+
+    adoptValues(input) {
+        this.translate.setComponents(input.translate.x, input.translate.y, input.translate.z);
+        this.rotation.rotation.q0 = input.rotation.rotation.q0;
+        this.rotation.rotation.q1 = input.rotation.rotation.q1;
+        this.rotation.rotation.q2 = input.rotation.rotation.q2;
+        this.rotation.rotation.q3 = input.rotation.rotation.q3;
+        this.xBase.set(input.xBase);
+        this.yBase.set(input.yBase);
+        this.zBase.set(input.zBase);
+        this._xRay.setP1(input.xRay.p1); 
+        this._xRay.setP2(input.xRay.p2);
+        this._yRay.setP1(input.yRay.p1); 
+        this._yRay.setP2(input.yRay.p2);
+        this._zRay.setP1(input.zRay.p1); 
+        this._zRay.setP2(input.zRay.p2);
+        this.refreshPrecomputed();
+        return this;
+    }
+
+    adoptValuesFromTransformState(input) {
+        this.translate.setComponents(input.translation);
+        this.rotation.rotation.q0 = input.rotation[0];
+        this.rotation.rotation.q1 = input.rotation[1];
+        this.rotation.rotation.q2 = input.rotation[2];
+        this.rotation.rotation.q3 = input.rotation[3];
+        this.xBase.setComponents(input.scale[0], 0, 0);
+        this.yBase.setComponents(0, input.scale[1], 0,);
+        this.zBase.setComponents(0, 0, input.scale[2]);
+        this.refreshPrecomputed();
+        return this;
+    }
+
+    set(translation, rotation, scale) {
+        this.translate.set(translation);
+        this.xBase.setComponents(scale.x, 0, 0);
+        this.yBase.setComponents(0, scale.y, 0);
+        this.zBase.setComponents(0, 0, scale.z);
+        this.rotation.set(rotation.q0, rotation.q1, rotation.q2, rotation.q3, true);
+        this.refreshPrecomputed();
+        return this;
+    }
+
+    setFromArrays(translation, rotation, scale) {
+        this.translate.setComponents(...translation);
+        this.xBase.setComponents(scale[0], 0, 0);
+        this.yBase.setComponents(0, scale[1], 0);
+        this.zBase.setComponents(0, 0, scale[2]);
+        this.rotation.set(rotation[0], rotation[1], rotation[2], rotation[3], true);
+        this.refreshPrecomputed();
+        return this;
+    }
+
+    setTransformToLocalOf(globalinput, localoutput) {
+        this.setVecToLocalOf(globalinput.translate, localoutput.translate);
+        this.inverseRotation.applyToRot(globalinput.rotation, localoutput.rotation);
+        localoutput.refreshPrecomputed();
+    }
+
+    setVecToLocalOf(globalInput, localOutput) {
+        localOutput.set(globalInput);
+		localOutput.sub(this.translate); 
+        this.inverseRotation.applyToVec(globalInput, localOutput);
+    }
+
+    setTransformToGlobalOf(localInput, globalOutput) {
+		this.rotation.applyToRot(localInput.rotation, globalOutput.rotation);
+		this.setVecToGlobalOf(localInput.translate, globalOutput.translate);		
+		globalOutput.refreshPrecomputed();
+ 	}
+
+    setVecToGlobalOf(localInput, globalOutput) {
+        this.rotation.applyToVec(localInput, globalOutput);
+        globalOutput.add(this.translate);
+    }
+
+
+    rotateTo(newRotation) {				
+		this.rotation.set(newRotation); 
+		this.refreshPrecomputed();
+	}
+
+	rotateBy(addRotation) {		
+		addRotation.applyToRot(this.rotation, this.rotation);
+		this.refreshPrecomputed();
+	}
+
+    getLocalOfVec(inVec) {
+        const result = inVec.copy();
+        this.setVecToLocalOf(inVec, result);
+        return result;  
+    }
+
+    getLocalOfRotation(inRot) {		
+        let resultNew =  this.inverseRotation.applyToRot(inRot).applyToRot(this.rotation);						
+        return resultNew;			
+    }
+
+    translateBy(vec) {
+        this.translate.add(vec);
+    }
+
+    translateTo(vec) {
+        this.translate.setComponents(...vec.components);
+    }
+
+    refreshPrecomputed() {
+        this.raysDirty = true;
+        this.inverseDirty = true;
+        //this.rotation.setToReversion(this._inverseRotation);
+        //this.updateRays();
+    }
+
+    get inverseRotation() {
+        if(this.inverseDirty) {
+            this.rotation.setToReversion(this._inverseRotation);
+            this.inverseDirty = false;
+        }
+        return this._inverseRotation;
+    }
+
+    get xRay() {
+        if(this.raysDirty) this.updateRays();
+        return this._xRay;
+    }
+    get yRay() {
+        if(this.raysDirty) this.updateRays();
+        return this._yRay;
+    }
+    get zRay() {
+        if(this.raysDirty) this.updateRays();
+        return this._zRay;
+    }
+
+    isAxisFlipped(axis) {
+        return false;
+    }
+
+
+    getXHeading() {
+        return this.xRay.heading();
+    }
+    getYHeading() {
+        return this.yRay.heading();
+    }
+    getZHeading() {
+        return this.zRay.heading();
+    }
+
+    updateRays() {
+        this._xRay.setP1(this.translate);
+        this._xRay.setHeading(this.xBase);
+        this._yRay.setP1(this.translate);
+        this._yRay.setHeading(this.yBase);
+        this._zRay.setP1(this.translate);
+        this._zRay.setHeading(this.zBase);
+        this.rotation.applyToRay(this._xRay, this._xRay);
+        this.rotation.applyToRay(this._yRay, this._yRay);
+        this.rotation.applyToRay(this._zRay, this._zRay);
+        this.scale.setComponents([this.xBase.mag(), this.yBase.mag(), this.zBase.mag()]);
+        this.raysDirty = false;
+    }
+
+    getOrigin() {
+        return this.translate;
+    }
+
+    toString() {
+        let xh = this.xRay.heading();
+        let yh = this.yRay.heading();
+        let zh = this.zRay.heading();
+        let xMag = xh.mag();
+        let yMag = yh.mag();
+        let zMag = zh.mag();
+        let rotax = this.rotation.getAxis();
+        let chiralityStr = this.chirality === IKTransform.LEFT ? "LEFT" : "RIGHT";
+        return `-----------
+${chiralityStr} handed
+origin: ${this.translate.toString()}
+rot Axis: ${rotax.toString()}, Angle: ${Math.toDegrees(this.rotation.getAngle())}
+xHead: ${xh.toString()}, mag: ${xMag.toString()}
+yHead: ${yh.toString()}, mag: ${yMag.toString()}
+zHead: ${zh.toString()}, mag: ${zMag.toString()}
+`;
+    }
+
+    copy() {
+		return  new IKTransform().adoptValues(this); 
+	}
+
+}
+
+export class CartesianTransform extends IKTransform {
+
+	copy() {
+		return  new CartesianTransform(this); 
+	}
+
+}

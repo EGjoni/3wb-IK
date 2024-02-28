@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Three.js Skeleton Interaction</title>
+    <script type="importmap">
+        {
+          "imports": {
+            "three": "https://unpkg.com/three@latest/build/three.module.js",
+            "orbitControls": "https://unpkg.com/three/examples/jsm/controls/OrbitControls.js",
+            "transformControls": "https://unpkg.com/three/examples/jsm/controls/TransformControls.js"
+          }
+        }
+    </script>
+    <style>
+        body {
+            margin: 0;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <script type="module">
+        const THREE = await import('three');
+        import { TransformControls } from 'transformControls';
+        import { OrbitControls } from 'orbitControls';
+        import { EWBIK } from "./js/EWBIK/EWBIK.js";
+        import { IKNode, TrackingNode } from "./js/EWBIK/util/IKNodes.js";
+        import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
+
+        let camera, renderer;
+        let orbitControls, boneCtrls, pinOrientCtrls, pinTranslateCtrls;
+        var scene = null;
+        const boneList = [];
+        const pinsList = [];
+        const targetsMeshList = [];
+        const rootBone = new THREE.Bone();
+        const bone1 = new THREE.Bone();
+        const bone2 = new THREE.Bone();
+        const right3 = new THREE.Bone();
+        const right4 = new THREE.Bone();
+        const right5 = new THREE.Bone();
+        const left3 = new THREE.Bone();
+        const left4 = new THREE.Bone();
+        const left5 = new THREE.Bone();
+        const lower_right3 = new THREE.Bone();
+        const lower_right4 = new THREE.Bone();
+        const lower_right5 = new THREE.Bone();
+        const lower_left3 = new THREE.Bone();
+        const lower_left4 = new THREE.Bone();
+        const lower_left5 = new THREE.Bone();
+        
+
+        const axesHelperSize = 14; // Adjust the size as needed
+        const boneAxesHelper = new THREE.AxesHelper(axesHelperSize);
+
+        const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.5);
+        
+
+
+       
+        /** @type {EWBIK} */
+        let armature = null;
+
+
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.add(hemisphereLight);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 20, 30);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+
+            // Bones
+
+
+            //bone1.setStiffness(0.9);
+            // left2.position.x = -2;
+            //right4.position.x = 5;
+            scene.add(rootBone);
+            rootBone.add(bone1);
+            bone1.add(bone2);
+            //bone2.add(right3);
+            bone2.add(right3);
+            right3.add(right4);
+            right4.add(right5);
+
+            bone2.add(left3);
+            left3.add(left4);
+            left4.add(left5);
+
+            bone1.position.y = 1;
+            bone1.add(lower_left3);
+            lower_left3.add(lower_left4);
+            lower_left4.add(lower_left5);
+            bone1.add(lower_right3);
+            lower_right3.add(lower_right4);
+            lower_right4.add(lower_right5);
+
+            lower_right3.position.x = 2.5;
+            lower_right3.position.y = -0.1;
+            lower_right4.position.y = -2;
+            lower_right4.position.x = 0.5
+            lower_right5.position.y = -4;
+            lower_right5.height = 4;
+            lower_left3.position.x = -1.5;
+            lower_left3.position.y = -0.1;
+            lower_left4.position.y = -4;
+            lower_left5.position.y = -4;
+            lower_left5.height = 4;
+
+            bone2.color = 0xffff00;
+            lower_left3.color = 0xff00ff;
+            lower_left4.color = 0x00ffff;
+            lower_left5.color = 0x0000ff;
+
+            bone2.position.y = 4;
+            right3.position.x = 2.5;
+            right3.position.y = 3;
+            right4.position.y = 2;
+            right4.position.x = 0.5
+            right5.position.y = 4;
+            right5.height = 4;
+            left3.position.x = -1.5;
+            left3.position.y = 3;
+            left4.position.y = 2;
+            left5.position.y = 4;
+            left5.height = 4;
+
+
+            armature = new EWBIK(rootBone);
+            window.Armature = armature;
+            window.bone1 = bone1;
+
+            let newBone = new THREE.Bone();
+
+
+            boneList.push(rootBone, bone1, bone2, right3, left3, right4, left4, right5, left5, 
+            lower_right3, lower_left3, lower_right4, lower_left4, lower_right5, lower_left5);
+
+            window.addEventListener('resize', onWindowResize, false);
+
+            document.addEventListener('keydown', function (event) {
+                switchSelected(event.key);
+            });
+
+            //let rootPin = new IKPin(rootBone);
+            let pinA = new IKPin(right5);
+            let pinB = new IKPin(left5);
+            let pinC = new IKPin(lower_left5);
+            let pinD = new IKPin(lower_right5);
+
+            makePinsList();
+
+            armature.maybeInferOrientation(rootBone);
+            armature.regenerateShadowSkeleton(true);            
+            armature.showBones();
+
+            /* const helper = new THREE.SkeletonHelper(rootBone);
+            helper.material.linewidth = 5; // Make the helper lines thicker
+            scene.add(helper);*/
+        }
+
+        function makePinsList() {
+            pinsList.splice(0,0);
+            targetsMeshList.splice(0,0);
+            let i = 0; 
+            for(let b of boneList) {
+                if(b.getIKPin() != null) {
+                    let ikpin = b.getIKPin();
+                    if(ikpin.targetNode.toTrack == null) {
+                        const geometry = new THREE.BoxGeometry();
+                        const material = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+                        const targMesh = new THREE.Mesh(geometry, material);                         
+                        scene.add(targMesh); 
+                        ikpin.targetNode.toTrack = targMesh;
+                        ikpin.alignToBone();
+                    }
+                    pinsList.push(ikpin);
+                    targetsMeshList.push(ikpin.targetNode.toTrack);
+                }
+                i++;
+            }
+        }
+
+        let transformActive = false; 
+        let lastmousedown = Date.now();
+        function initControls() {
+            orbitControls = new OrbitControls(camera, renderer.domElement);
+            orbitControls.addEventListener('change', render);
+
+            boneCtrls = new TransformControls(camera, renderer.domElement);
+            boneCtrls.addEventListener('change', () => {
+                render();
+            });
+            boneCtrls.addEventListener('dragging-changed', function (event) {
+                transformActive = event.value;
+                orbitControls.enabled = !event.value;
+                pinOrientCtrls.enabled = !event.value;
+                pinTranslateCtrls.enabled = !event.value;
+
+            });
+            boneCtrls.mode = 'rotate';
+
+            pinOrientCtrls = new TransformControls(camera, renderer.domElement);
+            pinOrientCtrls.addEventListener('change', render);
+            pinOrientCtrls.addEventListener('dragging-changed', function (event) {
+                orbitControls.enabled = !event.value;
+                boneCtrls.enabled = !event.value;
+                pinTranslateCtrls.enabled = !event.value;
+                render();
+            });
+            pinOrientCtrls.addEventListener('objectChange', function (event) {
+                //orbitControls.enabled = !event.value;
+                //boneCtrls.enabled = !event.value;
+                //pinTranslateCtrls.enabled = !event.value;
+                transformActive = event.value;
+                const tracknode = pinsList[selectedPinIdx].targetNode;
+                tracknode.adoptTrackedLocal();
+                if(interactionSolve)
+                    Armature.solve();
+                render();
+            });
+            pinOrientCtrls.mode = 'rotate';
+
+            pinTranslateCtrls = new TransformControls(camera, renderer.domElement);
+            pinTranslateCtrls.addEventListener('changed', render);
+            pinTranslateCtrls.addEventListener('dragging-changed', function (event) {
+                orbitControls.enabled = !event.value;
+                boneCtrls.enabled = !event.value;
+                pinOrientCtrls.enabled = !event.value;
+                transformActive = event.value;
+                render();
+            });
+            pinTranslateCtrls.addEventListener('objectChange', function (event) {
+                //orbitControls.enabled = false;
+                //boneCtrls.enabled = !event.value;
+                transformActive = event.value;
+                const tracknode = pinsList[selectedPinIdx].targetNode;
+                tracknode.adoptTrackedLocal();
+                if(interactionSolve)
+                    Armature.solve();
+                render();
+                //pinOrientCtrls.enabled = !event.value;
+            });
+            pinTranslateCtrls.mode = 'translate';
+            scene.add(pinOrientCtrls);
+            scene.add(boneCtrls);
+            pinOrientCtrls.size = 0.5;
+            pinTranslateCtrls.size = 1.2;
+            scene.add(pinTranslateCtrls);
+            
+
+            window.addEventListener('click', (event) => {
+                let downdelta = Date.now() - lastmousedown;
+                if(transformActive || downdelta > 250) return; 
+                
+                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(targetsMeshList, false);
+                selectedPinIdx = targetsMeshList.indexOf(intersects[0]?.object);
+                if(selectedPinIdx == -1) {
+                    pinOrientCtrls.detach();
+                    pinTranslateCtrls.detach();    
+                } else {
+                    pinOrientCtrls.attach(targetsMeshList[selectedPinIdx]);
+                    pinTranslateCtrls.attach(targetsMeshList[selectedPinIdx]);
+                }
+            });
+
+            window.addEventListener('mousedown', (event) => {
+                lastmousedown = Date.now();
+            }, false);
+
+        }
+
+        var selectedBoneIdx = 0;
+        var selectedPinIdx = -1;
+
+        async function switchSelected(key) {
+            let selectedBone = null;
+            switch (key) {
+                case '1':
+                    selectedBoneIdx = (selectedBoneIdx + 1) % boneList.length
+                    selectedBone = boneList[selectedBoneIdx];
+                    boneCtrls.attach(selectedBone);
+                    selectedBone.add(boneAxesHelper);
+                    break;
+                case '2':
+                    selectedBoneIdx = Math.abs(selectedBoneIdx - 1) % boneList.length
+                    selectedBone = boneList[selectedBoneIdx];
+                    boneCtrls.attach(selectedBone);
+                    selectedBone.add(boneAxesHelper);
+                    break;
+                case 'p':
+                    selectedPinIdx = (selectedPinIdx + 1) % pinsList.length;
+                    pinOrientCtrls.attach(targetsMeshList[selectedPinIdx]);
+                    pinTranslateCtrls.attach(targetsMeshList[selectedPinIdx]);
+                    break;
+                case 'a':
+                    autoSolve = !autoSolve;
+                    break;
+                case 's':
+                    await Armature.solve();
+                    break;
+                case 'i': 
+                    autoSolve = false;
+                    interactionSolve = true;
+                case 'r':
+                    boneCtrls.mode = 'rotate';
+                    break;
+                case 't':
+                    boneCtrls.mode = 'translate';
+                    break;
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            render();
+        }
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        
+        
+        
+        
+        var interactionSolve = true;
+        var autoSolve = false;
+        async function animate() {
+            if(autoSolve)
+                await Armature.solve();
+            requestAnimationFrame(animate);
+            render();
+        }
+
+        function render() {
+            renderer.render(scene, camera);
+        }
+
+        init();
+        initControls();
+        animate();
+    </script>
+</body>
+
+</html>

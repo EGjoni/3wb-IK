@@ -1,0 +1,27 @@
+Shameless Plug License
+
+Project Name: Everything Will Be IK
+Project URL: https://github.com/EGjoni/EverythingWillBeIK
+
+Copyright (c) 2024 Eron Gjoni
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+1. The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+2. Any use, remix, modification, or redistribution of this project, library, or its derivatives requires reasonable attribution in a manner that is clear and conspicuous within the standards of the medium of distribution.
+  
+  * In the case of source code redistribution, the text of this license is sufficient.
+
+  * In the case of any packaged, compiled, or other user-facing redistribution, the name or logo of this project or library and/or its authors must appear among any user-facing sections dedicated to the purposes of crediting or acknowledging the involvement or contributions of third parties if any such sections exist.
+
+  * In the case of use for any academic or research publications, this project's repository and its authors must appear in the citations section in whatever manner or format allowed or preferred by the publication.
+
+  * In the case of incidental redistribution where the library or project happens to be acquired by the redistributor as part of a larger package, but is otherwise unused and unsable for any downstream purpose, no attribution is required.
+
+3. The original author or copyright holder of this library or project retains exclusive rights to grant exemptions to this license.
+
+
+The primary intent of this license is to maximize exposure for the original project in the hopes that downstream users may benefit from contributions that would otherwise be limited to the tools that make use of it. The secondary intent of this license is to credit the developers so that they can get jobs. All clauses should be interpreted with the general spirit of these two intents in mind.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
