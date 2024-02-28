@@ -4,11 +4,10 @@ import { IKTransform } from "./util/IKTransform.js";
 import {Vec3} from "./util/vecs.js";
 import {Rot} from "./util/Rot.js";
 import { IKNode } from "./util/IKNodes.js";
-import { Bone } from "three";
 import { IKPin } from "./betterbones/IKpin.js";
-import { AbstractKusudama } from "./betterbones/Kusudama.js";
-import { Object3D } from "../three/three.module.js";
+import { AbstractKusudama } from "./betterbones/Kusudama.js";;
 const THREE = await import('three');
+import { Bone } from "three";
 //import * as THREE from 'three';
 //import { LineSegments, Bone } from "three";
 

@@ -2,9 +2,8 @@ import { Vec3, Vec3d, Vec3f } from "./vecs.js";
 import { MRotation, Rot } from "./Rot.js";
 import { IKTransform } from "./IKTransform.js";
 import { generateUUID } from "./uuid.js";
-//const THREE = await import('three');
-import { Quaternion, Vector3, Object3D, Matrix4 } from "../../three/three.module.js";
-//import { Object3D } from "../../three/three.module.js";
+const THREE = await import('three');
+import { Quaternion, Vector3, Object3D, Matrix4 } from "three";
 
 
 function lerp(start, end, t) {

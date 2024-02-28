@@ -53,16 +53,16 @@
         const lower_left3 = new THREE.Bone();
         const lower_left4 = new THREE.Bone();
         const lower_left5 = new THREE.Bone();
-        
+
 
         const axesHelperSize = 14; // Adjust the size as needed
         const boneAxesHelper = new THREE.AxesHelper(axesHelperSize);
 
         const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.5);
-        
 
 
-       
+
+
         /** @type {EWBIK} */
         let armature = null;
 
@@ -149,8 +149,8 @@
             let newBone = new THREE.Bone();
 
 
-            boneList.push(rootBone, bone1, bone2, right3, left3, right4, left4, right5, left5, 
-            lower_right3, lower_left3, lower_right4, lower_left4, lower_right5, lower_left5);
+            boneList.push(rootBone, bone1, bone2, right3, left3, right4, left4, right5, left5,
+                lower_right3, lower_left3, lower_right4, lower_left4, lower_right5, lower_left5);
 
             window.addEventListener('resize', onWindowResize, false);
 
@@ -167,7 +167,7 @@
             makePinsList();
 
             armature.maybeInferOrientation(rootBone);
-            armature.regenerateShadowSkeleton(true);            
+            armature.regenerateShadowSkeleton(true);
             armature.showBones();
 
             /* const helper = new THREE.SkeletonHelper(rootBone);
@@ -176,17 +176,17 @@
         }
 
         function makePinsList() {
-            pinsList.splice(0,0);
-            targetsMeshList.splice(0,0);
-            let i = 0; 
-            for(let b of boneList) {
-                if(b.getIKPin() != null) {
+            pinsList.splice(0, 0);
+            targetsMeshList.splice(0, 0);
+            let i = 0;
+            for (let b of boneList) {
+                if (b.getIKPin() != null) {
                     let ikpin = b.getIKPin();
-                    if(ikpin.targetNode.toTrack == null) {
+                    if (ikpin.targetNode.toTrack == null) {
                         const geometry = new THREE.BoxGeometry();
                         const material = new THREE.MeshLambertMaterial({ color: 0xff0000 });
-                        const targMesh = new THREE.Mesh(geometry, material);                         
-                        scene.add(targMesh); 
+                        const targMesh = new THREE.Mesh(geometry, material);
+                        scene.add(targMesh);
                         ikpin.targetNode.toTrack = targMesh;
                         ikpin.alignToBone();
                     }
@@ -197,7 +197,7 @@
             }
         }
 
-        let transformActive = false; 
+        let transformActive = false;
         let lastmousedown = Date.now();
         function initControls() {
             orbitControls = new OrbitControls(camera, renderer.domElement);
@@ -231,7 +231,7 @@
                 transformActive = event.value;
                 const tracknode = pinsList[selectedPinIdx].targetNode;
                 tracknode.adoptTrackedLocal();
-                if(interactionSolve)
+                if (interactionSolve)
                     Armature.solve();
                 render();
             });
@@ -252,7 +252,7 @@
                 transformActive = event.value;
                 const tracknode = pinsList[selectedPinIdx].targetNode;
                 tracknode.adoptTrackedLocal();
-                if(interactionSolve)
+                if (interactionSolve)
                     Armature.solve();
                 render();
                 //pinOrientCtrls.enabled = !event.value;
@@ -263,20 +263,20 @@
             pinOrientCtrls.size = 0.5;
             pinTranslateCtrls.size = 1.2;
             scene.add(pinTranslateCtrls);
-            
+
 
             window.addEventListener('click', (event) => {
                 let downdelta = Date.now() - lastmousedown;
-                if(transformActive || downdelta > 250) return; 
-                
+                if (transformActive || downdelta > 250) return;
+
                 mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
                 mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
                 raycaster.setFromCamera(mouse, camera);
                 const intersects = raycaster.intersectObjects(targetsMeshList, false);
                 selectedPinIdx = targetsMeshList.indexOf(intersects[0]?.object);
-                if(selectedPinIdx == -1) {
+                if (selectedPinIdx == -1) {
                     pinOrientCtrls.detach();
-                    pinTranslateCtrls.detach();    
+                    pinTranslateCtrls.detach();
                 } else {
                     pinOrientCtrls.attach(targetsMeshList[selectedPinIdx]);
                     pinTranslateCtrls.attach(targetsMeshList[selectedPinIdx]);
@@ -318,7 +318,7 @@
                 case 's':
                     await Armature.solve();
                     break;
-                case 'i': 
+                case 'i':
                     autoSolve = false;
                     interactionSolve = true;
                 case 'r':
@@ -339,14 +339,14 @@
 
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
-        
-        
-        
-        
+
+
+
+
         var interactionSolve = true;
         var autoSolve = false;
         async function animate() {
-            if(autoSolve)
+            if (autoSolve)
                 await Armature.solve();
             requestAnimationFrame(animate);
             render();

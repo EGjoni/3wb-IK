@@ -1,8 +1,8 @@
 import { IKTransform } from "../util/IKTransform.js";
 import { IKNode, TrackingNode} from "../util/IKNodes.js";
-import { Object3D } from "../../three/three.module.js";
 import { generateUUID } from "../util/uuid.js";
 const THREE = await import('three');
+import { Object3D } from "three";
 
 
 export class IKPin {
