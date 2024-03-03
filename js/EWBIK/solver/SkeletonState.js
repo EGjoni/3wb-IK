@@ -63,7 +63,7 @@ export class SkeletonState {
     validate() {
         for (const bs of Object.values(this.boneMap)) {
             if (bs.parent_id === null) {
-                if (this.rootBoneState !== null) {
+                if (this.rootBoneState != null) {
                     throw new Error(`A skeleton may only have 1 root bone, you attempted to initialize bone of id ${bs.ikd} as an implicit root (no parent bone), when bone with id '${this.rootBoneState.ikd}' is already determined as being the implicit root`);
                 }
                 this.rootBoneState = bs;
@@ -103,7 +103,7 @@ export class SkeletonState {
             leafCount = leafBones.length;
             for (const leaf of leafBones) {
                 let currentLeaf = leaf;
-                while (currentLeaf !== null && currentLeaf.target_id === null) {
+                while (currentLeaf != null && currentLeaf.target_id === null) {
                     if (currentLeaf.getTempChildCount() === 0) {
                         currentLeaf.prune();
                         currentLeaf = currentLeaf.getParent();
@@ -120,10 +120,10 @@ export class SkeletonState {
      * Creates simple arrays from the basic build maps for fast traversal and updates
      */
     optimize() {
-        this.bones = this.bonesList.filter(bone => bone !== null);
-        this.transforms = this.transformsList.filter(transform => transform !== null);
-        this.constraints = this.constraintsList.filter(constraint => constraint !== null);
-        this.targets = this.targetsList.filter(target => target !== null);
+        this.bones = this.bonesList.filter(bone => bone != null);
+        this.transforms = this.transformsList.filter(transform => transform != null);
+        this.constraints = this.constraintsList.filter(constraint => constraint != null);
+        this.targets = this.targetsList.filter(target => target != null);
     
         for (let i = 0; i < this.bones.length; i++) this.bones[i].clearChildList();
     
@@ -169,12 +169,12 @@ export class SkeletonState {
      * Adds a constraint to the skeleton's constraint map, defining limits on a bone's movement.
      * @param {string} id - A unique string identifier for this constraint.
      * @param {string} forBone_id - The id string of the bone this constraint is applied to.
-     * @param {Object} directReference - A reference to the actual Constraint instance; required for the solver to call its snapToLimitingAxes function.
      * @param {number} painfulness - Scalar indicating degree to which bone should be averse to approaching this constraint's boundary.
      * @param {string} swingOrientationTransform_id - The id of the transform specifying the orientation of the swing space for this constraint.
-     * @param {string} [twistOrientationTransform_id=null] - Optional. The id of the transform specifying the orientation of the twist basis for ball and socket-type constraints. Relevant for constraints like Kusudamas, splines, and limit cones.
+     * @param {(string | null)} - Optional. The id of the transform specifying the orientation of the twist basis for ball and socket-type constraints. Relevant for constraints like Kusudamas, splines, and limit cones.
+     * @param {Object} directReference - A reference to the actual Constraint instance; required for the solver to call its snapToLimitingAxes function.
      */
-    addConstraint(id, forBone_id, directReference, painfulness, swingOrientationTransform_id, twistOrientationTransform_id = null) {
+    addConstraint(id, forBone_id, painfulness, swingOrientationTransform_id, twistOrientationTransform_id = null, directReference = null) {
         const con = new ConstraintState(id, forBone_id, painfulness, swingOrientationTransform_id, twistOrientationTransform_id, directReference, this);
         this.constraintMap[id] = con;
         return con;
@@ -262,7 +262,7 @@ export class BoneState {
     }
 
     getTarget() {
-        return this.targetIdx !== -1 ? this.skeletonState.targets[this.targetIdx] : null;
+        return this.targetIdx != -1 ? this.skeletonState.targets[this.targetIdx] : null;
     }
 
     getStiffness() {
@@ -299,8 +299,8 @@ export class BoneState {
         delete this.skeletonState.boneMap[this.ikd];
         this.getFrameTransform().prune();
         this.getOrientationTransform().prune();
-        if (this.getConstraint() !== null) this.getConstraint().prune();
-        if (this.parent_id !== null) {
+        if (this.getConstraint() != null) this.getConstraint().prune();
+        if (this.parent_id != null) {
             this.skeletonState.boneMap[this.parent_id].childMap.delete(this.ikd);
         }
         if (this.skeletonState.rootBoneState === this) this.skeletonState.rootBoneState = null;
@@ -308,7 +308,7 @@ export class BoneState {
 
     setIndex(index) {
         this.index = index;
-        if (this.parent_id !== null) {
+        if (this.parent_id != null) {
             const parentBone = this.skeletonState.boneMap[this.parent_id];
             parentBone.addChild(this.ikd, this.index);
         }
@@ -320,15 +320,15 @@ export class BoneState {
 
     optimize() {
         this.childIndices = Array.from(this.childMap.values());
-        if (this.parent_id !== null) this.parentIdx = this.skeletonState.boneMap[this.parent_id].index;
+        if (this.parent_id != null) this.parentIdx = this.skeletonState.boneMap[this.parent_id].index;
 
         this.frame_transformIdx = this.skeletonState.transformMap[this.transformFrame_id].getIndex();
         if(this.orientationtransform_id != null)
             this.orientationtransform_idx = this.skeletonState.transformMap[this.orientationtransform_id].getIndex();
         else this.orientationtransform_idx = -1;
 
-        if (this.constraint_id !== null) this.constraintIdx = this.skeletonState.constraintMap[this.constraint_id].getIndex();
-        if (this.target_id !== null) this.targetIdx = this.skeletonState.targetMap[this.target_id].getIndex();
+        if (this.constraint_id != null) this.constraintIdx = this.skeletonState.constraintMap[this.constraint_id].getIndex();
+        if (this.target_id != null) this.targetIdx = this.skeletonState.targetMap[this.target_id].getIndex();
     }
 
     validate() {
@@ -337,19 +337,19 @@ export class BoneState {
         if (!transform) {
             throw new Error(`Bone '${this.ikd}' references transform with id '${this.transformFrame_id}', but '${this.transformFrame_id}' has not been registered with the SkeletonState.`);
         }
-        if (this.parent_id !== null) {
+        if (this.parent_id != null) {
             const parent = this.skeletonState.boneMap[this.parent_id];
             if (!parent) {
                 throw new Error(`Bone '${this.ikd}' references parent bone with id '${this.parent_id}', but '${this.parent_id}' has not been registered with the SkeletonState.`);
             }
             const parentBonesTransform = this.skeletonState.transformMap[parent.transformFrame_id];
             const transformsParent = this.skeletonState.transformMap[transform.parent_id];
-            if (parentBonesTransform !== transformsParent) {
+            if (parentBonesTransform != transformsParent) {
                 throw new Error(`Bone '${this.ikd}' has listed bone with id '${this.parent_id}' as its parent, which has a transformFrame_id of '${parent.transformFrame_id}' but the parent transform of this bone's transform is listed as '${transform.parent_id}'. A bone's transform must have the parent bone's transform as its parent.`);
             }
             // Avoid grandfather paradoxes
             let ancestor = parent;
-            while (ancestor !== null) {
+            while (ancestor != null) {
                 if (ancestor === this) {
                     throw new Error(`Bone '${this.ikd}' is listed as being both a descendant and an ancestor of itself.`);
                 }
@@ -364,16 +364,16 @@ export class BoneState {
                 }
             }
         } else {
-            if (this.constraint_id !== null) {
+            if (this.constraint_id != null) {
                 throw new Error(`Bone '${this.ikd}' has been determined to be a root bone. However, root bones may not be constrained. If you wish to constrain the root bone anyway, please insert a fake unconstrained root bone prior to this bone. Give that bone's transform values equal to this bone's, and set this bone's transforms to identity.`);
             }
         }
-        if (this.constraint_id !== null) {
+        if (this.constraint_id != null) {
             const constraint = this.skeletonState.constraintMap[this.constraint_id];
             if (!constraint) {
                 throw new Error(`Bone '${this.ikd}' claims to be constrained by '${this.constraint_id}', but no such constraint has been registered with this SkeletonState`);
             }
-            if (constraint.forBone_id !== this.ikd) {
+            if (constraint.forBone_id != this.ikd) {
                 throw new Error(`Bone '${this.ikd}' claims to be constrained by '${constraint.ikd}', but constraint of id '${constraint.ikd}' claims to be constraining bone with id '${constraint.forBone_id}'`);
             }
         }
@@ -398,7 +398,7 @@ export class TransformState {
     constructor(id, translation, rotation, scale, parent_id, directReference, skeletonState) {
         this.ikd = id;
         this.translation = translation;
-        console.log(this.translation);
+        //console.log(this.translation);
         this.rotation = rotation;
         this.scale = scale;
         this.parent_id = parent_id;
@@ -483,8 +483,6 @@ export class TransformState {
     }
 
     toString() {
-        // Assuming Rot is a class or function you've defined elsewhere for handling rotations.
-        // This part needs adaptation based on how you handle rotations in your JavaScript context.
         const rotationStr = `Rotation representation not implemented`; // Placeholder
         return `TransformState: \n origin: (${this.translation[0].toFixed(4)}, ${this.translation[1].toFixed(4)}, ${this.translation[2].toFixed(4)})\n rotation: ${rotationStr}`;
     }
@@ -530,8 +528,6 @@ export class TargetState {
         const transform = this.skeletonState.transformMap[this.transform_id];
         if (!transform)
             throw new Error(`Target with id '${this.ikd}' lists its transform as having id '${this.transform_id}', but no such transform has been registered with this StateSkeleton`);
-        if (transform.parent_id !== null)
-            throw new Error(`Target with id '${this.ikd}' lists its transform as having a parent transform. However, target transforms are not allowed to have a parent, as they must be given in the space of the skeleton transform. Please provide a transform object that has been converted into skeleton space and has no parent.`);
     }
 
     getIdString() {
@@ -566,7 +562,7 @@ export class TargetState {
         let maxPriority = 0;
 
         priorities.forEach((priority, i) => {
-            if ((this.modeCode & (1 << Math.floor(i / 2))) !== 0) {
+            if ((this.modeCode & (1 << Math.floor(i / 2))) != 0) {
                 priorityCount++;
                 totalPriority += priorities[i];
                 maxPriority = Math.max(priorities[i], maxPriority);
@@ -604,7 +600,7 @@ export class ConstraintState {
     }
 
     prune() {
-        if (this.getTwistTransform() !== null) this.getTwistTransform().prune();
+        if (this.getTwistTransform() != null) this.getTwistTransform().prune();
         this.getSwingTransform().prune();
         delete this.skeletonState.constraintMap[this.ikd];
         this.skeletonState.constraintsList[this.index] = null;
@@ -632,7 +628,7 @@ export class ConstraintState {
     }
 
     optimize() {
-        if (this.twistOrientationTransform_id !== null) {
+        if (this.twistOrientationTransform_id != null) {
             const twistTransform = this.skeletonState.transformMap[this.twistOrientationTransform_id];
             this.twistTransform_idx = twistTransform.getIndex();
         }
@@ -653,7 +649,7 @@ export class ConstraintState {
         if (constraintSwing === undefined) {
             throw new Error(`Constraint with id '${this.ikd}' claims to have a swingOrientationTransform with id '${this.swingOrientationTransform_id}', but no such transform has been registered with this SkeletonState`);
         }
-        if (this.twistOrientationTransform_id !== null) {
+        if (this.twistOrientationTransform_id != null) {
             const constraintTwist = this.skeletonState.transformMap[this.twistOrientationTransform_id];
             if (constraintTwist === undefined) {
                 throw new Error(`Constraint with id '${this.ikd}' claims to have a twist transform with id '${this.twistOrientationTransform_id}', but no such transform has been registered with this SkeletonState`);

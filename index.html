@@ -53,6 +53,7 @@
         const lower_left3 = new THREE.Bone();
         const lower_left4 = new THREE.Bone();
         const lower_left5 = new THREE.Bone();
+        const turntable = new THREE.Object3D();
 
 
         const axesHelperSize = 14; // Adjust the size as needed
@@ -63,7 +64,6 @@
 
 
 
-        /** @type {EWBIK} */
         let armature = null;
 
 
@@ -91,7 +91,11 @@
             //bone1.setStiffness(0.9);
             // left2.position.x = -2;
             //right4.position.x = 5;
-            scene.add(rootBone);
+            window.turntable = turntable;
+            turntable.name = 'turntable';
+            scene.add(turntable);
+            rootBone.name = 'rootBone';
+            turntable.add(rootBone);
             rootBone.add(bone1);
             bone1.add(bone2);
             //bone2.add(right3);
@@ -164,15 +168,17 @@
             let pinC = new IKPin(lower_left5);
             let pinD = new IKPin(lower_right5);
 
+            window.pinsList = pinsList;
+
             makePinsList();
 
             armature.maybeInferOrientation(rootBone);
             armature.regenerateShadowSkeleton(true);
             armature.showBones();
 
-            /* const helper = new THREE.SkeletonHelper(rootBone);
-            helper.material.linewidth = 5; // Make the helper lines thicker
-            scene.add(helper);*/
+            //const helper = new THREE.SkeletonHelper(rootBone);
+            //helper.material.linewidth = 5; // Make the helper lines thicker
+            //scene.add(helper);/=
         }
 
         function makePinsList() {
@@ -316,11 +322,13 @@
                     autoSolve = !autoSolve;
                     break;
                 case 's':
+                    interactionSolve = false;
+                    autoSolve = false;
                     await Armature.solve();
                     break;
                 case 'i':
                     autoSolve = false;
-                    interactionSolve = true;
+                    interactionSolve = !interactionSolve;
                 case 'r':
                     boneCtrls.mode = 'rotate';
                     break;

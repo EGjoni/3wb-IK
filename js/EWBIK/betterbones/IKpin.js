@@ -11,7 +11,7 @@ export class IKPin {
     effectorTransform = new IKTransform();
     target = null;
     enabled = true;
-    targetNode = new IKNode();
+    targetNode = new TrackingNode();
     pinWeight = 1;
     modeCode = 6;
     xPriority = 10;
@@ -37,12 +37,16 @@ export class IKPin {
         
         if (targetNode == null) {
             this.targetNode = new TrackingNode();
-            this.targetNode.adoptGlobalValuesFromObject3D(this.forBone);
+            this.targetNode.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());
         } else if(targetNode instanceof THREE.Object3D) {
             let trackNode = new TrackingNode(targetNode);
             this.targetNode = trackNode;
+            this.target_threejs = targetNode;
         } else {
             this.targetNode = targetNode;
+            if(targetNode instanceof TrackingNode) {
+                this.target_threejs = targetNode.toTrack
+            }
         }
         if(effectorTransformLocal != null) {
             this.effectorTransformLocal = effectorTransformLocal;
@@ -101,9 +105,9 @@ export class IKPin {
 		this.depthFalloff = depth;
 		if((this.depthFalloff == 0 && prevDepth != 0) 
 		|| (this.depthFalloff != 0 && prevDepth == 0)) {
-			this.forBone.parentArmature.regenerateShadowSkeleton();
+			this.forBone?.parentArmature?.regenerateShadowSkeleton();
 		} else {
-			this.forBone.parentArmature.updateShadowSkelRateInfo();
+			this.forBone?.parentArmature?.updateShadowSkelRateInfo();
 		}
     }
 
@@ -135,7 +139,7 @@ export class IKPin {
         this.yPriority = yPriority === undefined ? 1 : Math.max(0, Math.min(1, yPriority));
         this.zPriority = zPriority === undefined ? 1 : Math.max(0, Math.min(1, zPriority));
         
-        this.forBone.parentArmature.updateShadowSkelRateInfo();
+        this.forBone?.parentArmature?.updateShadowSkelRateInfo();
     }
 
     getSubtargetCount() {
@@ -185,7 +189,7 @@ export class IKPin {
         }
     }
 
-    translateBy_(location) {
+    translateByRay(location) {
         this.targetNode.translateByLocal(location);
     }
     
@@ -207,8 +211,6 @@ export class IKPin {
         }
     }
 
-   
-
     solveIKForThisAndChildren() {
         try {
             this.childPins.forEach(childPin => childPin.solveIKForThisAndChildren());
@@ -223,6 +225,7 @@ export class IKPin {
         if (index > -1) {
             this.childPins.splice(index, 1);
         }
+        this.forBone?.parentArmature?.regenerateShadowSkeleton();
     }
 
     setParentPin(parent) {
@@ -237,6 +240,7 @@ export class IKPin {
             parent.addChildPin(this);
             this.parentPin = parent;
         }
+        this.forBone?.parentArmature?.regenerateShadowSkeleton();
     }
 
     addChildPin(newChild) {
@@ -247,6 +251,7 @@ export class IKPin {
         if (!this.childPins.includes(newChild)) {
             this.childPins.push(newChild);
         }
+        this.forBone?.parentArmature?.regenerateShadowSkeleton();
     }
 
     getParentPin() {
@@ -270,17 +275,26 @@ export class IKPin {
     }
 
     setPinWeight(weight) {
-        this.pinWeight = weight;
-        // Update shadow skeleton rate info using THREE.js methods
+        const prevWeight = this.pinWeight;
+        this.pinWeight = Math.min(Math.max(weight, 0), 1);
+        this.forBone?.parentArmature.updateShadowSkelRateInfo();
+        if(this.isEnabled()) {
+            if(prevWeight <= 0 && this.pinWeight > 0) {
+                this.forBone?.parentArmature?.regenerateShadowSkeleton();
+            } 
+            if(this.pinWeight <= 0 && prevWeight >= 0)  {
+                this.forBone?.parentArmature?.regenerateShadowSkeleton();
+            }
+        }
     }
 
     /**
      * positions this pin to precisely where its bone can reach it.
     */
     alignToBone(){
-        this.forBone.updateWorldMatrix();
-        this.forBone.getWorldPosition(this.targetNode.toTrack.position);
-        this.forBone.getWorldQuaternion(this.targetNode.toTrack.quaternion);
+        this.forBone.getIKBoneOrientation().updateWorldMatrix();
+        this.forBone.getIKBoneOrientation().getWorldPosition(this.targetNode.toTrack.position);
+        this.forBone.getIKBoneOrientation().getWorldQuaternion(this.targetNode.toTrack.quaternion);
         this.targetNode.adoptTrackedLocal();
     }
 

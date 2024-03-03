@@ -1,5 +1,4 @@
-import { Vec3, VecN } from "./vecs.js";
-import { VVec } from "./FlexFreezeArray.js";
+import { Vec3, new_Vec3, any_Vec3 } from "./vecs.js";
 import { Ray } from "./Ray.js";
 
 
@@ -130,7 +129,7 @@ export class MRotation {
         return this;
     }
 
-    applyToVector(inVec, outVec = new Vec3()) {
+    applyToVector(inVec, outVec = any_Vec3()) {
         const x = inVec.x, y = inVec.y, z = inVec.z;
         const q0 = this.q0, q1 = this.q1, q2= this.q2, q3 = this.q3;
         const s = q1 * x + q2 * y + q3 * z;
@@ -141,7 +140,7 @@ export class MRotation {
         return outVec;
     }
 
-    applyInverseToVector(u, output = new Vec3()) {
+    applyInverseToVector(u, output = any_Vec3()) {
         const x = u.x, y = u.y, z = u.z;
         const m0 = -this.q0, q1 = this.q1, q2= this.q2, q3 = this.q3;
         const s = q1 * x + q2 * y + q3 * z;
@@ -164,7 +163,7 @@ export class MRotation {
 		return 2 * Math.acos(q0);
     }
 
-    getAxis(into = new Vec3()) {
+    getAxis(into = any_Vec3()) {
         const squaredSine = this.q1 * this.q1 + this.q2 * this.q2 + this.q3 * this.q3;
         if (squaredSine === 0) 
             return into.setComponents(1,0,0);
@@ -570,7 +569,7 @@ export class Rot {
             this.rotation = new MRotation(w, x, y, z, needsNormalization);
         } else if(w instanceof MRotation) {
             this.rotation.setFromComponents(w.q0, w.q1, w.q2, w.q3);
-        } else if(w instanceof VVec || w instanceof Vec3) {
+        } else if(w instanceof Vec3) {
             if(Number.isFinite(x)) {
                 this.rotation = MRotation.fromAxisAngle(w, x);
             } else {
@@ -612,6 +611,13 @@ export class Rot {
 	copy() {
 		return new Rot(new MRotation(rotation.q0, rotation.q1, rotation.q2, rotation.q3, false));
 	}
+
+    setComponents(w,x,y,z) {
+        this.rotation.q0 = w;
+        this.rotation.q1 = x;
+        this.rotation.q2 = y;
+        this.rotation.q3 = z;
+    }
 	
 	set(w, x, y, z) {
 		if(Number.isFinite(w)) {
@@ -619,23 +625,29 @@ export class Rot {
             this.rotation.q1 = x;
             this.rotation.q2 = y;
             this.rotation.q3 = z;
-        } else if(w instanceof MRotation) {
+        } else if(w instanceof MRotation || w instanceof Rot) {
             this.rotation.q0 = w.q0;
             this.rotation.q1 = x.q1;
             this.rotation.q2 = y.q2;
             this.rotation.q3 = z.q3;
-        } else if(w instanceof VVec || w instanceof Vec3) {
+        } else if(w instanceof Vec3) {
             if(Number.isFinite(x)) {
                 this.rotation.setFromAxisAngle(w, x);
             } else {
                 this.rotation.setFromVecs(w, x);
             }
-        } else if(w instanceof Rot) {
-            this.rotation = new MRotation(w.q0, w.q1, w.q2, w.q3);
         } else{
             throw new Error("Unrecognized cunstructor args");
         }
 	}
+
+    setFromRot(inR) {
+        this.rotation.q0 = inR.q0;
+        this.rotation.q1 = inR.q1;
+        this.rotation.q2 = inR.q2; 
+        this.rotation.q3 = inR.q3;
+        return this;
+    }
 
 
     applyTo(v, output) {
@@ -643,7 +655,7 @@ export class Rot {
         if(output == null) {
             output = copy;
         }
-        if(v instanceof VVec || v instanceof Vec3) {
+        if(v instanceof Vec3) {
             return this.applyToVec(v, output);
         } else if(v instanceof Ray) {
             return this.applytoRay()
@@ -651,7 +663,7 @@ export class Rot {
         return output;
     }
 	
-	applyToVec(v, output = new Vec3()) {        
+	applyToVec(v, output = any_Vec3()) {        
 		this.workingInput.x = v.x; this.workingInput.y = v.y; this.workingInput.z=v.z; 
 		this.rotation.applyToVector(this.workingInput, output);
 		return output;
@@ -659,7 +671,7 @@ export class Rot {
 
     
 
-	applyInverseToVec(v, output = new Vec3()) {
+	applyInverseToVec(v, output = any_Vec3()) {
 		this.workingInput.x = v.x; this.workingInput.y = v.y; this.workingInput.z=v.z; 
 		this.rotation.applyInverseToVector(this.workingInput, output);
         return output;
@@ -725,10 +737,9 @@ export class Rot {
     get q3() {
         return this.rotation.q3;
     }
-	applyToRot(rot, storeIn) {                                                                            
+	applyToRot(rot, storeIn=new Rot()) {                                                                            
 		let rq0 = rot.q0, rq1 = rot.q1, rq2=rot.q2, rq3 = rot.q3;
-        let trq0 = this.q0, trq1 = this.q1, trq2=this.q2, trq3 = this.q3; 
-        if(storeIn == null) storeIn = new Rot();                                                                                              
+        let trq0 = this.q0, trq1 = this.q1, trq2=this.q2, trq3 = this.q3;                                                                                              
 		storeIn.rotation.q0 =  rq0 * trq0 -(rq1 * trq1 +  rq2 * trq2 + rq3 * trq3);   
 		storeIn.rotation.q1 =  rq1 * trq0 + rq0 * trq1 + (rq2 * trq3 - rq3 * trq2);   
 		storeIn.rotation.q2 =  rq2 * trq0 + rq0 * trq2 + (rq3 * trq1 - rq1 * trq3);   
@@ -737,10 +748,9 @@ export class Rot {
         return storeIn;                                                                                                                                                                                       
 	}                                                             
 
-	applyInverseTo(rot, storeIn) {                                                                                           
+	applyInverseTo(rot, storeIn = new Rot()) {                                                                                           
 		let rq0 = rot.q0, rq1 = rot.q1, rq2=rot.q2, rq3 = rot.q3;
-        let trq0 = this.q0, trq1 = this.q1, trq2=this.q2, trq3 = this.q3; 
-        if(storeIn == null) storeIn = new Rot();                                                                       
+        let trq0 = this.q0, trq1 = this.q1, trq2=this.q2, trq3 = this.q3;                                                                    
 		                                                                                       
 		storeIn.rotation.q0 = -rq0 * trq0 -(rq1 * trq1 +  rq2 * trq2 + rq3 * trq3);    
 		storeIn.rotation.q1 = -rq1 * trq0 + rq0 * trq1 + (rq2 * trq3 - rq3 * trq2);    

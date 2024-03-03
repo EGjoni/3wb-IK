@@ -1,4 +1,4 @@
-import {Vec3, Vec3f, Vec3d, Vec4, Vec4f, Vec4d, VecN} from "./vecs.js";
+import {Vec3, any_Vec3, new_Vec3} from "./vecs.js";
 import {Rot} from "./Rot.js";
 
 export class QCP {	
@@ -18,8 +18,8 @@ export class QCP {
 		this.evec_prec = evec_prec;
 		this.eval_prec = eval_prec;
         this.max_iterations = 5;
-        this.targetCenter = type == 32 ? new Vec3f() : new Vec3d();
-		this.movedCenter = type == 32 ? new Vec3f() : new Vec3d();
+        this.targetCenter =  new Vec3();
+		this.movedCenter =  new Vec3();
 		this.wsum = 0;
 	}
 
@@ -61,8 +61,10 @@ export class QCP {
 			this.updateDirToWeightedCenter(this.moved, this.weight, this.movedCenter);
 			this.wsum = 0; // set wsum to 0 so we don't double up.
 			this.updateDirToWeightedCenter(this.target, this.weight, this.targetCenter);
-			this.translate(this.movedCenter.multCopy(-1), this.moved);
-			this.translate(this.targetCenter.multCopy(-1), this.target);
+			this.translate(this.movedCenter.mult(-1), this.moved);
+			this.translate(this.targetCenter.mult(-1), this.target);
+			this.movedCenter.mult(-1);
+			this.targetCenter.mult(-1);
 		} else {
 			if (weight != null) {
 				for (let w of weight) this.wsum += w;
@@ -410,6 +412,7 @@ export class QCP {
 	}	
 
 	getTranslation() {
-		return this.targetCenter.subCopy(this.movedCenter);
+		let temp = any_Vec3().set(this.targetCenter);
+		return temp.sub(this.movedCenter);
 	}
 }

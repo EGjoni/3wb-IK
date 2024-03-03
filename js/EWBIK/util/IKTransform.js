@@ -1,5 +1,8 @@
-import { Vec3, Vec3d, Vec3f } from "./vecs.js";
+import {  Vec3, new_Vec3 } from "./vecs.js";
 import { Ray, Rayd, Rayf } from "./Ray.js";
+import { IKNode } from "./IKNodes.js";
+const THREE = await import('three');
+import { Quaternion, Vector3, Object3D, Matrix4 } from "three";
 import { MRotation, Rot } from "./Rot.js";
 import { generateUUID } from "./uuid.js";
 
@@ -12,17 +15,18 @@ export class IKTransform {
     static Y = 1;
     static Z = 2;
     id = IKTransform.totalTransforms;
+    forceOrthonormality = true;
 
     chirality = IKTransform.RIGHT;
     rotation = new Rot();
     _inverseRotation = new Rot();
     inverseDirty = true;
     raysDirty = true; 
-    translate = new Vec3([0,0,0]);
-    scale = new Vec3([1,1,1]);
-    xBase = new Vec3([1,0,0]);
-    yBase = new Vec3([0,1,0]);
-    zBase = new Vec3([0,0,1]);
+    translate = new_Vec3(0,0,0);
+    scale = new_Vec3(1,1,1);
+    xBase = new_Vec3(1,0,0);
+    yBase = new_Vec3(0,1,0);
+    zBase = new_Vec3(0,0,1);
 
     _xRay = new Ray(this.translate, this.xBase);
     _yRay = new Ray(this.translate, this.yBase);
@@ -43,7 +47,7 @@ export class IKTransform {
         } else if (origin instanceof Ray && x instanceof Ray && y instanceof Ray) {
             this.initializeBasisWithRays(origin, x, y);
         } else if (origin != null) {
-            // Assuming origin is Vec3 and x, y, z are Vec3 directions
+            
             this.initializeBasisWithDirections(origin, x, y, z);
         }
         this.refreshPrecomputed();
@@ -127,14 +131,8 @@ export class IKTransform {
         return this;
     }
 
-    set(translation, rotation, scale) {
-        this.translate.set(translation);
-        this.xBase.setComponents(scale.x, 0, 0);
-        this.yBase.setComponents(0, scale.y, 0);
-        this.zBase.setComponents(0, 0, scale.z);
-        this.rotation.set(rotation.q0, rotation.q1, rotation.q2, rotation.q3, true);
-        this.refreshPrecomputed();
-        return this;
+    setToIdentity(){
+        return this.setFromArrays([0,0,0], [1,0,0,0], [1,1,1]);
     }
 
     setFromArrays(translation, rotation, scale) {
@@ -142,37 +140,62 @@ export class IKTransform {
         this.xBase.setComponents(scale[0], 0, 0);
         this.yBase.setComponents(0, scale[1], 0);
         this.zBase.setComponents(0, 0, scale[2]);
-        this.rotation.set(rotation[0], rotation[1], rotation[2], rotation[3], true);
+        this.rotation.setComponents(rotation[0], rotation[1], rotation[2], rotation[3], true);
         this.refreshPrecomputed();
         return this;
+    }
+
+    setFromGlobalizedObj3d(object3d, temp_originvec = new Vector3(0,0,0), temp_identitythreequat = new Quaternion(0,0,0,1), temp_unitscale = new Vector3(1,1,1)) {
+        temp_originvec.copy(IKNode.originthreevec)
+        temp_identitythreequat.copy(IKNode.identitythreequat);
+        temp_unitscale.copy(IKNode.unitthreescale);
+        object3d.updateWorldMatrix();
+        const pos = object3d.getWorldPosition(temp_originvec);
+        const quat = object3d.getWorldQuaternion(temp_identitythreequat);
+        const scale = object3d.getWorldScale(temp_unitscale); 
+        this.translate.setComponents(pos.x, pos.y, pos.z);
+        this.rotation.setComponents(-quat.w, quat.x, quat.y, quat.z);
+        this.scale.setComponents(scale.x, scale.y, scale.z);
+        this.refreshPrecomputed();
+    }
+
+    setFromObj3d(object3d) {
+        this.translate.setComponents(object3d.position.x, object3d.position.y, object3d.position.z);
+        this.rotation.setComponents(-object3d.quaternion.w, object3d.quaternion.x, object3d.quaternion.y, object3d.quaternion.z);
+        this.scale.setComponents(object3d.scale.x, object3d.scale.y, object3d.scale.z);
+        this.refreshPrecomputed();
     }
 
     setTransformToLocalOf(globalinput, localoutput) {
         this.setVecToLocalOf(globalinput.translate, localoutput.translate);
         this.inverseRotation.applyToRot(globalinput.rotation, localoutput.rotation);
         localoutput.refreshPrecomputed();
+        return localoutput;
     }
 
     setVecToLocalOf(globalInput, localOutput) {
         localOutput.set(globalInput);
 		localOutput.sub(this.translate); 
         this.inverseRotation.applyToVec(globalInput, localOutput);
+        return localOutput;
     }
 
     setTransformToGlobalOf(localInput, globalOutput) {
 		this.rotation.applyToRot(localInput.rotation, globalOutput.rotation);
 		this.setVecToGlobalOf(localInput.translate, globalOutput.translate);		
 		globalOutput.refreshPrecomputed();
+        return globalOutput;
  	}
 
     setVecToGlobalOf(localInput, globalOutput) {
         this.rotation.applyToVec(localInput, globalOutput);
         globalOutput.add(this.translate);
+        return globalOutput;
     }
 
 
     rotateTo(newRotation) {				
-		this.rotation.set(newRotation); 
+		this.rotation.setFromRot(newRotation); 
 		this.refreshPrecomputed();
 	}
 
@@ -197,7 +220,7 @@ export class IKTransform {
     }
 
     translateTo(vec) {
-        this.translate.setComponents(...vec.components);
+        this.translate.set(vec);
     }
 
     refreshPrecomputed() {
@@ -205,6 +228,19 @@ export class IKTransform {
         this.inverseDirty = true;
         //this.rotation.setToReversion(this._inverseRotation);
         //this.updateRays();
+    }
+
+    release() {
+        this._xRay.release();
+        this._yRay.release();
+        this._zRay.release();
+        this.translate.release();
+        this.rotation.release();
+        this._inverseRotation.release();
+        this.scale.release();
+        this.xBase.release();
+        this.yBase.release();
+        this.zBase.release();
     }
 
     get inverseRotation() {

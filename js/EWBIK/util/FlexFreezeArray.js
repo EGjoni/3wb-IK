@@ -1,10 +1,10 @@
-import { VecN } from "./vecs.js";
+
 /**behaves as a general typeless javascript array up until the finalize() method is called,
  * after which, resolves into a fix sized array of the provided type for efficiency.
  * 
  * This entire class might be totally useless depending on the optimizations provided by your js environment. 
  */
-export class FlexFreezeArray {
+class FlexFreezeArray {
     constructor() {
         this.array = [];
         this.finalizedArray = null;
@@ -351,7 +351,7 @@ export class VectorNArray {
             throw new Error('Vector dimensions must match');
         }
         for (let i = 0; i < this.dims; i++) {
-            const val = this.getVectorComponent(index, i) + v.getVectorComponent(0, i); // Assuming v is another VectorNArray with at least one vector
+            const val = this.getVectorComponent(index, i) + v.getVectorComponent(0, i); 
             this.setVectorComponent(index, val, i);
         }
     }

@@ -1,12 +1,12 @@
 
-import {Vec3, Vec3d, Vec3f} from "./vecs.js";
+import { Vec3, new_Vec3} from "./vecs.js";
 
 export class Ray {
     
     constructor(p1, p2) {
-        this.workingVector = new Vec3();
-        this.p1 = new Vec3();
-        this.p2 = new Vec3();
+        this.workingVector = new_Vec3();
+        this.p1 = new_Vec3();
+        this.p2 = new_Vec3();
         this.setP1(p1);
         this.setP2(p2);
     }
@@ -40,7 +40,7 @@ export class Ray {
 
     setHeading(setTo) {
         if (!this.p2) {
-            if (!this.p1) this.p1 = new Vec3();
+            if (!this.p1) this.p1 = new_Vec3();
             this.p2 = this.p1.copy();
         }
         this.workingVector.set(setTo);
@@ -192,14 +192,6 @@ export class Ray {
         this.p2.set(r.p2);
     }
 
-    p1() {
-        return this.p1;
-    }
-
-    p2() {
-        return this.p2;
-    }
-
     setP2(p2) {
         this.p2.x = p2.x;
         this.p2.y = p2.y;
@@ -222,6 +214,12 @@ export class Ray {
 
     copy() {
         return new Ray(this.p1, this.p2);
+    }
+
+    release() {
+        this.p1.release();
+        this.p2.release();
+        this.workingVector.release();
     }
 }
 

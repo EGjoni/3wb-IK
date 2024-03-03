@@ -1,62 +1,133 @@
-export class VecN {
-    constructor(components, type) {
-        this.type = type;
-        if(type == null) {         
-            this.components = [...components];
-        } else if (type === 64) {
-            this.components = new Float64Array(components);
-        } else if (type === 32) {
-            this.components = new Float32Array(components);
-        } else {
-            throw new Error('Unsupported type. Only 32 and 64 are valid.');
+
+/**untyped vec3, use for any frequent instantiatons, as its faster to create than floatbuffer*/
+
+export class Vec3 {
+    baseIdx = 0;
+    dataBuffer = [0, 0, 0];
+    dims = 3;
+    constructor(x=0, y=0, z=0) {
+        this.x = x, this.y=y, this.z=z;
+    }
+
+    get x() { return this.dataBuffer[this.baseIdx]; }
+    set x(value) { this.dataBuffer[this.baseIdx] = value; }
+
+    get y() { return this.dataBuffer[this.baseIdx + 1]; }
+    set y(value) { this.dataBuffer[this.baseIdx + 1] = value; }
+
+    get z() { return this.dataBuffer[this.baseIdx + 2]; }
+    set z(value) { this.dataBuffer[this.baseIdx + 2] = value; }
+
+
+    /** Sets the components from the given spherical coordinate
+     * @param azimuthalAngle The angle between x-axis in radians [0, 2pi]
+     * @param polarAngle The angle between z-axis in radians [0, pi]
+     * @return This vector for chaining */
+    setFromSpherical(azimuthalAngle, polarAngle) {
+        let cosPolar = Math.cos(polarAngle);
+        let sinPolar = Math.sin(polarAngle);
+
+        let cosAzim = Math.cos(azimuthalAngle);
+        let sinAzim = Math.sin(azimuthalAngle);
+
+        return this.setComponents(cosAzim * sinPolar, sinAzim * sinPolar, cosPolar);
+    }
+
+    /**takes this this.cross input and returns the result as a new vector*/
+    crossCopy(input) {
+        let newVec = this.copy();
+        newVec.setComponents(
+            this.y * input.z - this.z * input.y,
+            this.z * input.x - this.x * input.z,
+            this.x * input.y - this.y * input.x
+        );
+        return newVec;
+    }
+
+    copy() {
+        return new_Vec3(this.x, this.y, this.z);
+    }
+
+    toString() {
+        return '('+this.x.toFixed(4)+', '+this.y.toFixed(4)+', '+this.z.toFixed(4)+', )';
+    }
+    toConsole() {
+        console.log(this.toString());
+    }
+
+    getOrthogonal() {
+        const { x, y, z } = this;
+        let result = this.copy();
+        result.setComponents(0, 0, 0);
+        let threshold = this.mag() * 0.6;
+        if (threshold > 0) {
+            if (Math.abs(x) <= threshold) {
+                let inverse = 1 / Math.sqrt(y * y + z * z);
+                return result.setComponents(0, inverse * z, -inverse * y);
+            } else if (Math.abs(y) <= threshold) {
+                let inverse = 1 / Math.sqrt(x * x + z * z);
+                return result.set(-inverse * z, 0, inverse * x);
+            }
+            let inverse = 1 / Math.sqrt(x * x + y * y);
+            return result.setComponents(inverse * y, -inverse * x, 0);
         }
-        this.dims = components.length;
+
+        return result;
     }
 
     /**
-     * @param {Instanceof _VecN or Array} vec 
-     * @return this vector for chaining
-     */
+         * @param {Instanceof _VecN or Array} vec 
+         * @return this vector for chaining
+         */
     set(vec) {
-        if(vec.components.length == this.dims) {
-            return this.setComponents(...vec.components);
-        }
+        return this.setComponents(vec.x, vec.y, vec.z);
     }
 
     setComponents(...components) {
-        if(components.length == this.dims) {
-            for(let i = 0; i<components.length; i++) {
-                this.components[i] = components[i];
+        if (components.length == this.dims) {
+            for (let i = 0; i < components.length; i++) {
+                this.dataBuffer[this.baseIdx+i] = components[i];
             }
         }
         return this;
     }
 
     /** writes thes components of this vector into the given array. If no aray is given, one will be created and returned**/
-    intoArray( into = new Array(this.dims)) {
-        for(let i =0; i<this.components.length; i++) {
-            into[i] = this.components[i];
+    intoArray(into = new Array(this.dims)) {
+        for (let i = 0; i < this.dims; i++) {
+            into[i] = this.dataBuffer[this.baseIdx+i];
         }
         return into;
     }
 
     static extractInputComponents(vec) {
-        if (vec instanceof VecN) return vec.components;
+        if (vec instanceof Vec3) return vec.components;
         else if (Array.isArray(vec)) return vec;
-        else throw Error('Unsupported vector format');        
+        else throw Error('Unsupported vector format');
     }
 
     mag() {
-        return Math.sqrt(this.components.reduce((acc, val) => acc + val * val, 0));
+        let sumSq = 0;
+        for (let i = 0; i < this.dims; i++) {
+            let diff = this.dataBuffer[this.baseIdx+i];
+            sumSq += diff * diff;
+        }
+        return Math.sqrt(sumSq);
     }
 
     magSq() {
-        return this.components.reduce((acc, val) => acc + val * val, 0);
+        let sumSq = 0;
+        for (let i = 0; i < this.dims; i++) {
+            let diff = this.dataBuffer[this.baseIdx+i];
+            sumSq += diff * diff;
+        }
+        return sumSq;
     }
 
+
     mulAdd(vec, scalar) {
-        for(let i=0; i<vec.components.length; i++ ) {
-            this.components[i] += vec.components[i] * scalar;
+        for (let i = 0; i < vec.dims; i++) {
+            this.dataBuffer[this.baseIdx+i] += vec.dataBuffer[vec.baseIdx+i] * scalar;
         }
     }
 
@@ -106,16 +177,14 @@ export class VecN {
         const maxLength = Math.max(this.dims, v.dims);
         let sum = 0;
         for (let i = 0; i < maxLength; i++) {
-            const val1 = i < this.dims ? this.components[i] : 0;
-            const val2 = i < v.dims ? v.components[i] : 0;
-            sum += val1 * val2;
+            sum += this.dataBuffer[this.baseIdx+i] * v.dataBuffer[v.baseIdx+i];
         }
         return sum;
-    }    
+    }
 
     div(n) {
         for (let i = 0; i < this.dims; i++) {
-            this.components[i] /= n;
+            this.dataBuffer[this.baseIdx+i] /= n;
         }
         return this;
     }
@@ -123,12 +192,12 @@ export class VecN {
     divCopy(scalar) {
         let result = this.copy();
         result.div(scalar);
-        return result; 
+        return result;
     }
 
     mult(scalar) {
         for (let i = 0; i < this.dims; i++) {
-            this.components[i] *= scalar;
+            this.dataBuffer[this.baseIdx+i] *= scalar;
         }
         return this;
     }
@@ -140,20 +209,18 @@ export class VecN {
     }
 
     dist(v) {
-        if (this.dims !== v.dims) throw new Error('Vector dimensions must match');
         let sumSq = 0;
         for (let i = 0; i < this.dims; i++) {
-            let diff = this.components[i] - v.components[i];
+            let diff = this.dataBuffer[this.baseIdx+i] - v.dataBuffer[v.baseIdx+i];
             sumSq += diff * diff;
         }
         return Math.sqrt(sumSq);
     }
 
     distSq(v) {
-        if (this.dims !== v.dims) throw new Error('Vector dimensions must match');
         let sumSq = 0;
         for (let i = 0; i < this.dims; i++) {
-            let diff = this.components[i] - v.components[i];
+            let diff = this.dataBuffer[this.baseIdx+i] - v.dataBuffer[v.baseIdx+i];
             sumSq += diff * diff;
         }
         return sumSq;
@@ -161,20 +228,16 @@ export class VecN {
 
     lerp(target, alpha) {
         for (let i = 0; i < this.dims; i++) {
-            this.components[i] += (target.components[i] - this.components[i]) * alpha;
+            this.dataBuffer[this.baseIdx+i] += (target.dataBuffer[target.baseIdx+i] - this.dataBuffer[this.baseIdx+i]) * alpha;
         }
         return this;
     }
 
-    copy() {
-        return new _VecN(this.components, this.components instanceof Float32Array ? 32 : 64);
-    }
 
     add(v) {
-        if (this.dims !== v.dims) throw new Error('Vector dimensions must match');
-        for (let i = 0; i < this.dims; i++) {
-            this.components[i] += v.components[i];
-        }
+        this.x += v.x;
+        this.y += v.y;
+        this.z += v.z;
         return this;
     }
 
@@ -185,10 +248,9 @@ export class VecN {
     }
 
     sub(v) {
-        if (this.dims !== v.dims) throw new Error('Vector dimensions must match');
-        for (let i = 0; i < this.dims; i++) {
-            this.components[i] -= v.components[i];
-        }
+        this.x -= v.x;
+        this.y -= v.y;
+        this.z -= v.z;
         return this;
     }
 
@@ -205,191 +267,208 @@ export class VecN {
         }
         return this;
     }
-    
+
     extractInputComponents(vec) {
-        if (vec instanceof VecN) return vec.components;
+        if (vec instanceof Vec3) return vec.components;
         else if (Array.isArray(vec)) return vec;
-        else throw Error('Unsupported vector format');        
-    }
-}
-
-
-/**untyped vec2, use for any frequent instantiatons, as its faster to create than floatbuffer*/
-export class Vec2 extends VecN {
-    constructor(maybevec = [0,0], type=null) {
-        super(maybevec.components ?? maybevec, type);
+        else throw Error('Unsupported vector format');
     }
 
-    get x() { return this.components[0]; }
-    set x(value) { this.components[0] = value; }
-
-    get y() { return this.components[1]; }
-    set y(value) { this.components[1] = value; }
-
-    copy() {
-        return new this.constructor(this.components, this.type);
+    get components() {
+        return [this.x, this.y, this.z];
     }
 
-}
 
-/**untyped vec3, use for any frequent instantiatons, as its faster to create than floatbuffer*/
-export class Vec3 extends VecN {
-    constructor(maybevec = [0,0,0], type=null) {
-        super(maybevec.components ?? maybevec, type);
+    release() {
+        this.amFree = true;
+        return this;
     }
 
-    get x() { return this.components[0]; }
-    set x(value) { this.components[0] = value; }
-
-    get y() { return this.components[1]; }
-    set y(value) { this.components[1] = value; }
-
-    get z() { return this.components[2]; }
-    set z(value) { this.components[2] = value; }
-    
-    /** Sets the components from the given spherical coordinate
-	 * @param azimuthalAngle The angle between x-axis in radians [0, 2pi]
-	 * @param polarAngle The angle between z-axis in radians [0, pi]
-	 * @return This vector for chaining */
-	setFromSpherical (azimuthalAngle, polarAngle) {
-		let cosPolar = Math.cos(polarAngle);
-		let sinPolar = Math.sin(polarAngle);
-
-		let cosAzim = Math.cos(azimuthalAngle);
-		let sinAzim = Math.sin(azimuthalAngle);
-
-		return this.setComponents(cosAzim * sinPolar, sinAzim * sinPolar, cosPolar);
-	}
-
-    /**takes this this.cross input and returns the result as a new vector*/
-    crossCopy(input) {
-        let newVec = this.copy();
-        newVec.setComponents(
-            this.y * input.z - this.z * input.y, 
-            this.z * input.x - this.x * input.z, 
-            this.x * input.y - this.y * input.x
-        );
-        return newVec;
-    }
-
-    copy() {
-        return new this.constructor(this.components, this.type);
-    }
-
-    toString() {
-        let s = '('
-        let comps = []
-        for(let c of this.components) {
-            comps.push(c.toFixed(4));
+    /** 
+     * *components() {
+        for(let i = 0; i<this.dims; i++) {
+            yield this.dataBuffer[this.baseIdx+i];
         }
-        return '('+comps.join(", ")+')';
-    }
-    toConsole() {
-        console.log(this.toString());
-    }
-
-    getOrthogonal() {
-        const {x, y, z} = this;
-		let result = this.copy();				
-		result.setComponents(0,0,0);
-		let threshold = this.mag() * 0.6;
-		if(threshold > 0) {
-			if (Math.abs(x) <= threshold) {
-				let inverse  = 1 / Math.sqrt(y * y + z * z);
-				return result.setComponents(0, inverse * z, -inverse * y);
-			} else if (Math.abs(y) <= threshold) {
-				let inverse  = 1 / Math.sqrt(x * x + z * z);
-				return result.set(-inverse * z, 0, inverse * x);
-			}
-			let inverse  = 1 / Math.sqrt(x * x + y * y);
-			return result.setComponents(inverse * y, -inverse * x, 0);
-		}
-
-		return result; 
-	}
+    }*/
 }
 
 
-/**untyped vec4, use for any frequent instantiatons, as its faster to create than floatbuffer*/
-export class Vec4 extends VecN {
-    constructor(maybevec = [1, 0,0,0], type=null) {
-        super(maybevec.components ?? maybevec, type);
+export class Vec3Pool {
+    static persistentPool = [];
+    static reclaimedPool = []; //stores vecs that were previously
+    static inProgressPool = [];
+    static persistentBuffer;
+    static tempSize = 10000;
+    static tempPool = null;// new Array(this.tempSize);
+    static tempBuffer; //= new Float64Array(tempSize * 3);
+    static isFinalized = false;
+    static lru = -1;
+
+    static reclaim() {
+        Vec3Pool.isFinalized = false;  
+        Vec3Pool.lru = -1;
+        if(Vec3Pool.persistentPool?.length > 0) {
+            Vec3Pool.reclaimedPool.push(...Vec3Pool.persistentPool);
+            Vec3Pool.inProgressPool = [];
+            Vec3Pool.persistentPool = [];
+        }
+        Vec3Pool.releaseAll();
+        console.log("RECLAIMED: " + Vec3Pool.reclaimedPool.length);
     }
 
-    get w() { return this.components[0]; }
-    set w(value) { this.components[0] = value; }
-
-    get x() { return this.components[1]; }
-    set x(value) { this.components[1] = value; }
-
-    get y() { return this.components[2]; }
-    set y(value) { this.components[2] = value; }
-
-    get z() { return this.components[3]; }
-    set z(value) { this.components[3] = value; }
-
-    copy() {
-        return new this.constructor(this.components, this.type);
+    static init() {
+        Vec3Pool.setTempPoolSize(Vec3Pool.tempSize);
     }
-    
+    static acquire(x = 0, y = 0, z = 0) {
+        if(Vec3Pool.tempPool == null) Vec3Pool.init();
+        if (Vec3Pool.isFinalized) {
+            let isFree = false;
+            let vec;
+            //let attempts =0;
+            //while(!isFree && attempts < Vec3Pool.tempPool.length) {
+                /*if(Vec3Pool.lru >= Vec3Pool.length) { 
+                    if(Vec3Pool.assumeFree) {
+                        Vec3Pool.assumeFree = false;
+                        //attempts = 0;
+                    } else if(attempts >= Vec3Pool.tempPool.length) {
+                        console.warn(`
+                        ran out of vectors after ${attempts} attempts! Make sure you release any you're not using! You should either
+                        1. call releaseAll when you're at a point in your logic where you're sure any vectors you didn't call .finalize() for are free, or o
+                        2. increase the tempPool size or
+                        3. manually call .release() on more vectors after you finish using them
+                        `)
+                    }
+                }*/
+                Vec3Pool.lru = (Vec3Pool.lru + 1) % Vec3Pool.tempPool.length;
+                vec = Vec3Pool.tempPool[Vec3Pool.lru];
+                //isFree = vec.amFree || Vec3Pool.assumeFree
+                //vec.amFree = false;
+                //attempts++;
+            /*}
+            if(attempts > 10) {
+                console.log("attempted : "+attempts+" before finding " +Vec3Pool.lru);
+            }*/
+            vec.x = x; vec.y =y; vec.z = z;
+            //console.log("temp: "+Vec3Pool.lru);
+            return vec;
+        } else {
+            let newV;
+            if(Vec3Pool.reclaimedPool.length > 0) {
+                newV = Vec3Pool.reclaimedPool.pop();
+                newV.x = x; newV.y =y; newV.z = z;
+                Vec3Pool.inProgressPool.push(newV);
+            } else {
+                newV = new Vec3(x, y, z);
+                Vec3Pool.inProgressPool.push(newV);
+            }
+            return newV;
+        }
+    }
+
+
+    static temp_acquire(x=0, y=0, z=0) {
+        if(Vec3Pool.tempPool == null) Vec3Pool.init();
+            //let isFree = false;
+            //let vec = null;
+            //let attempts = 0;
+            /*while(!isFree && attempts < 10) {//Vec3Pool.tempPool.length) {
+                if(Vec3Pool.lru >= Vec3Pool.tempPool.length) { 
+                    if(assumeFree) {
+                        assumeFree = false;
+                    } else {
+                        console.warn(`
+                        ran out of vectors! Make sure you release any you're not using! You should either
+                        1. call releaseAll when you're at a point in your logic where you're sure any vectors you didn't call .finalize() for are free, or o
+                        2. increase the tempPool size or
+                        3. manually call .release() on more vectors after you finish using them
+                        `)
+                    }
+                }*/
+                Vec3Pool.lru = (Vec3Pool.lru + 1) % Vec3Pool.tempPool.length;
+                const vec = Vec3Pool.tempPool[Vec3Pool.lru];
+                //isFree = vec.amFree;
+                //attempts++
+            //}
+            /*if(attempts > 10) {
+                console.log("attempted : "+attempts+"TEMP before finding " +Vec3Pool.lru);
+            }
+            vec.amFree = true; // since the user indicated that they will be discarding this anyway*/
+            vec.x = x; vec.y =y; vec.z = z;
+            return vec;
+    }
+
+    static setTempPoolSize(newSize) {
+        Vec3Pool.tempSize = newSize
+        Vec3Pool.tempBuffer = new Float64Array(newSize*3);
+        Vec3Pool.tempPool = [];
+        for(let i=0; i<Vec3Pool.tempSize; i++) {
+            const vec = new Vec3();
+            vec.amFree = true;
+            vec.dataBuffer = Vec3Pool.tempBuffer;
+            vec.baseIdx = i*3;
+            Vec3Pool.tempPool.push(vec.release());
+        }
+    }
+
+    static finalize() {
+        if(Vec3Pool.reclaimedPool.length > 0) {
+            Vec3Pool.persistentPool = Vec3Pool.inProgressPool;
+            Vec3Pool.inProgressPool = [];   
+            Vec3Pool.isFinalized = true;         
+            return;
+        }
+        const prevBuffer = Vec3Pool.persistentBuffer;
+        Vec3Pool.persistentBuffer = new Float64Array(Vec3Pool.inProgressPool.length * 3);
+        const persistentBuffer = Vec3Pool.persistentBuffer;
+        for (let i = 0; i < Vec3Pool.inProgressPool.length; i++) {
+            const baseIdx = i*3;
+            const vec = Vec3Pool.inProgressPool[i];
+            const vx = vec.x, vy = vec.y, vz = vec.z;
+            persistentBuffer[baseIdx] = vx;
+            persistentBuffer[baseIdx+1] = vy;
+            persistentBuffer[baseIdx+2] = vz;
+            vec.dataBuffer = persistentBuffer;
+            vec.baseIdx = baseIdx;
+        }
+
+        Vec3Pool.persistentPool = Vec3Pool.inProgressPool;
+        Vec3Pool.inProgressPool = [];
+        console.log("REMAINING: " +Vec3Pool.reclaimedPool);
+        Vec3Pool.isFinalized = true;
+        Vec3Pool.lru = -1;
+    }
+
+    /**
+     * Let the VectorPool know that you're done with all of the temporary vectors you've been using so it doesn't need to yell at you.
+     */
+    static releaseAll() {
+        Vec3Pool.lru = -1;
+        Vec3Pool.assumeFree = true;
+    }
+
 }
 
-export class Vec4d extends Vec4 {
-    constructor(w=1, x=0, y=0, z=0) {
-        super([w, x, y, z], 64);
-    }
 
-    copy() {
-        return new this.constructor(...this.components, this.type);
-    }
+/**
+ * create a pooled Vec3 object. Any calls to this function prior to calling Vec3Pool.finalize() will instantiate a new Vec3. Any calls to it after
+ * will recycle an existing Vec3 from the temporary Vec3 pool (which is distinct from the finalized pool).
+ * @param {Number} x 
+ * @param {Number} y 
+ * @param {Number} z 
+ * @returns {Vec3} a potentially pool.
+ */
+export function new_Vec3(x=0, y=0, z=0) {
+    return Vec3Pool.acquire(x, y, z);
 }
 
-export class Vec4f extends Vec4 {
-    constructor(w=1, x=0, y=0, z=0) {
-        super([w, x, y, z], 32);
-    }
 
-    copy() {
-        return new this.constructor(...this.components);
-    }
-}
-
-export class Vec3d extends Vec3 {
-    constructor(x=0, y=0, z=0) {
-        super([x, y, z], 64);
-    }
-
-    copy() {
-        return new this.constructor(...this.components);
-    }
-}
-
-export class Vec3f extends Vec3 {
-    constructor(x=0, y=0, z=0) {
-        super([x, y, z], 32);
-    }
-
-    copy() {
-        return new this.constructor(...this.components);
-    }
-}
-
-export class Vec2d extends Vec2 {
-    constructor(x=0, y=0) {
-        super([x=0, y=0], 64);
-    }
-
-    copy() {
-        return new this.constructor(...this.components);
-    }
-}
-
-export class Vec2f extends Vec2 {
-    constructor(x=0, y=0) {
-        super([x=0, y=0], 32);
-    }
-
-    copy() {
-        return new this.constructor(...this.components);
-    }
+/**
+ * claim a pooled temporary Vec3 object. Will always recycle from the temp pool.
+ * @param {Number} x 
+ * @param {Number} y 
+ * @param {Number} z 
+ * @returns {Vec3} a potentially pool.
+ */
+export function any_Vec3(x=0, y=0, z=0) {
+    return Vec3Pool.temp_acquire(x, y, z);
 }

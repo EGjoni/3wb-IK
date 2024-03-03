@@ -1,4 +1,4 @@
-import { Vec3, Vec3d, Vec3f } from "./vecs.js";
+import {  Vec3, new_Vec3 } from "./vecs.js";
 import { MRotation, Rot } from "./Rot.js";
 import { IKTransform } from "./IKTransform.js";
 import { generateUUID } from "./uuid.js";
@@ -26,11 +26,12 @@ export class IKNode {
     globalMBasis = null;
     /** @type {IKNode} */
     parent = null;
-    id = IKNode.totalNodes;
+    id = 'IKNode-'+IKNode.totalNodes;
+    forceOrthoNormality = true;
     static originthreevec = new Vector3(0,0,0);
     static identitythreequat = new Quaternion(0,0,0,1);
     static unitthreescale = new Vector3(1,1,1);
-    tempOrigin = new  Vec3([0,0,0]);
+    tempOrigin = new_Vec3(0,0,0);
     temp_originthreevec = new Vector3(0,0,0);
     temp_identitythreequat = new Quaternion(0,0,0,1);
     temp_unitthreescale = new Vector3(1,1,1);
@@ -49,7 +50,7 @@ export class IKNode {
         this.parent = parent;
         this.dirty = true;
         this.childNodes = new Set();
-        this.workingVector = new Vec3();
+        this.workingVector = new_Vec3();
         this.areGlobal = true;
         
         this.tag = ikd;
@@ -62,32 +63,31 @@ export class IKNode {
 		this.updateGlobal();
     }
 
+    static fromObj3dGlobal(object3d) {
+        let result = new IKNode(); 
+        result.adoptGlobalValuesFromObject3D(object3d);
+        return result;
+    }
+
+    static fromObj3dLocal(object3d) {
+        let result = new IKNode(); 
+        result.adoptLocalValuesFromObject3D(object3d);
+        return result;
+    }
 
     adoptGlobalValuesFromObject3D(object3d) {
-        this.temp_originthreevec.copy(IKNode.originthreevec)
-        this.temp_identitythreequat.copy(IKNode.identitythreequat);
-        this.temp_unitthreescale.copy(IKNode.unitthreescale);
-        
-        object3d.updateWorldMatrix();
-        const pos = object3d.getWorldPosition(this.temp_originthreevec);
-        const quat = object3d.getWorldQuaternion(this.temp_identitythreequat);
-        const scale = object3d.getWorldScale(this.temp_unitthreescale); 
-        this.globalMBasis.translate.setComponents(pos.x, pos.y, pos.z);
-        this.globalMBasis.rotation.set(-quat.w, quat.x, quat.y, quat.z);
-        this.globalMBasis.scale.setComponents(scale.x, scale.y, scale.z);
-        this.globalMBasis.refreshPrecomputed();
+        this.localMBasis.setFromObj3d(object3d);
+        this.globalMBasis.setFromGlobalizedObj3d(object3d, this.temp_originthreevec, this.temp_identitythreequat, this.temp_unitthreescale);
         if(this.parent != null) {
             this.parent.setTransformToLocalOf(this.globalMBasis, this.localMBasis);
-        } else {
-            this.localMBasis.adoptValues(this.globalMBasis)
-        }
+        } 
+        return this;
     }
 
     adoptLocalValuesFromObject3D(object3d) {
-        this.localMBasis.translate.setComponents(object3d.position.x, object3d.position.y, object3d.position.z);
-        this.localMBasis.rotation.set(-object3d.quaternion.w, object3d.quaternion.x, object3d.quaternion.y, object3d.quaternion.z);
-        this.localMBasis.scale.setComponents(object3d.scale.x, object3d.scale.y, object3d.scale.z);
-        this.localMBasis.refreshPrecomputed();
+        this.localMBasis.setFromObj3d(object3d);
+        this.markDirty();
+        return this;
     }
 
 
@@ -106,6 +106,7 @@ export class IKNode {
             }
         }
         this.dirty = false;
+        return this;
     }
 
 
@@ -146,23 +147,37 @@ export class IKNode {
         this.updateGlobal();
 
         for(c of this.childNodes) ad.parentChangeCompletionNotice(this, oldParent, par, requestedBy);
-        
+        return this;
+    }
+
+    alignGlobalsTo(inputGlobalMBasis) {
+        this.updateGlobal();
+		if(this.getParentAxes() != null) {
+            this.getGlobalMBasis().adoptValues(inputGlobalMBasis);
+			this.getParentAxes().getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
+		} else {
+			this.getLocalMBasis().adoptValues(inputGlobalMBasis);
+		}
+		this.markDirty();
+        return this;
     }
 
     setGlobalOrientationTo(rotation) {
 		this.updateGlobal();
 		if(this.getParentAxes() != null) {
 			this.getGlobalMBasis().rotateTo(rotation);
-			getParentAxes().getGlobalMBasis().setToLocalOf(this.globalMBasis, this.localMBasis);
+			this.getParentAxes().getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
 		} else {
 			this.getLocalMBasis().rotateTo(rotation);
 		}
 		this.markDirty();
+        return this;
 	}
 	
 	setLocalOrientationTo(rotation) {
 		this.getLocalMBasis().rotateTo(rotation);
 		this.markDirty();
+        return this;
 	}
 
     rotateBy(apply) {
@@ -175,6 +190,7 @@ export class IKNode {
 		}
 
 		this.markDirty(); 
+        return this;
 	}
 
 
@@ -205,6 +221,7 @@ export class IKNode {
         this.areGlobal = false;
         this.getParentAxes().childNodes.add(this)
         this.markDirty();
+        return this;
     }
 
     needsUpdate() {
@@ -221,6 +238,7 @@ export class IKNode {
     setToGlobalOf(input, out) {
         this.updateGlobal();
         this.getGlobalMBasis().setToGlobalOf(input, out);
+        return out;
     }
     
 
@@ -230,6 +248,7 @@ export class IKNode {
         }
         this.updateGlobal();
         this.getGlobalMBasis().setVecToLocalOf(input, out);
+        return out;
     }
 
     setTransformToLocalOf(input, out) {
@@ -238,13 +257,18 @@ export class IKNode {
         }
         this.updateGlobal();
         this.getGlobalMBasis().setTransformToLocalOf(input, out);
+        return out;
     }
 
-    getLocalOf(input) {
+    /**
+     * 
+     * @param {Vec3} input 
+     * @returns {Vec3}
+     */
+    getLocalOf(input, storeIn = any_Vec3()) {
         this.updateGlobal();
-        const result = input.copy();
-        this.getGlobalMBasis().setTransformToLocalOf(input, result);
-        return result;
+        this.getGlobalMBasis().setTransformToLocalOf(input, storeIn);
+        return storeIn;
     }
 
 
@@ -252,6 +276,7 @@ export class IKNode {
         this.updateGlobal();
         this.getLocalMBasis().translateBy(translate);
         this.markDirty();
+        return this;
     }
 
     translateByGlobal(translate) {
@@ -263,6 +288,7 @@ export class IKNode {
         }
 
         this.markDirty();
+        return this;
     }
 
     translateTo(translate) {
@@ -274,11 +300,23 @@ export class IKNode {
         }
 
         this.markDirty();
+        return this;
     }
 
-    toIdentity() {
-        this.localMBasis.setIdentity();
+    setLocalsToIdentity() {
+        this.localMBasis.setToIdentity();
         this.markDirty();
+        return this;
+    }
+
+
+    setGlobalsToIdentity() {
+        this.getGlobalMBasis().setToIdentity();
+        if(this.getParentAxes()!=null) {
+            this.setRelativeTo(this.parent.getParentAxes());
+        }
+        this.markDirty();
+        return this;
     }
 
     /**sets the local values of this node to what they would need to be in order 
@@ -288,6 +326,7 @@ export class IKNode {
         this.updateGlobal();
         input.getGlobalMBasis().setTransformToLocalOf(this.getGlobalMBasis(), this.getLocalMBasis());
 		this.markDirty();
+        return this;
     }
 
 
@@ -385,6 +424,18 @@ export class IKNode {
     toConsole() {
         console.log(this.toString());
     }
+
+    static obj3dToConsole(object3d) {
+        let loc = new IKTransform() 
+        loc.setFromObj3d(object3d);
+        let glob = new IKTransform(); 
+        glob.setFromGlobalizedObj3d(object3d);
+
+        const global = `Global: ${glob.toString()}\n`;
+        const local = `Local: ${loc.toString()}`;
+        let out = global + local;
+        console.log(out);
+    }
 }
 
 /**
@@ -396,15 +447,18 @@ export class TrackingNode extends IKNode {
      * 
      * @param {Object3D} toTrack 
      */
-    constructor(toTrack, ikd = 'TrackingNode-'+(TrackingNode.totalNodes+1)) {
+    constructor(toTrack, ikd = 'TrackingNode-'+(TrackingNode.totalNodes+1), forceOrthoNormality = true) {
         super();
         this.ikd = ikd;
         TrackingNode.totalNodes +=1;
         this.toTrack = toTrack;
+        if(this.toTrack?.scale.x != 1 || this.toTrack?.scale.y != 1 || this.toTrack?.scale.z !=1) 
+            this.forceOrthoNormality = false
         //this.toTrack.matrixWorldAutoUpdate = false;
-        //this.adoptLocalValuesFromObject3D(this.toTrack);
+        if(this.toTrack != null)
+            this.adoptLocalValuesFromObject3D(this.toTrack);
         this.markDirty();
-        this.updateGlobal();
+        //this.updateGlobal();
     }
 
     updateGlobal(force = false) {
@@ -412,10 +466,10 @@ export class TrackingNode extends IKNode {
         super.updateGlobal();
         if(this.toTrack != null) {
             if((this.parent == null) || this.toTrack.parent == this.parent?.toTrack) {
-                this.updateUnderlyingFromLocal();
+                this.updateUnderlyingFrom_Local();
                 if(was_dirty) this.toTrack.updateWorldMatrix();
             } else {
-                this.updateUnderlyingFromGlobal(was_dirty, false);
+                this.updateUnderlyingFrom_Global(was_dirty, false);
             }
             //this.adoptLocalValuesFromObject3D(this.toTrack);
             //this.adoptGlobalValuesFromObject3D(this.toTrack);
@@ -428,17 +482,23 @@ export class TrackingNode extends IKNode {
         this.markDirty();
     }
 
+    adoptTrackedGlobal() {
+        this.adoptGlobalValuesFromObject3D(this.toTrack);
+        this.adoptLocalValuesFromObject3D(this.toTrack);
+        //this.markDirty();
+    }
+
     /*getLocalMBasis() {
         if(this.parent == null && this.toTrack)
         this.updateUnderlying();
         this.adoptLocalValuesFromObject3D(this.toTrack);
         return this.localMBasis;
     }*/
-    updateUnderlyingFromLocal() {
+    updateUnderlyingFrom_Local() {
         TrackingNode.transferLocalToObj3d(this.localMBasis, this.toTrack); 
     }
 
-    updateUnderlyingFromGlobal(update_world, updateSelf = true) {
+    updateUnderlyingFrom_Global(update_world, updateSelf = true) {
         if(updateSelf)
             this.updateGlobal();
         else {

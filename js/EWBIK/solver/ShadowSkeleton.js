@@ -1,4 +1,5 @@
 import { IKNode } from "../util/IKNodes.js";
+import { Vec3Pool } from "../util/vecs.js";
 import {ArmatureSegment} from "./ArmatureSegment.js";
 
 export class ShadowSkeleton {
@@ -46,11 +47,15 @@ export class ShadowSkeleton {
       let translate = endOnIndex === this.traversalArray.length - 1;
       let skipConstraints = stabilizationPasses < 0;
       stabilizationPasses = Math.max(0, stabilizationPasses);
+      if(translate) { //special case. translate and rotate the rootbone first to minimize deviation from innermost targets
+        this.traversalArray[endOnIndex].fastUpdateOptimalRotationToPinnedDescendants(0, translate, true);
+      }
       for (let j = 0; j <= endOnIndex; j++) {
           const wb = this.traversalArray[j];
           wb.fastUpdateOptimalRotationToPinnedDescendants(stabilizationPasses, translate && j === endOnIndex, skipConstraints);
       }
       this.conditionalNotify(doNotify, notifier);
+      Vec3Pool.releaseAll();
   }
 
   /**

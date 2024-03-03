@@ -1,12 +1,15 @@
 
-import { FlexFreezeArray, VectorNArray } from "../util/FlexFreezeArray.js";
-import { Vec3 } from "../util/vecs.js";
+import { Vec3, new_Vec3 } from "../util/vecs.js";
 import { Ray } from "../util/Ray.js";
 import {Rot} from "../util/Rot.js";
 import {QCP} from "../util/QCP.js";
 import { TargetState, ConstraintState, TransformState, BoneState } from "./SkeletonState.js";
+import { Rest } from "../betterbones/Constraints/Rest/Rest.js";
 
 export class ArmatureSegment {
+    boneCenteredTargetHeadings = [];
+    boneCenteredTipHeadings = [];
+    uniform_boneCenteredTipHeadings = [];
     constructor(shadowSkel, startingFrom, parentSegment, hasPinnedAncestor) {
         this.shadowSkel = shadowSkel;
         this.simTransforms = shadowSkel.simTransforms;
@@ -60,7 +63,7 @@ export class ArmatureSegment {
                     for (let i = 0; i < currentBS.getChildCount(); i++) {
                         const subseg = new ArmatureSegment(this.shadowSkel, currentBS.getChild(i), this, false);
                         subSgmts.push(subseg);
-                        subSgmts.push(...subseg.subSegments);
+                        //subSgmts.push(...subseg.subSegments);
                         segEffectors.push(...subseg.pinnedBones);
                     }
                     finished = true;
@@ -109,19 +112,34 @@ export class ArmatureSegment {
         for (const a of penaltyArray) {
             totalHeadings += a.length;
         }
-        this.boneCenteredTargetHeadings = new Array(totalHeadings);
-        this.boneCenteredTipHeadings = new Array(totalHeadings);
-        this.uniform_boneCenteredTipHeadings = new Array(totalHeadings);
+        let initVecs = false;
+        let startAt = 0;
+        let currentHeading = 0;
+        if(this.boneCenteredTargetHeadings?.length <= totalHeadings) {
+            startAt = this.boneCenteredTargetHeadings.length;
+            initVecs = true;
+        }
         this.weights = new Array(totalHeadings);
-        this.currentHeading = 0;
+        
         for (const a of penaltyArray) {
             for (const ad of a) {
-                this.weights[this.currentHeading] = ad;
-                this.boneCenteredTargetHeadings[this.currentHeading] = new Vec3();
-                this.boneCenteredTipHeadings[this.currentHeading] = new Vec3();
-                this.uniform_boneCenteredTipHeadings[this.currentHeading] = new Vec3();
-                this.currentHeading++;
+                this.weights[currentHeading] = ad;
+                currentHeading++;
             }
+        }
+
+        if(initVecs) {
+            for(let i = startAt; i < totalHeadings; i++) {
+                this.boneCenteredTargetHeadings.push(new_Vec3());
+                this.boneCenteredTipHeadings.push(new_Vec3());
+                this.uniform_boneCenteredTipHeadings.push(new_Vec3());
+            }
+        }
+
+        while(totalHeadings < this.boneCenteredTargetHeadings.length) {
+            this.boneCenteredTargetHeadings.pop().release();
+            this.boneCenteredTipHeadings.pop().release();
+            this.uniform_boneCenteredTipHeadings.pop().release();
         }
     }
 
@@ -222,10 +240,10 @@ class WorkingBone {
             this.simConstraintSwingAxes = forBone.getConstraint()?.getSwingTransform() == null ? null :  chain.simTransforms[forBone.getConstraint().getSwingTransform().getIndex()];
             /** @type {TransformState} */
             this.simConstraintTwistAxes = forBone.getConstraint()?.getTwistTransform() == null ? null : chain.simTransforms[forBone.getConstraint().getTwistTransform().getIndex()];
-            if (cnstrntstate.getPainfulness() > 0) {
-                springy = true;
+            if (this.cnstrntstate.getPainfulness() > 0) {
+                this.springy = true;
             } else {
-                springy = false;
+                this.springy = false;
             }
         }
         
@@ -258,10 +276,10 @@ class WorkingBone {
         const prevOrientation = new Rot(this.simLocalAxes.globalMBasis.rotation);
         let gotCloser = true;
         for (let i = 0; i <= stabilizePasses; i++) {
-            this.updateTipHeadings(this.chain.boneCenteredTipHeadings, true);
+            this.updateTipHeadings(this.chain.boneCenteredTipHeadings, !translate);
             this.updateOptimalRotationToPinnedDescendants(translate, skipConstraint, this.chain.boneCenteredTipHeadings, this.chain.boneCenteredTargetHeadings, this.chain.weights);
             if (stabilizePasses > 0) {
-                this.updateTipHeadings(this.chain.uniform_boneCenteredTipHeadings, false);
+                this.updateTipHeadings(this.chain.uniform_boneCenteredTipHeadings, !translate);
                 const currentmsd = this.chain.getManualMSD(this.chain.uniform_boneCenteredTipHeadings, this.chain.boneCenteredTargetHeadings, this.chain.weights);
                 if (currentmsd <= this.chain.previousDeviation * 1.000001) {
                     this.chain.previousDeviation = currentmsd;
@@ -291,7 +309,7 @@ class WorkingBone {
             this.simLocalAxes.translateByGlobal(translateBy);
         }
         this.simLocalAxes.updateGlobal();
-    
+        
         if (this.constraint != null && !skipConstraints) {
             this.constraint.setAxesToSnapped(this.simLocalAxes, this.simConstraintSwingAxes, this.simConstraintTwistAxes);
             //we should never hit this condition because root bones shouldn't have constraints, but I know people are gonna do it anyway so
@@ -306,13 +324,15 @@ class WorkingBone {
 
 
     pullBackTowardAllowableRegion() {
-        if (this.springy && this.constraint != null && AbstractKusudama.class.isAssignableFrom(constraint.getClass())) {
-            this.constraint.setAxesToReturnfulled(this.simLocalAxes, this.simConstraintSwingAxes, this.simConstraintTwistAxes, this.cosHalfReturnDamp, this.returnDamp);
-            this.chain.previousDeviation = Infinity;
+        if (this.springy) {
+            if(this.constraint != null && (this.constraint instanceof Rest || this.constraint instanceof Kusudama)) {
+                this.constraint.setAxesToReturnfulled(this.simLocalAxes, this.simBoneAxes, this.simConstraintSwingAxes, this.simConstraintTwistAxes, this.cosHalfReturnDamp, this.returnDamp);
+                this.chain.previousDeviation = Infinity;
+            }
         }
     }
 
-    workingRay = new Ray(new Vec3([0,0,0]), new Vec3([0,0,0]));
+    workingRay = new Ray(new_Vec3(0,0,0), new_Vec3(0,0,0));
 
     updateTargetHeadings(localizedTargetHeadings, weights) {
         let hdx = 0;
@@ -355,6 +375,7 @@ class WorkingBone {
     updateTipHeadings(localizedTipHeadings, scale) {
         let hdx = 0;
         const origin = this.simBoneAxes.origin();
+        const workingRay = this.workingRay;
         for (let i = 0; i < this.chain.pinnedBones.length; i++) {
             const sb = this.chain.pinnedBones[i];
             const tipAxes = sb.simBoneAxes;
@@ -370,19 +391,25 @@ class WorkingBone {
             hdx++;
 
             if ((modeCode & TargetState.XDir) != 0) {
-                const xTip = tipAxes.xRay().getRayScaledBy(scaleBy);
+                const xTip = workingRay;
+                xTip.set(tipAxes.xRay());
+                xTip.scaleBy(scaleBy);
                 localizedTipHeadings[hdx].set(xTip.p2).sub(origin);
                 xTip.setToInvertedTip(localizedTipHeadings[hdx + 1]).sub(origin);
                 hdx += 2;
             }
             if ((modeCode & TargetState.YDir) != 0) {
-                const yTip = tipAxes.yRay().getRayScaledBy(scaleBy);
+                const yTip = workingRay;
+                yTip.set(tipAxes.yRay());
+                yTip.scaleBy(scaleBy);
                 localizedTipHeadings[hdx].set(yTip.p2).sub(origin);
                 yTip.setToInvertedTip(localizedTipHeadings[hdx + 1]).sub(origin);
                 hdx += 2;
             }
             if ((modeCode & TargetState.ZDir) != 0) {
-                const zTip = tipAxes.zRay().getRayScaledBy(scaleBy);
+                const zTip = workingRay;
+                zTip.set(tipAxes.zRay());
+                zTip.scaleBy(scaleBy);
                 localizedTipHeadings[hdx].set(zTip.p2).sub(origin);
                 zTip.setToInvertedTip(localizedTipHeadings[hdx + 1]).sub(origin);
                 hdx += 2;
@@ -396,9 +423,9 @@ class WorkingBone {
              * determine maximum pullback that would still allow the solver to converge if applied once per pass 
              */
             if (this.cnstrntstate.getPainfulness() >= 0) {
-                dampening = forBone.getParent() == null ? MathUtils.PI : (1 - forBone.getStiffness()) * onChain.getDampening();
-                this.returnDamp = (dampening - (Math.PI / (2 * (Math.ceil(Math.PI / (iterations * dampening)) * iterations))))*cnstrntstate.getPainfulness();
-                this.cosHalfReturnDamp = Math.cos(returnDamp / 2);
+                const dampening = this.forBone.getParent() == null ? MathUtils.PI : (1 - this.forBone.getStiffness()) * this.chain.getDampening();
+                this.returnDamp = (dampening - (Math.PI / (2 * (Math.PI / (iterations * dampening) * iterations))))*this.cnstrntstate.getPainfulness();
+                this.cosHalfReturnDamp = Math.cos(this.returnDamp / 2);
                 this.springy = true;
                 //populateReturnDampeningIterationArray(k);
             } else {
