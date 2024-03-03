@@ -1,4 +1,4 @@
-Work In Progress three.js port of the Everything Will Be IK, with improvements for armature agnosticism. Java library.
+Work In Progress three.js port of the Everything Will Be IK, with improvements for armature agnosticism. From the cushion_tests branch of the Java library.
 
 
 Completed list: 
