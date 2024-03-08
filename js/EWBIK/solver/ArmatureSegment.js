@@ -1,16 +1,19 @@
 
-import { Vec3, new_Vec3 } from "../util/vecs.js";
+import { Vec3 } from "../util/vecs.js";
 import { Ray } from "../util/Ray.js";
 import {Rot} from "../util/Rot.js";
 import {QCP} from "../util/QCP.js";
 import { TargetState, ConstraintState, TransformState, BoneState } from "./SkeletonState.js";
 import { Rest } from "../betterbones/Constraints/Rest/Rest.js";
+import { Limiting, LimitingReturnful, Returnful } from "../betterbones/Constraints/Constraint.js";
+import { IKNode } from "../util/IKNodes.js";
 
 export class ArmatureSegment {
     boneCenteredTargetHeadings = [];
     boneCenteredTipHeadings = [];
     uniform_boneCenteredTipHeadings = [];
-    constructor(shadowSkel, startingFrom, parentSegment, hasPinnedAncestor) {
+    constructor(shadowSkel, startingFrom, parentSegment, hasPinnedAncestor, pool = noPool) {
+        this.pool = pool;
         this.shadowSkel = shadowSkel;
         this.simTransforms = shadowSkel.simTransforms;
         this.previousDeviation = Infinity;
@@ -19,7 +22,7 @@ export class ArmatureSegment {
         this.qcpConverger = new QCP(Number.EPSILON, Number.EPSILON);       
         this.rootSegment = this.hasPinnedAncestor || parentSegment == null ? this : this.parentSegment.rootSegment;
         this.hasPinnedAncestor = parentSegment != null && (parentSegment.hasPinnedAncestor || parentSegment.hasPinnedAncestor);
-        this.buildSegment(startingFrom);
+        this.buildSegment(startingFrom, parentSegment?.wb_segment_splitend);
         if (this.hasPinnedAncestor) this.wb_segmentRoot.setAsSegmentRoot();
     }
 
@@ -38,7 +41,7 @@ export class ArmatureSegment {
         return this.shadowSkel.baseDampening;
     }
 
-    buildSegment(startingFrom) {
+    buildSegment(startingFrom, parentBone) {
         const segEffectors = [];
         const strandBones = [];
         const subSgmts = [];
@@ -46,7 +49,7 @@ export class ArmatureSegment {
         let currentBS = startingFrom;
         let finished = false;
         while (!finished) {
-            const currentWB = new WorkingBone(currentBS, this);
+            const currentWB = new WorkingBone(currentBS, parentBone, this);
             if (currentBS == startingFrom) this.wb_segmentRoot = currentWB;
             strandBones.push(currentWB);
             const target = currentBS.getTarget();
@@ -61,6 +64,7 @@ export class ArmatureSegment {
                 }
                 else {
                     for (let i = 0; i < currentBS.getChildCount(); i++) {
+                        this.wb_segment_splitend = currentWB;
                         const subseg = new ArmatureSegment(this.shadowSkel, currentBS.getChild(i), this, false);
                         subSgmts.push(subseg);
                         //subSgmts.push(...subseg.subSegments);
@@ -74,6 +78,7 @@ export class ArmatureSegment {
             } else {
                 this.wb_segmentTip = currentWB;
             }
+            parentBone = currentWB;
         }
         this.subSegments = subSgmts;
         this.pinnedBones = segEffectors;
@@ -91,6 +96,8 @@ export class ArmatureSegment {
             reverseTraversalArray.push(...subsgmt.reversedTraversalArray);
         }
 
+        
+
         this.reversedTraversalArray = reverseTraversalArray;
     }
 
@@ -101,6 +108,11 @@ export class ArmatureSegment {
         }
         for (const s of this.childSegments) {
             s.recursivelyCreateHeadingArrays();
+        }
+        for(let i = (this.solvableStrandBones.length - 1) ; i>= 0; i--) {
+            const wb = this.solvableStrandBones[i];
+            wb.setPerPinDescendantCounts(this.pinnedBones);
+            wb.myWeights = [...this.weights]
         }
     }
 
@@ -130,9 +142,9 @@ export class ArmatureSegment {
 
         if(initVecs) {
             for(let i = startAt; i < totalHeadings; i++) {
-                this.boneCenteredTargetHeadings.push(new_Vec3());
-                this.boneCenteredTipHeadings.push(new_Vec3());
-                this.uniform_boneCenteredTipHeadings.push(new_Vec3());
+                this.boneCenteredTargetHeadings.push(this.pool.new_Vec3());
+                this.boneCenteredTipHeadings.push(this.pool.new_Vec3());
+                this.uniform_boneCenteredTipHeadings.push(this.pool.new_Vec3());
             }
         }
 
@@ -207,54 +219,68 @@ export class ArmatureSegment {
 }
 
 class WorkingBone {
-    simConstraintSwingAxes = null;
-    simConstraintTwistAxes = null;
     cosHalfDampen = 0;
     cosHalfReturnDamp = 0;
     returnDamp = 0;
+    stiffdampening = 0;
+    currentHardPain = 0; //pain from violating limiting constraints
+    currentSoftPain = 0; //pain from distance from returnful constraints
+    lastReturnfulResult = null;
     springy = false;
+    /** @type {(Limiting | Returnful | LimitingReturnful | ConstraintStack)}*/
+    constraint = null;
+    myWeights = [] //personal copy of the weights array per this bone;
 
-    constructor(forBone, chain) {
+    constructor(forBone, parentBone, chain) {
         /** @type {BoneState} */
         this.forBone = forBone;
+        this.pool = chain?.pool ?? noPool;
+        this.workingRay = new Ray(this.pool.new_Vec3(0,0,0), this.pool.new_Vec3(0,0,0), this.pool);
+        /**@type {WorkingBone}*/
+        this.parentBone = parentBone;
         /** @type {ConstraintState} */
         this.cnstrntstate = forBone.getConstraint();
+        this.constraint = this.cnstrntstate?.directReference;
         /** @type {TransformState} */
         this.simLocalAxes = chain.simTransforms[forBone.getFrameTransform().getIndex()];
         this.simBoneAxes = chain.simTransforms[forBone.getOrientationTransform().getIndex()];
+        /**@type {IKNode} */
+        this.desiredState = this.simLocalAxes.attachedCopy();
+        this.desiredBoneOrientation = this.simBoneAxes.freeCopy().setRelativeToParent(this.desiredState);
+        this.previousState= this.simLocalAxes.attachedCopy(); 
+        this.previousBoneOrientation = this.simBoneAxes.freeCopy().setRelativeToParent(this.desiredState);
         this.chain = chain;
         this.hasPinnedAncestor = this.chain.hasPinnedAncestor;
-        let predamp = 1 - forBone.getStiffness();
-		let defaultDampening = this.chain.getDampening();
-		let dampening = forBone.getParent() == null ? Math.PI : predamp * defaultDampening;
-		this.cosHalfDampen = Math.cos(dampening / 2);
 
         /** @type {TransformState} */
         if(forBone.getTarget() != null) {
             this.targetState = forBone.getTarget();
             this.simTargetAxes = this.chain.simTransforms[forBone.getTarget().getTransform().getIndex()];
         }
-        if(this.cnstrntstate != null) {
-            this.constraint = this.cnstrntstate.getDirectReference();
-            /** @type {TransformState} */
-            this.simConstraintSwingAxes = forBone.getConstraint()?.getSwingTransform() == null ? null :  chain.simTransforms[forBone.getConstraint().getSwingTransform().getIndex()];
-            /** @type {TransformState} */
-            this.simConstraintTwistAxes = forBone.getConstraint()?.getTwistTransform() == null ? null : chain.simTransforms[forBone.getConstraint().getTwistTransform().getIndex()];
-            if (this.cnstrntstate.getPainfulness() > 0) {
-                this.springy = true;
-            } else {
-                this.springy = false;
-            }
-        }
         
         this.updateCosDampening();
+    }
+
+    /**reports how much pain its in to its parent bone */
+    lament() {
+        const par = this.parentBone;
+        par.totalReports++; 
+        par.totalChildPain += this.getOwnPain();
+        //par.
+    }
+
+    mimicDesiredAxes() {
+        this.desiredState.adoptLocalValuesFromIKNode(this.simLocalAxes); 
+        this.desiredBoneOrientation.adoptLocalValuesFromIKNode(this.simLocalAxes);
+        this.previousState.adoptLocalValuesFromIKNode(this.simLocalAxes); 
+        this.previousBoneOrientation.adoptLocalValuesFromIKNode(this.simLocalAxes);
     }
 
     updateCosDampening() {
         const stiffness = this.forBone.getStiffness();
         const defaultDampening = this.chain.getDampening();
-        const dampening = this.forBone.getParent() == null ? Math.PI : (1 - stiffness) * defaultDampening;
-        this.cosHalfDampen = Math.cos(dampening / 2);
+        this.stiffdampening = this.forBone.getParent() == null ? Math.PI : (1 - stiffness) * defaultDampening;
+        this.cosHalfDampen = Math.cos(this.stiffdampening / 2);
     }
 
     setAsSegmentRoot() {
@@ -267,12 +293,14 @@ class WorkingBone {
 
     fastUpdateOptimalRotationToPinnedDescendants(stabilizePasses, translate, skipConstraint) {
         this.simLocalAxes.updateGlobal();
+        this.previousState.adoptLocalValuesFromIKNode(this.simLocalAxes); 
         if(this.cosHalfDampen == 1) {
             if(this.chain.wb_segmentRoot == this) 
                 this.chain.previousDeviation = Infinity;
             return;
         }
-        this.updateTargetHeadings(this.chain.boneCenteredTargetHeadings, this.chain.weights);
+        this.updateDescendantsPain();
+        this.updateTargetHeadings(this.chain.boneCenteredTargetHeadings, this.chain.weights, this.myWeights);
         const prevOrientation = new Rot(this.simLocalAxes.globalMBasis.rotation);
         let gotCloser = true;
         for (let i = 0; i <= stabilizePasses; i++) {
@@ -288,7 +316,9 @@ class WorkingBone {
                 } else gotCloser = false;
             }
         }
-        if (!gotCloser) this.simLocalAxes.setLocalOrientationTo(prevOrientation);
+        if (!gotCloser) {
+            this.simLocalAxes.setLocalOrientationTo(prevOrientation);
+        }
 
         //We've finished with this chain for this iteration, so next time we try to get deviation we start fresh
         if (this.chain.wb_segmentRoot == this) 
@@ -296,6 +326,7 @@ class WorkingBone {
         this.simLocalAxes.markDirty();
     }
 
+    /**returns the previousState if this bone has a constraint and might require additional passes, otherwise returns null*/
     updateOptimalRotationToPinnedDescendants(translate, skipConstraints, localizedTipHeadings, localizedTargetHeadings, weights) {
         const qcpRot = this.chain.qcpConverger.weightedSuperpose(localizedTipHeadings, localizedTargetHeadings, weights, translate);
     
@@ -304,37 +335,127 @@ class WorkingBone {
         if (!translate) {
             qcpRot.rotation.clampToQuadranceAngle(boneDamp);
         }
-        this.simLocalAxes.rotateBy(qcpRot.rotation);
-        if (translate) {
-            this.simLocalAxes.translateByGlobal(translateBy);
-        }
-        this.simLocalAxes.updateGlobal();
-        
-        if (this.constraint != null && !skipConstraints) {
-            this.constraint.setAxesToSnapped(this.simLocalAxes, this.simConstraintSwingAxes, this.simConstraintTwistAxes);
-            //we should never hit this condition because root bones shouldn't have constraints, but I know people are gonna do it anyway so
-            if (translate) {
-                this.simConstraintSwingAxes.translateByGlobal(translateBy);
-                this.simConstraintTwistAxes.translateByGlobal(translateBy);
+        if (this.constraint != null && !skipConstraints && !(this.constraint instanceof Returnful)) {
+            this.desiredState.rotateBy(qcpRot.rotation);
+            this.desiredState.updateGlobal();
+            let rotBy = this.constraint.getRectifyingRotation(this.desiredState, this.desiredBoneOrientation, this.simLocalAxes, this.simBoneAxes);
+            this.currentHardPain = 0;
+            if(rotBy != Rot.IDENTITY) { 
+                this.currentHardPain = 1; //violating a hard constraint should be maximally painful.
             }
-        }
+            this.desiredState.rotateBy(rotBy); //rectify the desired state to a valid state
+            IKNode.swap(this.previousState, this.simLocalAxes); //save the old value of simLocalAxes
+            this.simLocalAxes.setLocalOrientationTo(this.desiredState.getLocalMBasis().rotation); //set the new values of simLocalAxes to the rectified result
+            return this.previousState;
+        } else {
+            if (translate) {
+                this.simLocalAxes.translateByGlobal(translateBy);
+            }
+            this.simLocalAxes.rotateBy(qcpRot.rotation);
+        } 
         return qcpRot;
     }
+
+    /**sets an array specifying the number of descendants to reach each pin. 
+     * this is as an iteration count independent part of the painfulness scheme
+     * where each bone weighs targets more heavily based on the amount of pain their descendants report toward that target.
+    */
+    setPerPinDescendantCounts(pinnedBones) {
+        this.descendantCounts = new Array(pinnedBones.length);
+        this.descendantAveragePain = new Array(pinnedBones.length);
+        this.childPathToPin = new Array(pinnedBones.length);
+        this.indexOnDescendant = new Array(pinnedBones.length);
+        for(let i =0; i < pinnedBones.length; i++) {
+            let count = 1;
+            let currentBone = pinnedBones[i];
+            while(currentBone != this) {
+                count++;
+                if(currentBone.parentBone == this) {
+                    this.childPathToPin[i] = currentBone;
+                }
+                this.indexOnDescendant[i] = currentBone.chain.pinnedBones.indexOf(pinnedBones[i]);
+                currentBone = currentBone.parentBone;
+            }
+            this.descendantCounts[i] = count;
+            this.descendantAveragePain[i] = 0;
+        }
+    }
+
+    updateDescendantsPain() {
+        let ownPain = this.getOwnPain();
+        let distrOwnPain = ownPain / this.descendantCounts.length;
+        this.justDescendantPainTotal = 0;
+        this.totalDescendants = 0;
+        this.justDescendantsAverage = 0;
+        this.justDescendantsDeviation = 0; 
+        
+        if(this.childPathToPin.length == 1) {
+            let childToPin = this.childPathToPin[0];
+            if(childToPin == undefined) { //leaf node
+                this.descendantAveragePain[0] = ownPain;
+            }else {
+                for(let i =0; i < this.descendantCounts.length; i++) {
+                    let descToPin = this.descendantCounts[i];
+                    let avgDescendantPain = childToPin.descendantAveragePain[i];
+                    let segdescendantTotal = ((descToPin-1)*avgDescendantPain);
+                    avgDescendantPain = (segdescendantTotal + distrOwnPain)/descToPin;
+                    this.totalDescendants += descToPin;
+                    this.justDescendantPainTotal += segdescendantTotal;
+                    this.descendantAveragePain[i] = avgDescendantPain;
+                }
+            }
+        }
+        else if (this.childPathToPin.length > 1) {            
+            for(let i =0; i < this.descendantCounts.length; i++) {
+                let descToPin = this.descendantCounts[i];
+                let indexOfPinInDescendant = this.indexOnDescendant[i]
+                let avgDescendantPain = this.childPathToPin[i].getDescendantPain(indexOfPinInDescendant);
+                let segdescendantTotal = ((descToPin-1)*avgDescendantPain);
+                avgDescendantPain = (segdescendantTotal + distrOwnPain)/descToPin;
+                this.totalDescendants += descToPin;
+                this.justDescendantPainTotal += segdescendantTotal;
+                this.descendantAveragePain[i] = avgDescendantPain;
+            }
+        } else if(this.descendantCounts.length >= 1) {
+            console.log("what")
+        }
+        this.descendantPainTotal = this.avgDescendantPain*this.descToPin
+    }
+
+     /**@return the amount of pain this bone itself is experiencing */
+    getOwnPain() {
+       this.currentSoftPain = this.lastReturnfulResult?.postCallDiscomfort;
+       this.currentSoftPain = isNaN(this.currentSoftPain) ? 0 : this.currentSoftPain;
+       return Math.max(this.currentHardPain,  this.currentSoftPain);
+    }
+
+    /**@return the average amount of pain this bone and all descendants attempting to reach this pin are experiencing**/
+    getDescendantPain(pinIndex) {
+        return this.descendantAveragePain[pinIndex];
+    }
     
+    updatePain(iteration) {
+        if (this.springy) {
+            const res = this.constraint.getPreferenceRotation(this.simLocalAxes, this.simBoneAxes, this.previousState, this.previousBoneOrientation, iteration, this);
+            this.chain.previousDeviation = Infinity;
+            this.lastReturnfulResult = res;
+        }
+    }
 
-
-    pullBackTowardAllowableRegion() {
+    pullBackTowardAllowableRegion(iteration, callbacks) {
         if (this.springy) {
             if(this.constraint != null && (this.constraint instanceof Rest || this.constraint instanceof Kusudama)) {
-                this.constraint.setAxesToReturnfulled(this.simLocalAxes, this.simBoneAxes, this.simConstraintSwingAxes, this.simConstraintTwistAxes, this.cosHalfReturnDamp, this.returnDamp);
+                callbacks?.beforePullback(this.forBone.directRef, this);
+                const res = this.constraint.getPreferenceRotation(this.simLocalAxes, this.simBoneAxes, this.previousState, this.previousBoneOrientation, iteration, this);
                 this.chain.previousDeviation = Infinity;
+                this.lastReturnfulResult = res;
+                this.simLocalAxes.rotateBy(this.lastReturnfulResult.clampedRotation);
+                callbacks?.afterPullback(this.forBone.directRef, this);
             }
         }
     }
 
-    workingRay = new Ray(new_Vec3(0,0,0), new_Vec3(0,0,0));
-
-    updateTargetHeadings(localizedTargetHeadings, weights) {
+    updateTargetHeadings(localizedTargetHeadings, baseWeights, weights) {
         let hdx = 0;
         const workingRay = this.workingRay;
         for (let i = 0; i < this.chain.pinnedBones.length; i++) {
@@ -343,28 +464,37 @@ class WorkingBone {
             targetAxes.updateGlobal();
             const origin = this.simLocalAxes.origin();
             localizedTargetHeadings[hdx].set(targetAxes.origin()).sub(origin);
+            let painScalar = (1+this.descendantAveragePain[i]);
+            weights[hdx] = painScalar * baseWeights[hdx];
             const modeCode = sb.targetState.getModeCode();
             hdx++;
             if ((modeCode & TargetState.XDir) != 0) {
+                weights[hdx] = painScalar*baseWeights[hdx];
+                weights[hdx+1] = painScalar*baseWeights[hdx+1];
                 const xTarget = workingRay;
                 xTarget.set(targetAxes.xRay());
-                xTarget.scaleBy(weights[hdx]);
+                //xTarget.scaleBy(weights[hdx]);
                 localizedTargetHeadings[hdx].set(xTarget.p2).sub(origin);
                 xTarget.setToInvertedTip(localizedTargetHeadings[hdx + 1]).sub(origin);
                 hdx += 2;
             }
             if ((modeCode & TargetState.YDir) != 0) {
+                weights[hdx] = painScalar*baseWeights[hdx];
+                weights[hdx+1] = painScalar*baseWeights[hdx+1];
                 const yTarget = workingRay;
                 yTarget.set(targetAxes.yRay());
-                yTarget.scaleBy(weights[hdx]);
+                //yTarget.scaleBy(weights[hdx]);
                 localizedTargetHeadings[hdx].set(yTarget.p2).sub(origin);
                 yTarget.setToInvertedTip(localizedTargetHeadings[hdx + 1]).sub(origin);
+                
                 hdx += 2;
             }
             if ((modeCode & TargetState.ZDir) != 0) {
+                weights[hdx] = painScalar*baseWeights[hdx];
+                weights[hdx+1] = painScalar*baseWeights[hdx+1];
                 const zTarget = workingRay;
                 zTarget.set(targetAxes.zRay());
-                zTarget.scaleBy(weights[hdx]);
+                //zTarget.scaleBy(weights[hdx]);
                 localizedTargetHeadings[hdx].set(zTarget.p2).sub(origin);
                 zTarget.setToInvertedTip(localizedTargetHeadings[hdx + 1]).sub(origin);
                 hdx += 2;
@@ -418,20 +548,20 @@ class WorkingBone {
     }
 
     updateReturnfullnessDamp(iterations) {
-        if(this.cnstrntstate != null) {
+        if(this.maybeSpringy()) {
+            this.constraint.setPreferenceLeeway(this.stiffdampening);
+            this.constraint.updatePerIterationLeewayCache(iterations);
             /**
              * determine maximum pullback that would still allow the solver to converge if applied once per pass 
              */
-            if (this.cnstrntstate.getPainfulness() >= 0) {
-                const dampening = this.forBone.getParent() == null ? MathUtils.PI : (1 - this.forBone.getStiffness()) * this.chain.getDampening();
-                this.returnDamp = (dampening - (Math.PI / (2 * (Math.PI / (iterations * dampening) * iterations))))*this.cnstrntstate.getPainfulness();
-                this.cosHalfReturnDamp = Math.cos(this.returnDamp / 2);
+            if(this.constraint.giveup >= 1) {
                 this.springy = true;
-                //populateReturnDampeningIterationArray(k);
-            } else {
-                this.springy = false;
             }
         }
+    }
+
+    maybeSpringy() {
+        return (this.constraint != null && (this.constraint instanceof Returnful || this.constraint instanceof LimitingReturnful ));
     }
 }
 

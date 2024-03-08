@@ -2,25 +2,25 @@ import { IKTransform } from "../../../util/IKTransform.js";
 const THREE = await import('three')
 import { Bone } from 'three';
 import { Rot } from "../../../util/Rot.js";
-import { Vec3, any_Vec3, new_Vec3 } from "../../../util/vecs.js";
+import { Vec3, any_Vec3 } from "../../../util/vecs.js";
 import { Ray } from "../../../util/Ray.js";
 import { IKNode } from "../../../util/IKNodes.js";
 import { generateUUID } from "../../../util/uuid.js";
-import { Constraint } from "../Constraint.js";
+import { Constraint, LimitingReturnful } from "../Constraint.js";
 
-export class Kusudama extends Constraint {
+export class Kusudama extends LimitingReturnful {
     
     static TAU = Math.PI * 2;
     static PI = Math.PI;
     static totalKusudamas = 0;
     
 
-    constructor(forBone = null, ikd = 'Kusudama-'+(Kusudama.totalKusudamas+1)) {
+    constructor(forBone = null, ikd = 'Kusudama-'+(Kusudama.totalKusudamas++), vecpool = noPool) {
+        this.pool = vecpool;
         if(!forBone?.parent instanceof THREE.Bone) { 
-            throw new Error("Root bones may not specify a constraint. Add this bone to a parent before attempting to register a constrain on it.");
+            console.warn("Root bones should not specify a constraint. Add this bone to a parent before attempting to register a constrain on it.");        
         }
         this.ikd = ikd;
-        Kusudama.totalKusudamas +=1;
         this.directionAxes = this.maybeCreateOrientationAxes();
         this.twistAxes = this.maybeCreateTwistAxes();
         this.painfulness = 0.0;
@@ -37,17 +37,17 @@ export class Kusudama extends Constraint {
         this.twistMaxRot = new Rot();
         this.twistHalfRangeRot = new Rot();
         this.twistCentRot = new Rot();
-        this.boneRay = new Ray(new_Vec3(), new_Vec3());
-        this.constrainedRay = new Ray(new_Vec3(), new_Vec3());
-        this.twistMinVec = new_Vec3(0, 0, 1);
-        this.twistMaxVec = new_Vec3(0, 0, 1);
-        this.twistCenterVec = new_Vec3(0, 0, -1);
+        this.boneRay = new Ray(this.pool.any_Vec3(), this.pool.any_Vec3());
+        this.constrainedRay = new Ray(this.pool.any_Vec3(), this.pool.any_Vec3());
+        this.twistMinVec = new Vec3(0, 0, 1);
+        this.twistMaxVec = new Vec3(0, 0, 1);
+        this.twistCenterVec = new Vec3(0, 0, -1);
         this.twistHalfRangeHalfCos = -0.5;
         this.flippedBounds = false;
         this.forBone.constraint = this;                
 
         if (forBone) {            
-            this.limitingAxes = new IKNode(); 
+            this.limitingAxes =new IKNode(null, null, undefined, this.pool); 
             this.limitingAxes.getLocalMBasis().translateTo(new Vec3(this.forBone.position));
             this.twistAxes = this.limitingAxes.attachedCopy(false);
             this.forBone.addConstraint(this); 
@@ -83,13 +83,13 @@ export class Kusudama extends Constraint {
             }
         }
 
-        let newY = new_Vec3();
+        let newY = this.pool.any_Vec3();
         directions.forEach(dv => {
             newY.add(dv);
         });
         newY.normalize();
 
-        let newYRay = new Ray(new_Vec3(0, 0, 0), newY);
+        let newYRay = new Ray(this.pool.any_Vec3(0, 0, 0), newY);
 
         let oldYtoNewY = new Rot(this.swingOrientationAxes().yRay().heading(), this.swingOrientationAxes().getGlobalOf(newYRay).heading());
         this.twistAxes.alignOrientationTo(this.swingOrientationAxes());
@@ -134,7 +134,7 @@ export class Kusudama extends Constraint {
         if (!this.axiallyConstrained) return 0.0;
         let globTwistCent = twistAxes.getGlobalMBasis().rotation.applyTo(this.twistCentRot);
         let alignRot = globTwistCent.applyInverseTo(toSet.getGlobalMBasis().rotation);
-        let decomposition = alignRot.getSwingTwist(new_Vec3(0, 1, 0));
+        let decomposition = alignRot.getSwingTwist(this.pool.any_Vec3(0, 1, 0));
         decomposition[1].rotation.clampToQuadranceAngle(this.twistHalfRangeHalfCos);
         let recomposition = decomposition[0].applyTo(decomposition[1]);
         toSet.getParentAxes().getGlobalMBasis().inverseRotation.applyTo(globTwistCent.applyTo(recomposition), toSet.localMBasis.rotation);
@@ -166,9 +166,9 @@ export class Kusudama extends Constraint {
     setAxialLimits(minAngle, inRange) {
         this.minAxialAngle = minAngle;
         this.range = inRange;
-        let y_axis = new_Vec3(0, 1, 0);
+        let y_axis = this.pool.new_Vec3(0, 1, 0);
         this.twistMinRot = new Rot(y_axis, this.minAxialAngle);
-        this.twistMinVec = this.twistMinRot.applyToCopy(new_Vec3(0, 0, 1));
+        this.twistMinVec = this.twistMinRot.applyToCopy(this.pool.new_Vec3(0, 0, 1));
 
         this.twistHalfRangeHalfCos = Math.cos(inRange / 4);
         this.twistRangeRot = new Rot(y_axis, this.range);
@@ -177,7 +177,7 @@ export class Kusudama extends Constraint {
 
         this.twistHalfRangeRot = new Rot(y_axis, this.range / 2);
         this.twistCenterVec = this.twistHalfRangeRot.applyToCopy(this.twistMinVec);
-        this.twistCentRot = new Rot(new_Vec3(0, 0, 1), this.twistCenterVec);
+        this.twistCentRot = new Rot(this.pool.new_Vec3(0, 0, 1), this.twistCenterVec);
 
         this.constraintUpdateNotification();
     }
@@ -186,7 +186,7 @@ export class Kusudama extends Constraint {
         let globTwistCent = new Rot();
         this.twistAxes.getGlobalMBasis().applyTo(this.twistMinRot, globTwistCent);
         let alignRot = globTwistCent.applyInverseTo(toSet.getGlobalMBasis().rotation);
-        let decomposition = alignRot.getSwingTwist(new_Vec3(0, 1, 0));
+        let decomposition = alignRot.getSwingTwist(this.pool.new_Vec3(0, 1, 0));
         let goal = new Rot(this.twistHalfRangeRot.getAxis(), 2 * this.twistHalfRangeRot.getAngle() * ratio);
         let toGoal = goal.applyTo(alignRot.getInverse());
         let achieved = toGoal.applyTo(alignRot);
@@ -201,8 +201,8 @@ export class Kusudama extends Constraint {
         let globTwistCent = new Rot();
         twistAxes.getGlobalMBasis().applyTo(this.twistCentRot, globTwistCent);
         let centAlignRot = globTwistCent.applyInverseTo(toGet.getGlobalMBasis().rotation);
-        let centDecompRot = centAlignRot.getSwingTwist(new_Vec3(0, 1, 0));
-        let locZ = centDecompRot[1].applyToCopy(new_Vec3(0, 0, 1));
+        let centDecompRot = centAlignRot.getSwingTwist(this.pool.new_Vec3(0, 1, 0));
+        let locZ = centDecompRot[1].applyToCopy(this.pool.new_Vec3(0, 0, 1));
         let loctwistMaxVec = twistCentRot.getInverse().applyToCopy(this.twistMaxVec);
         let loctwistMinVec = twistCentRot.getInverse().applyToCopy(this.twistMinVec);
         let toMax = new Rot(locZ, loctwistMaxVec);
@@ -265,7 +265,7 @@ export class Kusudama extends Constraint {
      */
     pointOnPathSequence(inPoint, limitingAxes) {
         let closestPointDot = 0;
-        let result = limitingAxes.getLocalOf(inPoint, any_Vec3()); 
+        let result = limitingAxes.getLocalOf(inPoint, this.pool.any_Vec3()); 
         result.normalize();
 
         if (this.limitCones.length === 1) {

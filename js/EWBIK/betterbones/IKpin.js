@@ -11,12 +11,16 @@ export class IKPin {
     effectorTransform = new IKTransform();
     target = null;
     enabled = true;
-    targetNode = new TrackingNode();
+    targetNode = null;
     pinWeight = 1;
-    modeCode = 6;
-    xPriority = 10;
-    yPriority = 10;
-    zPriority = 10;
+    modeCode = 3;
+    xPriority = 1;
+    yPriority = 1;
+    zPriority = 1;
+    
+    static _XDIR = 0b001;
+    static _YDIR = 0b010;
+    static _ZDIR = 0b100;
 
     /**
      * 
@@ -36,11 +40,14 @@ export class IKPin {
         this.ikd = ikd;
         
         if (targetNode == null) {
-            this.targetNode = new TrackingNode();
+            this.targetNode = new TrackingNode(null, undefined, this.forBone.parentArmature.wScale);           
             this.targetNode.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());
+            this.targetNode.setParent(forBone.parentArmature.armatureNode);
+            this.targetNode.updateUnderlyingFrom_Global(true)
         } else if(targetNode instanceof THREE.Object3D) {
-            let trackNode = new TrackingNode(targetNode);
+            let trackNode = new TrackingNode(targetNode, undefined, this.forBone.parentArmature.wScale);
             this.targetNode = trackNode;
+            this.targetNode.setParent(forBone.parentArmature.armatureNode);
             this.target_threejs = targetNode;
         } else {
             this.targetNode = targetNode;
@@ -64,14 +71,17 @@ export class IKPin {
 
     toggle() {
         this.enabled = !this.isEnabled();
+        this.forBone?.parentArmature?.regenerateShadowSkeleton();
     }
 
     enable() {
         this.enabled = true;
+        this.forBone?.parentArmature?.regenerateShadowSkeleton();
     }
 
     disable() {
         this.enabled = false;
+        this.forBone?.parentArmature?.regenerateShadowSkeleton();
     }
 
 
@@ -115,31 +125,66 @@ export class IKPin {
         return this.depthFalloff;
     }
 
-    setTargetPriorities(position, xPriority, yPriority, zPriority) {
-        const modeCodes = {
-            'none': 0,
-            'x': 1,
-            'y': 2,
-            'z': 4,
-            'xy': 3,
-            'xz': 5,
-            'yz': 6,
-            'xyz': 7,
-        };
+    setPositionPriority(val) {
 
-        let combinedModeCode = 0;
-        if (xPriority !== undefined && xPriority >= 0) combinedModeCode |= modeCodes['x'];
-        if (yPriority !== undefined && yPriority >= 0) combinedModeCode |= modeCodes['y'];
-        if (zPriority !== undefined && zPriority >= 0) combinedModeCode |= modeCodes['z'];
+    }
 
-        this.modeCode = combinedModeCode;
-        this.subTargetCount = Object.keys(position).filter(key => position[key]).length;
+    /**
+	 * Sets  the priority of the orientation bases which effectors reaching for this target will and won't align with. 
+	 * If all are set to 0, then the target is treated as a simple position target. 
+	 * It's usually better to set at least on of these three values to 0, as giving a nonzero value to all three is most often redundant and just adds comput time. 
+	 *
+	 * @param xPriority Determines how much this pin's bone tries to align its x-axis with the target x-axis.
+	 * @param yPriority Determines how much this pin's bone tries to align its y-axis with the target y-axis.	
+	 * @param zPriority Determines how much this pin's bone tries to align its z-axis with the target z-axis.
+	 */
 
-        this.xPriority = xPriority === undefined ? 1 : Math.max(0, Math.min(1, xPriority));
-        this.yPriority = yPriority === undefined ? 1 : Math.max(0, Math.min(1, yPriority));
-        this.zPriority = zPriority === undefined ? 1 : Math.max(0, Math.min(1, zPriority));
+    setTargetPriorities(xPriority, yPriority, zPriority) {
+
+        let xDir = xPriority > 0 ? IKPin._XDIR : 0;
+		let yDir = yPriority > 0 ? IKPin._YDIR : 0;
+		let zDir = zPriority > 0 ? IKPin._ZDIR : 0;
+        let prevmodecode = this.modeCode;
+		this.modeCode = 0; 
+
+		this.modeCode += xDir; 
+		this.modeCode += yDir; 
+		this.modeCode += zDir;
+		
+		let subTargetCount = 1;
+		if((this.modeCode &1) != 0) subTargetCount++;   
+		if((this.modeCode &2) != 0) subTargetCount++;   
+		if((this.modeCode &4) != 0) subTargetCount++; 
+		
+		this.xPriority = xPriority;
+		this.yPriority = yPriority;
+		this.zPriority = zPriority;		
         
+        if(prevmodecode != this.modeCode) {
+            this.forBone?.parentArmature?.regenerateShadowSkeleton();
+        }
         this.forBone?.parentArmature?.updateShadowSkelRateInfo();
+    }
+
+    /**
+	 * @param xPriority Determines how much this pin's bone tries to align its x-axis with the target x-axis.	
+	 */
+    setXPriority(val) {
+        this.setTargetPriorities(parseFloat(val), this.yPriority, this.zPriority);
+    }
+
+    /**
+	 * @param yPriority Determines how much this pin's bone tries to align its y-axis with the target y-axis.	
+	 */
+    setYPriority(val) {
+        this.setTargetPriorities(this.xPriority, parseFloat(val), this.zPriority);
+    }
+
+    /**
+	 * @param zPriority Determines how much this pin's bone tries to align its z-axis with the target z-axis.	
+	 */
+    setZPriority(val) {
+        this.setTargetPriorities(this.xPriority, this.yPriority, parseFloat(val));
     }
 
     getSubtargetCount() {
@@ -211,10 +256,14 @@ export class IKPin {
         }
     }
 
-    solveIKForThisAndChildren() {
+    /**
+     * performs a solve only for the bones which can rotate to satisfy this target, and which must rotate as
+     * a result of moving ancestors of this target
+     */
+    solveFromHere() {
         try {
-            this.childPins.forEach(childPin => childPin.solveIKForThisAndChildren());
-            this.forBone.solveIKFromHere();
+            //this.childPins.forEach(childPin => childPin.solveIKForThisAndChildren());
+            this.forBone.parentArmature.solve(this.forBone);
         } catch (error) {
             console.warn(error);
         }
@@ -291,11 +340,38 @@ export class IKPin {
     /**
      * positions this pin to precisely where its bone can reach it.
     */
-    alignToBone(){
-        this.forBone.getIKBoneOrientation().updateWorldMatrix();
-        this.forBone.getIKBoneOrientation().getWorldPosition(this.targetNode.toTrack.position);
-        this.forBone.getIKBoneOrientation().getWorldQuaternion(this.targetNode.toTrack.quaternion);
-        this.targetNode.adoptTrackedLocal();
+    alignToBone() {
+        const object = this.targetNode.toTrack;
+        let prevPar = object.parent;
+        object.position.set(0, 0, 0);
+        object.quaternion.set(0, 0, 0, 1);
+        object.scale.set(1, 1, 1);
+        object.updateMatrix();
+        (this.forBone.getIKBoneOrientation()?.children[0] ?? this.forBone.getIKBoneOrientation()).add(object); 
+        object.updateWorldMatrix();
+        this.forBone.getIKBoneOrientation()?.children[0] ?? this.forBone.getIKBoneOrientation().attach();
+        this.targetNode.adoptGlobalValuesFromObject3D(object, this.forBone.parentArmature.wScale, true);
+        prevPar.attach(object);
+
+        //this.targetNode.sendTrackedToGlobal(this.forBone.getIKBoneOrientation()?.children[0] ?? this.forBone.getIKBoneOrientation());
+        //this.targetNode.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation()?.children[0] ?? this.forBone.getIKBoneOrientation());
+        //this.forBone.getIKBoneOrientation().updateWorldMatrix();
+        //this.forBone.getIKBoneOrientation().getWorldPosition(this.targetNode.toTrack.position);
+        //this.forBone.getIKBoneOrientation().getWorldQuaternion(this.targetNode.toTrack.quaternion);
+        //this.targetNode.adoptTrackedLocal();
+    }
+
+
+    /**
+     * if you call this function, it will fire whatever callback has been specified as this IKPin instances 
+     * onChange function. By default, the onChange function calls solveFromHere()
+     */
+    notifyOfChange() {
+        this.onChange();
+    }
+
+    onChange() {
+        this.solveFromHere();
     }
 
 }

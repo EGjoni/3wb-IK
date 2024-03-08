@@ -169,13 +169,10 @@ export class SkeletonState {
      * Adds a constraint to the skeleton's constraint map, defining limits on a bone's movement.
      * @param {string} id - A unique string identifier for this constraint.
      * @param {string} forBone_id - The id string of the bone this constraint is applied to.
-     * @param {number} painfulness - Scalar indicating degree to which bone should be averse to approaching this constraint's boundary.
-     * @param {string} swingOrientationTransform_id - The id of the transform specifying the orientation of the swing space for this constraint.
-     * @param {(string | null)} - Optional. The id of the transform specifying the orientation of the twist basis for ball and socket-type constraints. Relevant for constraints like Kusudamas, splines, and limit cones.
      * @param {Object} directReference - A reference to the actual Constraint instance; required for the solver to call its snapToLimitingAxes function.
      */
-    addConstraint(id, forBone_id, painfulness, swingOrientationTransform_id, twistOrientationTransform_id = null, directReference = null) {
-        const con = new ConstraintState(id, forBone_id, painfulness, swingOrientationTransform_id, twistOrientationTransform_id, directReference, this);
+    addConstraint(id, forBone_id, directReference = null) {
+        const con = new ConstraintState(id, forBone_id, directReference, this);
         this.constraintMap[id] = con;
         return con;
     }
@@ -263,6 +260,14 @@ export class BoneState {
 
     getTarget() {
         return this.targetIdx != -1 ? this.skeletonState.targets[this.targetIdx] : null;
+    }
+
+    _setCurrentPain(currentPain) {
+        this.currentPain=currentPain;
+    }
+
+    readBonePain() {
+        return this.currentPain;
     }
 
     getStiffness() {
@@ -553,66 +558,64 @@ export class TargetState {
     getPriority(basisDirection) {
         return this.priorities[Math.floor(basisDirection / 2)];
     }
-
+ 
     /**takes an array of target direction weights and modifies them in accordance with the priorities this targetstate specifies */
     setPriorities(priorities) {
+        const xDir = priorities[0] > 0;
+        const yDir = priorities[1] > 0;
+        const zDir = priorities[2] > 0;
         let totalPriority = 0;
         let priorityCount = 0;
         let normedPriority = 0;
         let maxPriority = 0;
 
-        priorities.forEach((priority, i) => {
-            if ((this.modeCode & (1 << Math.floor(i / 2))) != 0) {
-                priorityCount++;
-                totalPriority += priorities[i];
-                maxPriority = Math.max(priorities[i], maxPriority);
-            }
-        });
-
-        if (priorityCount > 0)
-            normedPriority = totalPriority / priorityCount;
-
-        this.priorities = priorities.map(priority => priority * normedPriority * maxPriority);
+        this.modeCode = 0;
+        if (xDir) {
+            this.modeCode += TargetState.XDir;
+            totalPriority += priorities[0];
+            maxPriority = Math.max(priorities[0], maxPriority);
+            priorityCount++;
+        }
+        if (yDir) {
+            this.modeCode += TargetState.YDir;
+            totalPriority = priorities[1];
+            maxPriority = Math.max(priorities[1], maxPriority);
+            priorityCount++;
+        }
+        if (zDir) {
+            this.modeCode += TargetState.ZDir;
+            totalPriority = priorities[2];
+            maxPriority = Math.max(priorities[2], maxPriority);
+            priorityCount++;
+        }
+        this.priorities = priorities;
+        
+        //if (priorityCount > 0)
+        this.priorities = priorities.map(priority => priority/3)// * maxPriority);
     }
 
     setWeight(weight) {
         this.weight = weight;
     }
 
-    static XDir = 1;
-    static YDir = 2;
-    static ZDir = 4;
+    static XDir = 0b001;
+    static YDir = 0b010;
+    static ZDir = 0b100;
 }
 
 
 export class ConstraintState {
-    constructor(id, forBone_id, painfulness, swingOrientationTransform_id, twistOrientationTransform_id, directReference, parentSkelState) {
+    constructor(id, forBone_id, directReference, parentSkelState) {
         this.ikd = id;
         this.forBone_id = forBone_id;
-        this.swingOrientationTransform_id = swingOrientationTransform_id;
-        this.twistOrientationTransform_id = twistOrientationTransform_id;
         this.directReference = directReference;
-        this.painfulness = painfulness;
         this.skeletonState = parentSkelState; 
         this.index = -1;
-        this.swingTranform_idx = -1;
-        this.twistTransform_idx = -1;
     }
 
     prune() {
-        if (this.getTwistTransform() != null) this.getTwistTransform().prune();
-        this.getSwingTransform().prune();
         delete this.skeletonState.constraintMap[this.ikd];
         this.skeletonState.constraintsList[this.index] = null;
-    }
-
-    getSwingTransform() {
-        return this.skeletonState.transforms[this.swingTranform_idx];
-    }
-
-    getTwistTransform() {
-        if (this.twistTransform_idx === -1) return null;
-        return this.skeletonState.transforms[this.twistTransform_idx];
     }
 
     setIndex(index) {
@@ -623,17 +626,8 @@ export class ConstraintState {
         return this.index;
     }
 
-    getPainfulness() {
-        return this.painfulness;
-    }
-
     optimize() {
-        if (this.twistOrientationTransform_id != null) {
-            const twistTransform = this.skeletonState.transformMap[this.twistOrientationTransform_id];
-            this.twistTransform_idx = twistTransform.getIndex();
-        }
-        const swingTransform = this.skeletonState.transformMap[this.swingOrientationTransform_id];
-        this.swingTranform_idx = swingTransform.getIndex();
+        
     }
 
     validate() {
@@ -641,19 +635,6 @@ export class ConstraintState {
         const forBone = this.skeletonState.boneMap[this.forBone_id];
         if (forBone === undefined) {
             throw new Error(`Constraint '${this.ikd}' claims to constrain bone '${this.forBone_id}', but no such bone has been registered with this SkeletonState`);
-        }
-        if (this.swingOrientationTransform_id === null) {
-            throw new Error(`Constraint with id '${this.ikd}' claims to have no swing transform, but this transform is required.`);
-        }
-        const constraintSwing = this.skeletonState.transformMap[this.swingOrientationTransform_id];
-        if (constraintSwing === undefined) {
-            throw new Error(`Constraint with id '${this.ikd}' claims to have a swingOrientationTransform with id '${this.swingOrientationTransform_id}', but no such transform has been registered with this SkeletonState`);
-        }
-        if (this.twistOrientationTransform_id != null) {
-            const constraintTwist = this.skeletonState.transformMap[this.twistOrientationTransform_id];
-            if (constraintTwist === undefined) {
-                throw new Error(`Constraint with id '${this.ikd}' claims to have a twist transform with id '${this.twistOrientationTransform_id}', but no such transform has been registered with this SkeletonState`);
-            }
         }
     }
 

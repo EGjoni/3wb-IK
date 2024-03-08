@@ -1,5 +1,5 @@
 
-import { Vec3, new_Vec3 } from "../../../util/vecs.js";
+import { Vec3} from "../../../util/vecs.js";
 import { Rot } from "../../../util/Rot.js";
 import { Ray } from "../../../util/Ray.js";
 

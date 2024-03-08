@@ -1,4 +1,4 @@
-import {Vec3, any_Vec3, new_Vec3} from "./vecs.js";
+import {Vec3, any_Vec3} from "./vecs.js";
 import {Rot} from "./Rot.js";
 
 export class QCP {	

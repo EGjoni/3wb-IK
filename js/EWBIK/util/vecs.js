@@ -1,6 +1,7 @@
 
 /**untyped vec3, use for any frequent instantiatons, as its faster to create than floatbuffer*/
 
+
 export class Vec3 {
     baseIdx = 0;
     dataBuffer = [0, 0, 0];
@@ -45,7 +46,7 @@ export class Vec3 {
     }
 
     copy() {
-        return new_Vec3(this.x, this.y, this.z);
+        return new Vec3(this.x, this.y, this.z);
     }
 
     toString() {
@@ -104,6 +105,21 @@ export class Vec3 {
         if (vec instanceof Vec3) return vec.components;
         else if (Array.isArray(vec)) return vec;
         else throw Error('Unsupported vector format');
+    }
+
+    /**swap the values of these variables */
+    static swap(v1, v2) {        
+        v1.components[v1.baseIdx] = v1.components[v1.baseIdx] ^ v2.components[v2.baseIdx];
+        v2.components[v2.baseIdx] = v1.components[v1.baseIdx] ^ v2.components[v2.baseIdx];
+        v1.components[v1.baseIdx] = v1.components[v1.baseIdx] ^ v2.components[v2.baseIdx];
+
+        v1.components[v1.baseIdx+1] = v1.components[v1.baseIdx+1] ^ v2.components[v2.baseIdx+1];
+        v2.components[v2.baseIdx+1] = v1.components[v1.baseIdx+1] ^ v2.components[v2.baseIdx+1];
+        v1.components[v1.baseIdx+1] = v1.components[v1.baseIdx+1] ^ v2.components[v2.baseIdx+1];
+
+        v1.components[v1.baseIdx+2] = v1.components[v1.baseIdx+2] ^ v2.components[v2.baseIdx+2];
+        v2.components[v2.baseIdx+2] = v1.components[v1.baseIdx+2] ^ v2.components[v2.baseIdx+2];
+        v1.components[v1.baseIdx+2] = v1.components[v1.baseIdx+2] ^ v2.components[v2.baseIdx+2];
     }
 
     mag() {
@@ -294,43 +310,46 @@ export class Vec3 {
 
 
 export class Vec3Pool {
-    static persistentPool = [];
-    static reclaimedPool = []; //stores vecs that were previously
-    static inProgressPool = [];
-    static persistentBuffer;
-    static tempSize = 10000;
-    static tempPool = null;// new Array(this.tempSize);
-    static tempBuffer; //= new Float64Array(tempSize * 3);
-    static isFinalized = false;
-    static lru = -1;
+    persistentPool = [];
+    reclaimedPool = []; //stores vecs that were previously
+    inProgressPool = [];
+    persistentBuffer;
+    tempSize = 30000;
+    tempPool = null;// new Array(this.tempSize);
+    tempBuffer; //= new Float64Array(tempSize * 3);
+    isFinalized = false;
+    lru = -1;
 
-    static reclaim() {
-        Vec3Pool.isFinalized = false;  
-        Vec3Pool.lru = -1;
-        if(Vec3Pool.persistentPool?.length > 0) {
-            Vec3Pool.reclaimedPool.push(...Vec3Pool.persistentPool);
-            Vec3Pool.inProgressPool = [];
-            Vec3Pool.persistentPool = [];
+    constructor(tempSize = 10000) {
+        this.setTempPoolSize(tempSize);
+    }
+
+    reclaim() {
+        this.isFinalized = false;  
+        this.lru = -1;
+        if(this.persistentPool?.length > 0) {
+            this.reclaimedPool.push(...this.persistentPool);
+            this.inProgressPool = [];
+            this.persistentPool = [];
         }
-        Vec3Pool.releaseAll();
-        console.log("RECLAIMED: " + Vec3Pool.reclaimedPool.length);
+        this.releaseAll();
+        console.log("RECLAIMED: " + this.reclaimedPool.length);
     }
 
-    static init() {
-        Vec3Pool.setTempPoolSize(Vec3Pool.tempSize);
-    }
-    static acquire(x = 0, y = 0, z = 0) {
-        if(Vec3Pool.tempPool == null) Vec3Pool.init();
-        if (Vec3Pool.isFinalized) {
+    
+    acquire(x = 0, y = 0, z = 0) {
+        if(this.tempPool == null) 
+            this.setTempPoolSize(this.tempSize);
+        if (this.isFinalized) {
             let isFree = false;
             let vec;
             //let attempts =0;
-            //while(!isFree && attempts < Vec3Pool.tempPool.length) {
-                /*if(Vec3Pool.lru >= Vec3Pool.length) { 
-                    if(Vec3Pool.assumeFree) {
-                        Vec3Pool.assumeFree = false;
+            //while(!isFree && attempts < this.tempPool.length) {
+                /*if(this.lru >= this.length) { 
+                    if(this.assumeFree) {
+                        this.assumeFree = false;
                         //attempts = 0;
-                    } else if(attempts >= Vec3Pool.tempPool.length) {
+                    } else if(attempts >= this.tempPool.length) {
                         console.warn(`
                         ran out of vectors after ${attempts} attempts! Make sure you release any you're not using! You should either
                         1. call releaseAll when you're at a point in your logic where you're sure any vectors you didn't call .finalize() for are free, or o
@@ -339,40 +358,41 @@ export class Vec3Pool {
                         `)
                     }
                 }*/
-                Vec3Pool.lru = (Vec3Pool.lru + 1) % Vec3Pool.tempPool.length;
-                vec = Vec3Pool.tempPool[Vec3Pool.lru];
-                //isFree = vec.amFree || Vec3Pool.assumeFree
+                this.lru = (this.lru + 1) % this.tempPool.length;
+                vec = this.tempPool[this.lru];
+                //isFree = vec.amFree || this.assumeFree
                 //vec.amFree = false;
                 //attempts++;
             /*}
             if(attempts > 10) {
-                console.log("attempted : "+attempts+" before finding " +Vec3Pool.lru);
+                console.log("attempted : "+attempts+" before finding " +this.lru);
             }*/
             vec.x = x; vec.y =y; vec.z = z;
-            //console.log("temp: "+Vec3Pool.lru);
+            //console.log("temp: "+this.lru);
             return vec;
         } else {
             let newV;
-            if(Vec3Pool.reclaimedPool.length > 0) {
-                newV = Vec3Pool.reclaimedPool.pop();
+            if(this.reclaimedPool.length > 0) {
+                newV = this.reclaimedPool.pop();
                 newV.x = x; newV.y =y; newV.z = z;
-                Vec3Pool.inProgressPool.push(newV);
+                this.inProgressPool.push(newV);
             } else {
                 newV = new Vec3(x, y, z);
-                Vec3Pool.inProgressPool.push(newV);
+                this.inProgressPool.push(newV);
             }
             return newV;
         }
     }
 
 
-    static temp_acquire(x=0, y=0, z=0) {
-        if(Vec3Pool.tempPool == null) Vec3Pool.init();
+    temp_acquire(x=0, y=0, z=0) {
+        if(this.tempPool == null) 
+            this.setTempPoolSize(this.tempSize);
             //let isFree = false;
             //let vec = null;
             //let attempts = 0;
-            /*while(!isFree && attempts < 10) {//Vec3Pool.tempPool.length) {
-                if(Vec3Pool.lru >= Vec3Pool.tempPool.length) { 
+            /*while(!isFree && attempts < 10) {//this.tempPool.length) {
+                if(this.lru >= this.tempPool.length) { 
                     if(assumeFree) {
                         assumeFree = false;
                     } else {
@@ -384,45 +404,45 @@ export class Vec3Pool {
                         `)
                     }
                 }*/
-                Vec3Pool.lru = (Vec3Pool.lru + 1) % Vec3Pool.tempPool.length;
-                const vec = Vec3Pool.tempPool[Vec3Pool.lru];
+        this.lru = (this.lru + 1) % this.tempPool.length;
+        let vec = this.tempPool[this.lru];
                 //isFree = vec.amFree;
                 //attempts++
             //}
             /*if(attempts > 10) {
-                console.log("attempted : "+attempts+"TEMP before finding " +Vec3Pool.lru);
+                console.log("attempted : "+attempts+"TEMP before finding " +this.lru);
             }
             vec.amFree = true; // since the user indicated that they will be discarding this anyway*/
-            vec.x = x; vec.y =y; vec.z = z;
-            return vec;
+        vec.x = x; vec.y =y; vec.z = z;
+        return vec;
     }
 
-    static setTempPoolSize(newSize) {
-        Vec3Pool.tempSize = newSize
-        Vec3Pool.tempBuffer = new Float64Array(newSize*3);
-        Vec3Pool.tempPool = [];
-        for(let i=0; i<Vec3Pool.tempSize; i++) {
+    setTempPoolSize(newSize) {
+        this.tempSize = newSize
+        this.tempBuffer = new Float64Array(newSize*3);
+        this.tempPool = [];
+        for(let i=0; i<this.tempSize; i++) {
             const vec = new Vec3();
             vec.amFree = true;
-            vec.dataBuffer = Vec3Pool.tempBuffer;
+            vec.dataBuffer = this.tempBuffer;
             vec.baseIdx = i*3;
-            Vec3Pool.tempPool.push(vec.release());
+            this.tempPool.push(vec.release());
         }
     }
 
-    static finalize() {
-        if(Vec3Pool.reclaimedPool.length > 0) {
-            Vec3Pool.persistentPool = Vec3Pool.inProgressPool;
-            Vec3Pool.inProgressPool = [];   
-            Vec3Pool.isFinalized = true;         
+    finalize() {
+        if(this.reclaimedPool.length > 0) {
+            this.persistentPool = this.inProgressPool;
+            this.inProgressPool = [];   
+            this.isFinalized = true;         
             return;
         }
-        const prevBuffer = Vec3Pool.persistentBuffer;
-        Vec3Pool.persistentBuffer = new Float64Array(Vec3Pool.inProgressPool.length * 3);
-        const persistentBuffer = Vec3Pool.persistentBuffer;
-        for (let i = 0; i < Vec3Pool.inProgressPool.length; i++) {
+        const prevBuffer = this.persistentBuffer;
+        this.persistentBuffer = new Float64Array(this.inProgressPool.length * 3);
+        const persistentBuffer = this.persistentBuffer;
+        for (let i = 0; i < this.inProgressPool.length; i++) {
             const baseIdx = i*3;
-            const vec = Vec3Pool.inProgressPool[i];
+            const vec = this.inProgressPool[i];
             const vx = vec.x, vy = vec.y, vz = vec.z;
             persistentBuffer[baseIdx] = vx;
             persistentBuffer[baseIdx+1] = vy;
@@ -431,44 +451,47 @@ export class Vec3Pool {
             vec.baseIdx = baseIdx;
         }
 
-        Vec3Pool.persistentPool = Vec3Pool.inProgressPool;
-        Vec3Pool.inProgressPool = [];
-        console.log("REMAINING: " +Vec3Pool.reclaimedPool);
-        Vec3Pool.isFinalized = true;
-        Vec3Pool.lru = -1;
+        this.persistentPool = this.inProgressPool;
+        this.inProgressPool = [];
+        console.log("REMAINING: " +this.reclaimedPool);
+        this.isFinalized = true;
+        this.lru = -1;
     }
 
     /**
      * Let the VectorPool know that you're done with all of the temporary vectors you've been using so it doesn't need to yell at you.
      */
-    static releaseAll() {
-        Vec3Pool.lru = -1;
-        Vec3Pool.assumeFree = true;
+    releaseAll() {
+        this.lru = -1;
+        this.assumeFree = true;
     }
 
+    new_Vec3(x=0, y=0, z=0) {
+        return this.acquire(x, y, z);
+    }
+
+    any_Vec3(x=0, y=0, z=0) {
+        return this.temp_acquire(x, y, z);
+    }
 }
 
+window.globalVecPool = new Vec3Pool(1000);
 
-/**
- * create a pooled Vec3 object. Any calls to this function prior to calling Vec3Pool.finalize() will instantiate a new Vec3. Any calls to it after
- * will recycle an existing Vec3 from the temporary Vec3 pool (which is distinct from the finalized pool).
- * @param {Number} x 
- * @param {Number} y 
- * @param {Number} z 
- * @returns {Vec3} a potentially pool.
- */
-export function new_Vec3(x=0, y=0, z=0) {
-    return Vec3Pool.acquire(x, y, z);
-}
-
-
-/**
- * claim a pooled temporary Vec3 object. Will always recycle from the temp pool.
- * @param {Number} x 
- * @param {Number} y 
- * @param {Number} z 
- * @returns {Vec3} a potentially pool.
- */
 export function any_Vec3(x=0, y=0, z=0) {
-    return Vec3Pool.temp_acquire(x, y, z);
+    return globalVecPool.temp_acquire(x, y, z);
 }
+
+export class NoPool {
+    new_Vec3(x=0, y=0, z=0) {
+        return new Vec3(x, y, z);
+    }
+    any_Vec3(x=0, y=0, z=0) {
+        return new Vec3(x, y, z); 
+    }
+    releaseAll() {
+        
+    }
+}
+
+
+window.noPool = new NoPool();

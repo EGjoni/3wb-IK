@@ -1,4 +1,4 @@
-import {  Vec3, new_Vec3 } from "./vecs.js";
+import {  Vec3} from "./vecs.js";
 import { Ray, Rayd, Rayf } from "./Ray.js";
 import { IKNode } from "./IKNodes.js";
 const THREE = await import('three');
@@ -22,15 +22,9 @@ export class IKTransform {
     _inverseRotation = new Rot();
     inverseDirty = true;
     raysDirty = true; 
-    translate = new_Vec3(0,0,0);
-    scale = new_Vec3(1,1,1);
-    xBase = new_Vec3(1,0,0);
-    yBase = new_Vec3(0,1,0);
-    zBase = new_Vec3(0,0,1);
+    
 
-    _xRay = new Ray(this.translate, this.xBase);
-    _yRay = new Ray(this.translate, this.yBase);
-    _zRay = new Ray(this.translate, this.zBase);
+    
 
     /**
      * 
@@ -39,9 +33,19 @@ export class IKTransform {
      * @param {Ray or Vec3} y y direction heading or ray
      * @param {Ray or Vec3} z z direction heading or ray
      */
-    constructor(origin=null, x = null, y = null, z = null, ikd = 'IKNode-'+(IKTransform.totalTransforms+1)) {
+    constructor(origin=null, x = null, y = null, z = null, ikd = 'IKNode-'+(IKTransform.totalTransforms+1), pool= noPool) {
         this.ikd = 'IKTransform'-IKTransform.totalTransforms+1;
         IKTransform.totalNodes += 1; 
+        this.pool = noPool;
+        this.translate = this.pool.new_Vec3(0,0,0);
+        this.scale = this.pool.new_Vec3(1,1,1);
+        this.xBase = this.pool.new_Vec3(1,0,0);
+        this.yBase = this.pool.new_Vec3(0,1,0);
+        this.zBase = this.pool.new_Vec3(0,0,1);
+        this._xRay = new Ray(this.translate, this.xBase);
+        this._yRay = new Ray(this.translate, this.yBase);
+        this._zRay = new Ray(this.translate, this.zBase);
+
         if (origin instanceof IKTransform) {
             this.initializeBasisAtOrigin(origin);
         } else if (origin instanceof Ray && x instanceof Ray && y instanceof Ray) {
@@ -51,6 +55,11 @@ export class IKTransform {
             this.initializeBasisWithDirections(origin, x, y, z);
         }
         this.refreshPrecomputed();
+    }
+
+
+    static newPooled(pool) {
+        return new IKTransform(null, null, null, null, null, pool);
     }
 
     createPrioritzedRotation(xHeading, yHeading, zHeading) {		
@@ -135,17 +144,17 @@ export class IKTransform {
         return this.setFromArrays([0,0,0], [1,0,0,0], [1,1,1]);
     }
 
-    setFromArrays(translation, rotation, scale) {
+    setFromArrays(translation, rotation, scale, wScale=1) {
         this.translate.setComponents(...translation);
         this.xBase.setComponents(scale[0], 0, 0);
         this.yBase.setComponents(0, scale[1], 0);
         this.zBase.setComponents(0, 0, scale[2]);
-        this.rotation.setComponents(rotation[0], rotation[1], rotation[2], rotation[3], true);
+        this.rotation.setComponents(rotation[0]*wScale, rotation[1], rotation[2], rotation[3], true);
         this.refreshPrecomputed();
         return this;
     }
 
-    setFromGlobalizedObj3d(object3d, temp_originvec = new Vector3(0,0,0), temp_identitythreequat = new Quaternion(0,0,0,1), temp_unitscale = new Vector3(1,1,1)) {
+    setFromGlobalizedObj3d(object3d, temp_originvec = new Vector3(0,0,0), temp_identitythreequat = new Quaternion(0,0,0,1), temp_unitscale = new Vector3(1,1,1), wScale) {
         temp_originvec.copy(IKNode.originthreevec)
         temp_identitythreequat.copy(IKNode.identitythreequat);
         temp_unitscale.copy(IKNode.unitthreescale);
@@ -154,14 +163,14 @@ export class IKTransform {
         const quat = object3d.getWorldQuaternion(temp_identitythreequat);
         const scale = object3d.getWorldScale(temp_unitscale); 
         this.translate.setComponents(pos.x, pos.y, pos.z);
-        this.rotation.setComponents(-quat.w, quat.x, quat.y, quat.z);
+        this.rotation.setComponents(wScale*quat.w, quat.x, quat.y, quat.z);
         this.scale.setComponents(scale.x, scale.y, scale.z);
         this.refreshPrecomputed();
     }
 
-    setFromObj3d(object3d) {
+    setFromObj3d(object3d, wScale) {
         this.translate.setComponents(object3d.position.x, object3d.position.y, object3d.position.z);
-        this.rotation.setComponents(-object3d.quaternion.w, object3d.quaternion.x, object3d.quaternion.y, object3d.quaternion.z);
+        this.rotation.setComponents(wScale*object3d.quaternion.w, object3d.quaternion.x, object3d.quaternion.y, object3d.quaternion.z);
         this.scale.setComponents(object3d.scale.x, object3d.scale.y, object3d.scale.z);
         this.refreshPrecomputed();
     }
@@ -176,7 +185,7 @@ export class IKTransform {
     setVecToLocalOf(globalInput, localOutput) {
         localOutput.set(globalInput);
 		localOutput.sub(this.translate); 
-        this.inverseRotation.applyToVec(globalInput, localOutput);
+        this.inverseRotation.applyToVec(localOutput, localOutput);
         return localOutput;
     }
 
@@ -245,7 +254,7 @@ export class IKTransform {
 
     get inverseRotation() {
         if(this.inverseDirty) {
-            this.rotation.setToReversion(this._inverseRotation);
+            this.rotation.setToInversionOf(this._inverseRotation);
             this.inverseDirty = false;
         }
         return this._inverseRotation;

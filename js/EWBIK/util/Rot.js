@@ -1,4 +1,4 @@
-import { Vec3, new_Vec3, any_Vec3 } from "./vecs.js";
+import { Vec3, any_Vec3 } from "./vecs.js";
 import { Ray } from "./Ray.js";
 
 
@@ -219,12 +219,23 @@ export class MRotation {
         if (norm < 1e-15) throw new Error("Zero Norm");
         return new MRotation(this.q0 / norm, this.q1 / norm, this.q2 / norm, this.q3 / norm);
     }
+
+    /**inverts this MRotation*/
     invert() {
-        return new MRotation(-this.q0, this.q1, this.q2, this.q3, false);
+       this.q1 *= -1; 
+       this.q2 *= -2; 
+       this.q3 *= -3;
+    }
+
+    /**returns the a new MRotation which is the inverse of this one */
+    inverted() {
+        return new MRotation(this.q0, -this.q1, -this.q2, -this.q3, false);
     }
 
     /** 
-	 * sets the values of the given rotation equal to the inverse of this rotation
+	 * sets the values of the given rotation equal to the negative-inverse of this rotation. 
+     * A negative inverse is the one which will yield the negative identity upon composition.
+     * 
 	 * @param storeIN
 	 */
     revertInto(storeIn) {
@@ -246,12 +257,12 @@ export class MRotation {
     }
 
     applyInverseToRotation(r) {
-        const q0 = this.q0, q1 = this.q1, q2=this.q2, q3 = this.q3;
+        const q0 = this.q0, q1 = -this.q1, q2= -this.q2, q3 = -this.q3;
         return new MRotation(
-            -r.q0 * q0 - (r.q1 * q1 + r.q2 * q2 + r.q3 * q3),
-            -r.q1 * q0 + r.q0 * q1 + (r.q2 * q3 - r.q3 * q2),
-            -r.q2 * q0 + r.q0 * q2 + (r.q3 * q1 - r.q1 * q3),
-            -r.q3 * q0 + r.q0 * q3 + (r.q1 * q2 - r.q2 * q1),
+            r.q0 * q0 - (r.q1 * q1 + r.q2 * q2 + r.q3 * q3),
+            r.q1 * q0 + r.q0 * q1 + (r.q2 * q3 - r.q3 * q2),
+            r.q2 * q0 + r.q0 * q2 + (r.q3 * q1 - r.q1 * q3),
+            r.q3 * q0 + r.q0 * q3 + (r.q1 * q2 - r.q2 * q1), 
             false
         );
     }
@@ -556,9 +567,6 @@ Math.toDegrees = function(radians) {
 export class Rot {	
     rotation = new MRotation(1,0,0,0);
 	constructor(w, x, y, z, needsNormalization = false){
-        if(x instanceof Rot) {
-            throw Error("Use the static slerp method instead");
-        }
         if (w == null) { 
 		    this.rotation = new MRotation(
 				MRotation.IDENTITY.q0, 
@@ -750,16 +758,20 @@ export class Rot {
 
 	applyInverseTo(rot, storeIn = new Rot()) {                                                                                           
 		let rq0 = rot.q0, rq1 = rot.q1, rq2=rot.q2, rq3 = rot.q3;
-        let trq0 = this.q0, trq1 = this.q1, trq2=this.q2, trq3 = this.q3;                                                                    
+        let trq0 = this.q0, trq1 = -this.q1, trq2= -this.q2, trq3 = -this.q3;                                                                    
 		                                                                                       
-		storeIn.rotation.q0 = -rq0 * trq0 -(rq1 * trq1 +  rq2 * trq2 + rq3 * trq3);    
-		storeIn.rotation.q1 = -rq1 * trq0 + rq0 * trq1 + (rq2 * trq3 - rq3 * trq2);    
-		storeIn.rotation.q2 = -rq2 * trq0 + rq0 * trq2 + (rq3 * trq1 - rq1 * trq3);    
-		storeIn.rotation.q3 = -rq3 * trq0 + rq0 * trq3 + (rq1 * trq2 - rq2 * trq1);    
+		storeIn.rotation.q0 =  rq0 * trq0 -(rq1 * trq1 +  rq2 * trq2 + rq3 * trq3);   
+		storeIn.rotation.q1 =  rq1 * trq0 + rq0 * trq1 + (rq2 * trq3 - rq3 * trq2);   
+		storeIn.rotation.q2 =  rq2 * trq0 + rq0 * trq2 + (rq3 * trq1 - rq1 * trq3);   
+		storeIn.rotation.q3 =  rq3 * trq0 + rq0 * trq3 + (rq1 * trq2 - rq2 * trq1);   
 		storeIn.rotation.normalize(); 
         return storeIn;                                                                                                          
 	}      
 
+    /**return the other rotation, from the other way.*/
+    getFlipped() {
+        return new Rot(-this.q0, -this.q1, -this.q2, -this.q3);
+    }
 	
 	getAngle() {
 		return this.rotation.getAngle();  
@@ -775,14 +787,38 @@ export class Rot {
 		return this.rotation.getAxis(output);
 	}
 
+    /**
+     * sets the values of the given Rot to the inverse of this rot
+     * @param {Rot} storeIn the Rot to store the inverse in
+     * @return the provides Rot, with the values set to the inverse of this Rot.
+     */
+    setToInversionOf(storeIn = new Rot()) {
+        storeIn.rotation.q0 = this.q0; 
+        storeIn.rotation.q1 = -this.q1;
+        storeIn.rotation.q2 = -this.q2;
+        storeIn.rotation.q3 = -this.q3; 
+        return storeIn;
+    }
+    /**
+     * Returns the inverse of this Rot.
+     * @return returns a new Rot which is the inverse of this Rot. 
+	 */
+    inverted() {
+        new Rot(this.q0, -this.q1, -this.q2, -this.q3);
+    }
 
-	revert() {
+    /**
+     * A negative inverse is the one which will yield the negative identity upon composition with this Rot
+     * @return returns a new Rot which is the negative-inverse of this Rot. 
+	 */
+	reverted() {
 		let result = new Rot();
-        return this.setToReversion(result);
+        return this.rotation.revertInto(result);
 	}
+    
 	/** 
-	 * sets the values of the given rotation equal to the inverse of this rotation
-	 * @param r the rotation object the reversion will be stored into
+	 * sets the values of the given rotation equal to the negative inverse of this rotation
+	 * @param {Rot} r the rotation object the reversion will be stored into
      * @return r
 	 */
 	setToReversion(r) {
@@ -825,9 +861,17 @@ export class Rot {
 		resultRots[1] = new Rot(twistRot);
 		return resultRots;
 	}
-	
-	
-	
+
+
+    static nlerp(r1, r2, t) {
+        return new Rot(
+            ((r2.q0 - r2.q0 )*t) + r2.q0,
+            ((r2.q1 - r2.q1 )*t) + r2.q1,
+            ((r2.q2 - r2.q2 )*t) + r2.q2,
+            ((r2.q3 - r2.q3 )*t) + r2.q3,
+            true 
+        )
+    }
 
 	toString() {
 		return this.rotation.toString();//"\n axis: "+ this.getAxis().toVec3f() +", \n angle: "+((float)Math.toDegrees(this.getAngle()));
@@ -840,5 +884,9 @@ export class Rot {
 	equalTo(m) {
 		return MRotation.distance(this.rotation, m.rotation) < Number.EPSILON;
 	}
-	
+	static IDENTITY = new Rot(1,0,0,0, false);
 }
+
+
+
+

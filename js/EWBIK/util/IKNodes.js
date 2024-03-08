@@ -1,13 +1,15 @@
-import {  Vec3, new_Vec3 } from "./vecs.js";
+import { Vec3 } from "./vecs.js";
 import { MRotation, Rot } from "./Rot.js";
 import { IKTransform } from "./IKTransform.js";
 import { generateUUID } from "./uuid.js";
 const THREE = await import('three');
 import { Quaternion, Vector3, Object3D, Matrix4 } from "three";
+import { TargetState } from "../solver/SkeletonState.js";
+
 
 
 function lerp(start, end, t) {
-    return (t*(end-start))+start;
+    return (t * (end - start)) + start;
 }
 
 export class IKNode {
@@ -26,23 +28,22 @@ export class IKNode {
     globalMBasis = null;
     /** @type {IKNode} */
     parent = null;
-    id = 'IKNode-'+IKNode.totalNodes;
+    id = 'IKNode-' + IKNode.totalNodes;
     forceOrthoNormality = true;
-    static originthreevec = new Vector3(0,0,0);
-    static identitythreequat = new Quaternion(0,0,0,1);
-    static unitthreescale = new Vector3(1,1,1);
-    tempOrigin = new_Vec3(0,0,0);
-    temp_originthreevec = new Vector3(0,0,0);
-    temp_identitythreequat = new Quaternion(0,0,0,1);
-    temp_unitthreescale = new Vector3(1,1,1);
+    static originthreevec = new Vector3(0, 0, 0);
+    static identitythreequat = new Quaternion(0, 0, 0, 1);
+    static unitthreescale = new Vector3(1, 1, 1);
+    temp_originthreevec = new Vector3(0, 0, 0);
+    temp_identitythreequat = new Quaternion(0, 0, 0, 1);
+    temp_unitthreescale = new Vector3(1, 1, 1);
 
-
-    constructor(globalMBasis, parent, ikd = 'IKNode-'+(IKNode.totalNodes+1)) {
+    constructor(globalMBasis, parent, ikd = 'IKNode-' + (IKNode.totalNodes + 1), pool = noPool) {
         this.ikd = ikd;
-        IKNode.totalNodes += 1; 
-        if(globalMBasis == null) {
-            this.localMBasis = new IKTransform();
-            this.globalMBasis = new IKTransform();
+        IKNode.totalNodes += 1;
+        this.pool = pool;
+        if (globalMBasis == null) {
+            this.localMBasis = IKTransform.newPooled(this.pool);
+            this.globalMBasis = IKTransform.newPooled(this.pool);
         } else {
             this.localMBasis = globalMBasis.copy();
             this.globalMBasis = globalMBasis.copy();
@@ -50,47 +51,91 @@ export class IKNode {
         this.parent = parent;
         this.dirty = true;
         this.childNodes = new Set();
-        this.workingVector = new_Vec3();
+        this.workingVector = this.pool.new_Vec3();
         this.areGlobal = true;
-        
+
         this.tag = ikd;
-        if(parent != null) {
-			this.setParent(parent);
-		} 	else {
-			this.areGlobal = true;
-		}
-		this.markDirty();
-		this.updateGlobal();
+        if (parent != null) {
+            this.setParent(parent);
+        } else {
+            this.areGlobal = true;
+        }
+        this.markDirty();
+        this.updateGlobal();
     }
 
-    static fromObj3dGlobal(object3d) {
-        let result = new IKNode(); 
-        result.adoptGlobalValuesFromObject3D(object3d);
+    /**
+     * in place swaps the local and global transforms of the input nodes
+     * Kind of dangerous to do for anything other than keeping a rolling history of states.
+     * @param {IKNode} node1 
+     * @param {IKNode} node2 
+     */
+    static swap(node1, node2) {
+        let temptransform = node1.localMBasis;
+        node1.localMBasis = node2.localMBasis;
+        node2.localMBasis = node1.temptransform;
+        temptransform = node1.globalMBasis;
+        node1.globalMBasis = node2.globalMBasis;
+        node2.globalMBasis = temptransform;
+        let dirtytemp = node1.dirty;
+        node1.dirty = node2.dirty;
+        node2.dirty = dirtytemp;
+    }
+
+    static fromObj3dGlobal(object3d, wScale = this.wScale) {
+        if(wScale == null) throw new Error("need wscale for now");
+        let result = new IKNode(null, null, undefined, this.pool);
+        result.adoptGlobalValuesFromObject3D(object3d, wScale);
         return result;
     }
 
-    static fromObj3dLocal(object3d) {
-        let result = new IKNode(); 
-        result.adoptLocalValuesFromObject3D(object3d);
+    static fromObj3dLocal(object3d, wScale = this.wScale) {
+        if(wScale == null) throw new Error("need wscale for now");
+        let result = new IKNode(null, null, undefined, this.pool);
+        result.adoptLocalValuesFromObject3D(object3d, wScale);
         return result;
     }
 
-    adoptGlobalValuesFromObject3D(object3d) {
-        this.localMBasis.setFromObj3d(object3d);
-        this.globalMBasis.setFromGlobalizedObj3d(object3d, this.temp_originthreevec, this.temp_identitythreequat, this.temp_unitthreescale);
-        if(this.parent != null) {
+    adoptGlobalValuesFromObject3D(object3d, wScale= this.wScale, updateLocal = true) {
+        if(wScale == null) throw new Error("need wscale for now");
+        this.localMBasis.setFromObj3d(object3d, wScale);
+        this.globalMBasis.setFromGlobalizedObj3d(object3d, this.temp_originthreevec, this.temp_identitythreequat, this.temp_unitthreescale, wScale);
+        if (this.parent != null && updateLocal) {
             this.parent.setTransformToLocalOf(this.globalMBasis, this.localMBasis);
-        } 
+        }
         return this;
     }
 
-    adoptLocalValuesFromObject3D(object3d) {
-        this.localMBasis.setFromObj3d(object3d);
+    adoptLocalValuesFromObject3D(object3d, wScale = this.wScale) {
+        if(wScale == null) throw new Error("need wscale for now");
+        this.localMBasis.setFromObj3d(object3d, wScale);
         this.markDirty();
         return this;
     }
 
 
+    adoptAllValuesFromIKNode(node) {
+        this.getLocalMBasis().adoptValues(node.getLocalMBasis());
+        this.getGlobalMBasis().adoptValues(node.getGlobalMBasis());
+        this.dirty = node.dirty;
+        return this;
+    }
+
+    adoptGlobalValuesFromIKNode(node, updateLocal = true) {
+        this.globalMBasis.adoptValues(node);
+        if (this.parent != null && updateLocal) {
+            this.parent.setTransformToLocalOf(this.globalMBasis, this.localMBasis);
+        }
+        return this;
+    }
+
+    adoptLocalValuesFromIKNode(node) {
+        this.localMBasis.adoptValues(node.getLocalMBasis());
+        this.markDirty();
+        return this;
+    }
+
+    
     getParentAxes() {
         const p = this.parent;
         return p ? p : null;
@@ -112,22 +157,21 @@ export class IKNode {
 
     origin() {
         this.updateGlobal();
-        this.tempOrigin.set(this.getGlobalMBasis().getOrigin());
-        return this.tempOrigin;
+        return this.pool.new_Vec3().set(this.getGlobalMBasis().getOrigin());
     }
 
     getGlobalCopy() {
-        return new IKNode(this.getGlobalMBasis(), this.getParentAxes());
+        return new IKNode(this.getGlobalMBasis(), this.getParentAxes(), this.pool);
     }
 
     /**
-     * 
+     * Sets the parent of this node to the input node such that this node's global coordinates remain the same
      * @param {IKNode} par 
      * @param {Object} requestedBy 
      */
     setParent(par, requestedBy = undefined) {
         this.updateGlobal();
-        const oldParent = this.getParentAxes();        
+        const oldParent = this.getParentAxes();
 
         if (par !== null && par !== this) {
             par.updateGlobal();
@@ -146,52 +190,52 @@ export class IKNode {
         this.markDirty();
         this.updateGlobal();
 
-        for(c of this.childNodes) ad.parentChangeCompletionNotice(this, oldParent, par, requestedBy);
+        for (c of this.childNodes) ad.parentChangeCompletionNotice(this, oldParent, par, requestedBy);
         return this;
     }
 
     alignGlobalsTo(inputGlobalMBasis) {
         this.updateGlobal();
-		if(this.getParentAxes() != null) {
+        if (this.getParentAxes() != null) {
             this.getGlobalMBasis().adoptValues(inputGlobalMBasis);
-			this.getParentAxes().getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
-		} else {
-			this.getLocalMBasis().adoptValues(inputGlobalMBasis);
-		}
-		this.markDirty();
+            this.getParentAxes().getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
+        } else {
+            this.getLocalMBasis().adoptValues(inputGlobalMBasis);
+        }
+        this.markDirty();
         return this;
     }
 
     setGlobalOrientationTo(rotation) {
-		this.updateGlobal();
-		if(this.getParentAxes() != null) {
-			this.getGlobalMBasis().rotateTo(rotation);
-			this.getParentAxes().getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
-		} else {
-			this.getLocalMBasis().rotateTo(rotation);
-		}
-		this.markDirty();
+        this.updateGlobal();
+        if (this.getParentAxes() != null) {
+            this.getGlobalMBasis().rotateTo(rotation);
+            this.getParentAxes().getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
+        } else {
+            this.getLocalMBasis().rotateTo(rotation);
+        }
+        this.markDirty();
         return this;
-	}
-	
-	setLocalOrientationTo(rotation) {
-		this.getLocalMBasis().rotateTo(rotation);
-		this.markDirty();
+    }
+
+    setLocalOrientationTo(rotation) {
+        this.getLocalMBasis().rotateTo(rotation);
+        this.markDirty();
         return this;
-	}
+    }
 
     rotateBy(apply) {
-		this.updateGlobal();		
-		if(this.getParentAxes() != null) {
-			let newRot = this.getParentAxes().getGlobalMBasis().getLocalOfRotation(apply);
-			this.getLocalMBasis().rotateBy(newRot);
-		} else {
-			this.getLocalMBasis().rotateBy(apply);
-		}
+        this.updateGlobal();
+        if (this.getParentAxes() != null) {
+            let newRot = this.getParentAxes().getGlobalMBasis().getLocalOfRotation(apply);
+            this.getLocalMBasis().rotateBy(newRot);
+        } else {
+            this.getLocalMBasis().rotateBy(apply);
+        }
 
-		this.markDirty(); 
+        this.markDirty();
         return this;
-	}
+    }
 
 
     getGlobalChirality() {
@@ -213,6 +257,11 @@ export class IKNode {
         return this.localMBasis.isAxisFlipped(axis);
     }
 
+    /**
+     * sets this given node as this node's parent such that this node's global values are likely to change
+     * @param {IKNode} par 
+     * @returns 
+     */
     setRelativeToParent(par) {
         if (this.getParentAxes() !== null) {
             this.getParentAxes()._disown(this);
@@ -240,10 +289,10 @@ export class IKNode {
         this.getGlobalMBasis().setToGlobalOf(input, out);
         return out;
     }
-    
+
 
     setVecToLocalOf(input, out) {
-        if(out == null) {
+        if (out == null) {
             out = input.copy();
         }
         this.updateGlobal();
@@ -252,7 +301,7 @@ export class IKNode {
     }
 
     setTransformToLocalOf(input, out) {
-        if(out == null) {
+        if (out == null) {
             out = input.copy();
         }
         this.updateGlobal();
@@ -265,7 +314,7 @@ export class IKNode {
      * @param {Vec3} input 
      * @returns {Vec3}
      */
-    getLocalOf(input, storeIn = any_Vec3()) {
+    getLocalOf(input, storeIn = this.pool.any_Vec3()) {
         this.updateGlobal();
         this.getGlobalMBasis().setTransformToLocalOf(input, storeIn);
         return storeIn;
@@ -303,6 +352,16 @@ export class IKNode {
         return this;
     }
 
+    reset() {
+        this.emancipate();
+        this.setLocalsToIdentity();
+        this.setGlobalsToIdentity();
+        for (let c in this.children) {
+            c.emancipate();
+        }
+        return this;
+    }
+
     setLocalsToIdentity() {
         this.localMBasis.setToIdentity();
         this.markDirty();
@@ -312,7 +371,7 @@ export class IKNode {
 
     setGlobalsToIdentity() {
         this.getGlobalMBasis().setToIdentity();
-        if(this.getParentAxes()!=null) {
+        if (this.getParentAxes() != null) {
             this.setRelativeTo(this.parent.getParentAxes());
         }
         this.markDirty();
@@ -325,7 +384,7 @@ export class IKNode {
     setRelativeTo(input) {
         this.updateGlobal();
         input.getGlobalMBasis().setTransformToLocalOf(this.getGlobalMBasis(), this.getLocalMBasis());
-		this.markDirty();
+        this.markDirty();
         return this;
     }
 
@@ -368,7 +427,7 @@ export class IKNode {
     markDirty() {
         if (!this.dirty) {
             this.dirty = true;
-            for(let c of this.childNodes) c.markDirty();            
+            for (let c of this.childNodes) c.markDirty();
         }
     }
 
@@ -398,17 +457,32 @@ export class IKNode {
         );
     }
 
+    /**
+     * @returns {IKNode} a copy of this node with likely the same global values, no parent, and likely different local values
+     */
+    freeGlobalCopy() {
+        const freeCopy = new IKNode(this.getGlobalMBasis(), null, undefined, this.pool);
+        freeCopy.markDirty();
+        freeCopy.updateGlobal();
+        return freeCopy;
+    }
+
+    /**
+     * @returns {IKNode} a copy of this node without a parent, the same local values, and likely different global values
+     */
     freeCopy() {
-        const freeCopy = new IKNode(this.getLocalMBasis(), null);
+        const freeCopy = new IKNode(this.getLocalMBasis(), null, undefined, this.pool);
         freeCopy.getLocalMBasis().adoptValues(this.localMBasis);
         freeCopy.markDirty();
         freeCopy.updateGlobal();
         return freeCopy;
     }
 
+    /**
+     * @return {IKNode} a copy of this node which is attached to the same parent and has the same local / global values */
     attachedCopy() {
         this.updateGlobal();
-        const copy = new IKNode(this.getGlobalMBasis(), this.getParentAxes());
+        const copy = new IKNode(null, this.getParentAxes(), undefined, this.pool);
         copy.getLocalMBasis().adoptValues(this.localMBasis);
         copy.markDirty();
         return copy;
@@ -425,17 +499,34 @@ export class IKNode {
         console.log(this.toString());
     }
 
-    static obj3dToConsole(object3d) {
-        let loc = new IKTransform() 
-        loc.setFromObj3d(object3d);
-        let glob = new IKTransform(); 
-        glob.setFromGlobalizedObj3d(object3d);
+    static obj3dToConsole(object3d, wScale) {
+        let loc = IKTransform.newPooled(this.pool);
+        loc.setFromObj3d(object3d, wScale);
+        let glob = IKTransform.newPooled(this.pool);
+        glob.setFromGlobalizedObj3d(object3d, wScale);
 
         const global = `Global: ${glob.toString()}\n`;
         const local = `Local: ${loc.toString()}`;
         let out = global + local;
         console.log(out);
     }
+
+    getDebug = function() {
+        const localPosition = this.getLocalMBasis().translate;
+        const worldPosition = this.getGlobalMBasis().translate;
+        const result = {
+            localPos : localPosition,
+            worldPos : worldPosition,
+            name :  this.ikd
+        }
+        return result; 
+    }
+
+    toVis = function (doubleElem, range = 1, vert=null, horiz=null) {
+        let debugObj = this.getDebug();
+        window.toDebugColor(debugObj, doubleElem, range, vert, horiz);
+        return groupedelem;
+    };
 }
 
 /**
@@ -447,27 +538,65 @@ export class TrackingNode extends IKNode {
      * 
      * @param {Object3D} toTrack 
      */
-    constructor(toTrack, ikd = 'TrackingNode-'+(TrackingNode.totalNodes+1), forceOrthoNormality = true) {
+    constructor(toTrack, ikd = 'TrackingNode-' + (TrackingNode.totalNodes + 1), wScale, forceOrthoNormality = true) {
         super();
+        this.wScale = wScale;
         this.ikd = ikd;
-        TrackingNode.totalNodes +=1;
+        TrackingNode.totalNodes += 1;
         this.toTrack = toTrack;
-        if(this.toTrack?.scale.x != 1 || this.toTrack?.scale.y != 1 || this.toTrack?.scale.z !=1) 
+        if (this.toTrack?.scale.x != 1 || this.toTrack?.scale.y != 1 || this.toTrack?.scale.z != 1)
             this.forceOrthoNormality = false
         //this.toTrack.matrixWorldAutoUpdate = false;
-        if(this.toTrack != null)
-            this.adoptLocalValuesFromObject3D(this.toTrack);
+        if (this.toTrack != null)
+            this.adoptLocalValuesFromObject3D(this.toTrack, this.wScale);
         this.markDirty();
         //this.updateGlobal();
     }
 
-    updateGlobal(force = false) {
+    /**
+     * 
+     * @param {IKNode} par 
+     * @param {Object} requestedBy 
+     */
+    setParent(par, requestedBy = undefined) {
+        this.updateGlobal();
+        const oldParent = this.getParentAxes();
+
+        if (par !== null && par !== this) {
+            par.updateGlobal();
+            if (par instanceof TrackingNode && par.toTrack != null && this.toTrack != null) {
+                par.toTrack.attach(this.toTrack);
+                this.adoptGlobalValuesFromObject3D(this.toTrack, this.wScale, false);
+            }
+            par.getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
+
+            if (oldParent !== null) oldParent._disown(this);
+            this.parent = par;
+
+            this.getParentAxes().childNodes.add(this)
+            this.areGlobal = false;
+        } else {
+            if (oldParent !== null) oldParent._disown(this);
+            this.parent = null;
+            this.areGlobal = true;
+        }
+
+        this.markDirty();
+        this.updateGlobal();       
+
+
+        for (c of this.childNodes) ad.parentChangeCompletionNotice(this, oldParent, par, requestedBy);
+
+        return this;
+    }
+
+    /*updateGlobal(force = false) {
         const was_dirty = this.dirty;
         super.updateGlobal();
-        if(this.toTrack != null) {
-            if((this.parent == null) || this.toTrack.parent == this.parent?.toTrack) {
+        if (this.toTrack != null) {
+            if ((this.parent == null) || this.toTrack.parent == this.parent?.toTrack) {
                 this.updateUnderlyingFrom_Local();
-                if(was_dirty) this.toTrack.updateWorldMatrix();
+                if (was_dirty) this.toTrack.updateWorldMatrix();
             } else {
                 this.updateUnderlyingFrom_Global(was_dirty, false);
             }
@@ -475,16 +604,16 @@ export class TrackingNode extends IKNode {
             //this.adoptGlobalValuesFromObject3D(this.toTrack);
             //this.dirty = false;
         }
-    }
+    }*/
 
     adoptTrackedLocal() {
-        this.adoptLocalValuesFromObject3D(this.toTrack);
+        this.adoptLocalValuesFromObject3D(this.toTrack, this.wScale);
         this.markDirty();
     }
 
     adoptTrackedGlobal() {
-        this.adoptGlobalValuesFromObject3D(this.toTrack);
-        this.adoptLocalValuesFromObject3D(this.toTrack);
+        this.adoptGlobalValuesFromObject3D(this.toTrack, this.wScale);
+        this.adoptLocalValuesFromObject3D(this.toTrack, this.wScale);
         //this.markDirty();
     }
 
@@ -495,17 +624,58 @@ export class TrackingNode extends IKNode {
         return this.localMBasis;
     }*/
     updateUnderlyingFrom_Local() {
-        TrackingNode.transferLocalToObj3d(this.localMBasis, this.toTrack); 
+        TrackingNode.transferLocalToObj3d(this.localMBasis, this.toTrack, this.wScale);
     }
 
     updateUnderlyingFrom_Global(update_world, updateSelf = true) {
-        if(updateSelf)
+        if (updateSelf)
             this.updateGlobal();
         else {
-            transferGlobalToObj3d(this.globalMBasis, this.toTrack, update_world);
+            this.sendTrackedToGlobal(this.globalMBasis);
         }
     }
 
+    /**modifies the local coordinates of the tracked object so that they result in the provided @param {(Object3D | IKNode | IKTransform)} globalCoordinates*/
+    sendTrackedToGlobal(newGlobal) {
+        let A = newGlobal;
+        let worldMatrixA = null;
+        if (A instanceof IKNode || A instanceof IKTransform) {
+            let globalMBasis = newGlobal;
+            if (A instanceof IKNode) {
+                globalMBasis = newGlobal.globalMBasis;
+            }
+            worldMatrixA = new THREE.Matrix4();
+            worldMatrixA.compose(globalMBasis.translate,
+                new Quaternion(
+                    globalMBasis.rotation.q1,
+                    globalMBasis.rotation.q2,
+                    globalMBasis.rotation.q3,
+                    this.wScale * globalMBasis.rotation.q0
+                ),
+                globalMBasis.scale);
+        }
+        else if (A instanceof THREE.Object3D) {
+            worldMatrixA = A.matrixWorld;
+        }
+        let localMatrixB = new THREE.Matrix4();
+
+        if (this.toTrack.parent) {
+            const parentInverseWorldMatrix = new THREE.Matrix4().copy(this.toTrack.parent.matrixWorld).invert();
+            localMatrixB.multiplyMatrices(parentInverseWorldMatrix, worldMatrixA);
+        } else {
+            localMatrixB.copy(worldMatrixA);
+        }
+        const position = new THREE.Vector3();
+        const quaternion = new THREE.Quaternion();
+        const scale = new THREE.Vector3();
+        localMatrixB.decompose(position, quaternion, scale);
+
+        this.toTrack.position.copy(position);
+        this.toTrack.quaternion.copy(quaternion);
+        this.toTrack.scale.copy(scale);
+        this.toTrack.updateMatrix();
+        //}
+    }
 
     static transferLocalToObj3d(localMBasis, obj3d) {
         obj3d.position.x = localMBasis.translate.x;
@@ -516,31 +686,10 @@ export class TrackingNode extends IKNode {
         obj3d.scale.y = localMBasis.scale.y;
         obj3d.scale.z = localMBasis.scale.z;
 
-        obj3d.quaternion.w = -localMBasis.rotation.q0;
+        obj3d.quaternion.w = localMBasis.rotation.q0 * wScale;
         obj3d.quaternion.x = localMBasis.rotation.q1;
         obj3d.quaternion.y = localMBasis.rotation.q2;
         obj3d.quaternion.z = localMBasis.rotation.q3;
-
+        obj3d.updateWorldMatrix()
     }
-
-
-    static transferGlobalToObj3d(globalMBasis, obj3d, update_world = true) {
-        const newWorld = this.toTrack.matrixWorld.compose(
-            globalMBasis.translate, 
-            new Quaternion(
-                globalMBasis.rotation.q1,
-                globalMBasis.rotation.q2,
-                globalMBasis.rotation.q3,
-                -globalMBasis.rotation.q0
-                ),
-            globalMBasis.scale);
-        const inverseParentWorldMatrix = new Matrix4().copy(obj3d.matrixWorld).invert();
-        const localMatrix = inverseParentWorldMatrix.multiply(newWorld);
-        obj3d.matrix = localMatrix;
-        obj3d.matrix.decompose(obj3d.position, obj3d.quaternion, obj3d.scale);
-        obj3d.matrixWorldAutoUpdate = false;        
-        if(update_world)
-            obj3d.updateWorldMatrix(false, true);
-    }
-
 }
