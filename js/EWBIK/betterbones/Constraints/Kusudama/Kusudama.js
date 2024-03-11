@@ -32,11 +32,11 @@ export class Kusudama extends LimitingReturnful {
         this.axiallyConstrained = false;
         this.strength = 1.0;
         this.forBone = forBone;
-        this.twistMinRot = new Rot();
-        this.twistRangeRot = new Rot();
-        this.twistMaxRot = new Rot();
-        this.twistHalfRangeRot = new Rot();
-        this.twistCentRot = new Rot();
+        this.twistMinRot = Rot.IDENTITY.clone();
+        this.twistRangeRot = Rot.IDENTITY.clone();
+        this.twistMaxRot = Rot.IDENTITY.clone();
+        this.twistHalfRangeRot = Rot.IDENTITY.clone();
+        this.twistCentRot = Rot.IDENTITY.clone();
         this.boneRay = new Ray(this.pool.any_Vec3(), this.pool.any_Vec3());
         this.constrainedRay = new Ray(this.pool.any_Vec3(), this.pool.any_Vec3());
         this.twistMinVec = new Vec3(0, 0, 1);
@@ -49,7 +49,7 @@ export class Kusudama extends LimitingReturnful {
         if (forBone) {            
             this.limitingAxes =new IKNode(null, null, undefined, this.pool); 
             this.limitingAxes.getLocalMBasis().translateTo(new Vec3(this.forBone.position));
-            this.twistAxes = this.limitingAxes.attachedCopy(false);
+            this.twistAxes = this.limitingAxes.attachedClone(false);
             this.forBone.addConstraint(this); 
             this.enable();
         }
@@ -63,19 +63,19 @@ export class Kusudama extends LimitingReturnful {
     optimizeTwistAxes() {
         let directions = [];
         if (this.getLimitCones().length === 1) {
-            directions.push(this.limitCones[0].getControlPoint().copy());
+            directions.push(this.limitCones[0].getControlPoint().clone());
         } else {
             let thisC = this.getLimitCones()[0];
-            directions.push(thisC.getControlPoint().copy().mult(thisC.getRadius()));
+            directions.push(thisC.getControlPoint().clone().mult(thisC.getRadius()));
             for (let i = 0; i < this.getLimitCones().length - 1; i++) {
                 thisC = this.getLimitCones()[i];
                 let nextC = this.getLimitCones()[i + 1];
-                let thisCp = thisC.getControlPoint().copy();
-                let nextCp = nextC.getControlPoint().copy();
-                let thisToNext = new Rot(thisCp, nextCp); 
-                let halfThisToNext = new Rot(thisToNext.getAxis(), thisToNext.getAngle() / 2);
+                let thisCp = thisC.getControlPoint().clone();
+                let nextCp = nextC.getControlPoint().clone();
+                let thisToNext = Rot.fromVecs(thisCp, nextCp); 
+                let halfThisToNext = Rot.fromAxisAngle(thisToNext.getAxis(), thisToNext.getAngle() / 2);
 
-                let halfAngle = halfThisToNext.applyToCopy(thisCp);
+                let halfAngle = halfThisToNext.applyToClone(thisCp);
                 halfAngle.normalize();
                 halfAngle.mult((thisC.getRadius() + nextC.getRadius()) / 2 + thisToNext.getAngle());
                 directions.push(halfAngle);
@@ -91,7 +91,7 @@ export class Kusudama extends LimitingReturnful {
 
         let newYRay = new Ray(this.pool.any_Vec3(0, 0, 0), newY);
 
-        let oldYtoNewY = new Rot(this.swingOrientationAxes().yRay().heading(), this.swingOrientationAxes().getGlobalOf(newYRay).heading());
+        let oldYtoNewY = Rot.fromVecs(this.swingOrientationAxes().yRay().heading(), this.swingOrientationAxes().getGlobalOf(newYRay).heading());
         this.twistAxes.alignOrientationTo(this.swingOrientationAxes());
         this.twistAxes.rotateBy(oldYtoNewY);
         this.updateTangentRadii();
@@ -118,13 +118,13 @@ export class Kusudama extends LimitingReturnful {
         limitingAxes.updateGlobal();
         this.boneRay.p1.set(limitingAxes.origin());
         this.boneRay.p2.set(toSet.y().p2);
-        let bonetip = limitingAxes.getLocalOf(toSet.yRay().p2).copy();
+        let bonetip = limitingAxes.getLocalOf(toSet.yRay().p2).clone();
         let inLimits = this.pointInLimits(bonetip, inBounds, AbstractLimitCone.BOUNDARY);
 
         if (inBounds[0] === -1 && inLimits !== null) {
             this.constrainedRay.p1.set(this.boneRay.p1);
             this.constrainedRay.p2.set(limitingAxes.getGlobalOf(inLimits));
-            let rectifiedRot = new Rot(this.boneRay.heading(), this.constrainedRay.heading());
+            let rectifiedRot = Rot.fromVecs(this.boneRay.heading(), this.constrainedRay.heading());
             toSet.rotateBy(rectifiedRot);
             toSet.updateGlobal();
         }
@@ -135,7 +135,7 @@ export class Kusudama extends LimitingReturnful {
         let globTwistCent = twistAxes.getGlobalMBasis().rotation.applyTo(this.twistCentRot);
         let alignRot = globTwistCent.applyInverseTo(toSet.getGlobalMBasis().rotation);
         let decomposition = alignRot.getSwingTwist(this.pool.any_Vec3(0, 1, 0));
-        decomposition[1].rotation.clampToQuadranceAngle(this.twistHalfRangeHalfCos);
+        decomposition[1].clampToCosHalfAngle(this.twistHalfRangeHalfCos);
         let recomposition = decomposition[0].applyTo(decomposition[1]);
         toSet.getParentAxes().getGlobalMBasis().inverseRotation.applyTo(globTwistCent.applyTo(recomposition), toSet.localMBasis.rotation);
         toSet.localMBasis.refreshPrecomputed();
@@ -147,12 +147,12 @@ export class Kusudama extends LimitingReturnful {
         if (swingAxes !== null && this.painfulness > 0.0) {
             if (this.orientationallyConstrained) {
                 let origin = toSet.origin();
-                let inPoint = toSet.yRay().p2.copy();
+                let inPoint = toSet.yRay().p2.clone();
                 let pathPoint = this.pointOnPathSequence(inPoint, swingAxes);
                 inPoint.sub(origin);
                 pathPoint.sub(origin);
-                let toClamp = new Rot(inPoint, pathPoint);
-                toClamp.rotation.clampToQuadranceAngle(cosHalfReturnfullness);
+                let toClamp = Rot.fromVecs(inPoint, pathPoint);
+                toClamp.clampToCosHalfAngle(cosHalfReturnfullness);
                 toSet.rotateBy(toClamp);
             }
             if (this.axiallyConstrained) {
@@ -167,46 +167,46 @@ export class Kusudama extends LimitingReturnful {
         this.minAxialAngle = minAngle;
         this.range = inRange;
         let y_axis = this.pool.new_Vec3(0, 1, 0);
-        this.twistMinRot = new Rot(y_axis, this.minAxialAngle);
-        this.twistMinVec = this.twistMinRot.applyToCopy(this.pool.new_Vec3(0, 0, 1));
+        this.twistMinRot = Rot.fromAxisAngle(y_axis, this.minAxialAngle);
+        this.twistMinVec = this.twistMinRot.applyToVecClone(this.pool.new_Vec3(0, 0, 1));
 
         this.twistHalfRangeHalfCos = Math.cos(inRange / 4);
-        this.twistRangeRot = new Rot(y_axis, this.range);
+        this.twistRangeRot = Rot.fromAxisAngle(y_axis, this.range);
 
-        this.twistMaxVec = this.twistRangeRot.applyToCopy(this.twistMinVec);
+        this.twistMaxVec = this.twistRangeRot.applyToVecClone(this.twistMinVec);
 
-        this.twistHalfRangeRot = new Rot(y_axis, this.range / 2);
-        this.twistCenterVec = this.twistHalfRangeRot.applyToCopy(this.twistMinVec);
-        this.twistCentRot = new Rot(this.pool.new_Vec3(0, 0, 1), this.twistCenterVec);
+        this.twistHalfRangeRot = Rot.fromAxisAngle(y_axis, this.range / 2);
+        this.twistCenterVec = this.twistHalfRangeRot.applyToVecClone(this.twistMinVec);
+        this.twistCentRot = Rot.fromVecs(this.pool.new_Vec3(0, 0, 1), this.twistCenterVec);
 
         this.constraintUpdateNotification();
     }
 
     setTwist(ratio, toSet) {
-        let globTwistCent = new Rot();
+        let globTwistCent = Rot.IDENTITY.clone();
         this.twistAxes.getGlobalMBasis().applyTo(this.twistMinRot, globTwistCent);
-        let alignRot = globTwistCent.applyInverseTo(toSet.getGlobalMBasis().rotation);
+        let alignRot = globTwistCent.applyInverseToRot(toSet.getGlobalMBasis().rotation);
         let decomposition = alignRot.getSwingTwist(this.pool.new_Vec3(0, 1, 0));
-        let goal = new Rot(this.twistHalfRangeRot.getAxis(), 2 * this.twistHalfRangeRot.getAngle() * ratio);
-        let toGoal = goal.applyTo(alignRot.getInverse());
-        let achieved = toGoal.applyTo(alignRot);
+        let goal = Rot.fromAxisAngle(this.twistHalfRangeRot.getAxis(), 2 * this.twistHalfRangeRot.getAngle() * ratio);
+        let toGoal = goal.applyToRot(alignRot.getInverse());
+        let achieved = toGoal.applyToRot(alignRot);
         decomposition[1] = achieved;
-        let recomposition = decomposition[0].applyTo(decomposition[1]);
-        toSet.getParentAxes().getGlobalMBasis().inverseRotation.applyTo(globTwistCent.applyTo(recomposition), toSet.localMBasis.rotation);
+        let recomposition = decomposition[0].applyToRot(decomposition[1]);
+        toSet.getParentAxes().getGlobalMBasis().inverseRotation.applyToRot(globTwistCent.applyToRot(recomposition), toSet.localMBasis.rotation);
         toSet.localMBasis.refreshPrecomputed();
         toSet.markDirty();
     }
 
     getTwistRatio(toGet, twistAxes) {
-        let globTwistCent = new Rot();
+        let globTwistCent = Rot.IDENTITY.clone();
         twistAxes.getGlobalMBasis().applyTo(this.twistCentRot, globTwistCent);
         let centAlignRot = globTwistCent.applyInverseTo(toGet.getGlobalMBasis().rotation);
         let centDecompRot = centAlignRot.getSwingTwist(this.pool.new_Vec3(0, 1, 0));
-        let locZ = centDecompRot[1].applyToCopy(this.pool.new_Vec3(0, 0, 1));
-        let loctwistMaxVec = twistCentRot.getInverse().applyToCopy(this.twistMaxVec);
-        let loctwistMinVec = twistCentRot.getInverse().applyToCopy(this.twistMinVec);
-        let toMax = new Rot(locZ, loctwistMaxVec);
-        let fromMin = new Rot(locZ, loctwistMinVec);
+        let locZ = centDecompRot[1].applyToClone(this.pool.new_Vec3(0, 0, 1));
+        let loctwistMaxVec = twistCentRot.getInverse().applyToClone(this.twistMaxVec);
+        let loctwistMinVec = twistCentRot.getInverse().applyToClone(this.twistMinVec);
+        let toMax = Rot.fromAxisAngle(locZ, loctwistMaxVec);
+        let fromMin = Rot.fromAxisAngle(locZ, loctwistMinVec);
         let toMaxAngle = toMax.getAngle();
         let minToAngle = fromMin.getAngle();
         let absRange = Math.abs(this.range);
@@ -218,7 +218,7 @@ export class Kusudama extends LimitingReturnful {
     }
 
     pointInLimits(inPoint, inBounds, boundaryMode) {
-        let point = inPoint.copy(); 
+        let point = inPoint.clone(); 
         point.normalize(); 
 
         inBounds[0] = -1;
@@ -227,7 +227,7 @@ export class Kusudama extends LimitingReturnful {
         let closestCos = -2;
         if (this.limitCones.length > 1 && this.orientationallyConstrained) {
             for (let i = 0; i < this.limitCones.length - 1; i++) {
-                let collisionPoint = inPoint.copy();
+                let collisionPoint = inPoint.clone();
                 collisionPoint.setComponents(0, 0, 0); 
                 let nextCone = this.limitCones[i + 1];
                 let inSegBounds = this.limitCones[i].inBoundsFromThisToNext(nextCone, point, collisionPoint);
@@ -236,7 +236,7 @@ export class Kusudama extends LimitingReturnful {
                 } else {
                     let thisCos = collisionPoint.dot(point); 
                     if (closestCollisionPoint === null || thisCos > closestCos) {
-                        closestCollisionPoint = collisionPoint.copy();
+                        closestCollisionPoint = collisionPoint.clone();
                         closestCos = thisCos;
                     }
                 }
@@ -247,9 +247,9 @@ export class Kusudama extends LimitingReturnful {
                 inBounds[0] = 1;
                 return inPoint;
             } else {
-                let axis = this.limitCones[0].getControlPoint().crossCopy(point); 
-                let toLimit = new Rot(axis, this.limitCones[0].getRadius()); 
-                return toLimit.applyToCopy(this.limitCones[0].getControlPoint()); 
+                let axis = this.limitCones[0].getControlPoint().crossClone(point); 
+                let toLimit = Rot.fromAxisAngle(axis, this.limitCones[0].getRadius()); 
+                return toLimit.applyToVecClone(this.limitCones[0].getControlPoint()); 
             }
         } else {
             inBounds[0] = 1;
@@ -290,9 +290,9 @@ export class Kusudama extends LimitingReturnful {
         let globY = toGet.yRay().heading();
         let globZ = toGet.zRay().heading();
         let globX = toGet.xRay().heading();
-        let algnY = new Rot(globY, twistY); 
-        let alignedZ = algnY.applyToVecCopy(globZ); 
-        let alignedX = algnY.applyToVecCopy(globX);
+        let algnY = Rot.fromVecs(globY, twistY); 
+        let alignedZ = algnY.applyToVecClone(globZ); 
+        let alignedX = algnY.applyToVecClone(globX);
         let twistLocZ = twistAxes.getLocalOf(alignedZ.add(twistAxes.origin()));
         let twistLocX = twistAxes.getLocalOf(alignedX.add(twistAxes.origin()));
         return [twistLocX, twistLocZ]; 

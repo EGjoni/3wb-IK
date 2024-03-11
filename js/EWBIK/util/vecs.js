@@ -35,8 +35,8 @@ export class Vec3 {
     }
 
     /**takes this this.cross input and returns the result as a new vector*/
-    crossCopy(input) {
-        let newVec = this.copy();
+    crossClone(input) {
+        let newVec = this.clone();
         newVec.setComponents(
             this.y * input.z - this.z * input.y,
             this.z * input.x - this.x * input.z,
@@ -45,20 +45,14 @@ export class Vec3 {
         return newVec;
     }
 
-    copy() {
+    clone() {
         return new Vec3(this.x, this.y, this.z);
     }
 
-    toString() {
-        return '('+this.x.toFixed(4)+', '+this.y.toFixed(4)+', '+this.z.toFixed(4)+', )';
-    }
-    toConsole() {
-        console.log(this.toString());
-    }
-
+   
     getOrthogonal() {
         const { x, y, z } = this;
-        let result = this.copy();
+        let result = this.clone();
         result.setComponents(0, 0, 0);
         let threshold = this.mag() * 0.6;
         if (threshold > 0) {
@@ -94,7 +88,7 @@ export class Vec3 {
     }
 
     /** writes thes components of this vector into the given array. If no aray is given, one will be created and returned**/
-    intoArray(into = new Array(this.dims)) {
+    toArray(into = new Array(this.dims)) {
         for (let i = 0; i < this.dims; i++) {
             into[i] = this.dataBuffer[this.baseIdx+i];
         }
@@ -205,8 +199,8 @@ export class Vec3 {
         return this;
     }
 
-    divCopy(scalar) {
-        let result = this.copy();
+    divClone(scalar) {
+        let result = this.clone();
         result.div(scalar);
         return result;
     }
@@ -218,8 +212,8 @@ export class Vec3 {
         return this;
     }
 
-    multCopy(scalar) {
-        let result = this.copy();
+    multClone(scalar) {
+        let result = this.clone();
         result.mult(scalar);
         return result;
     }
@@ -249,6 +243,13 @@ export class Vec3 {
         return this;
     }
 
+    square() {
+        const {x, y, z} = this;
+        this.x *= x; 
+        this.y *= y;
+        this.z *= z;
+        return this;
+    }
 
     add(v) {
         this.x += v.x;
@@ -257,8 +258,8 @@ export class Vec3 {
         return this;
     }
 
-    addCopy(v) {
-        let result = this.copy();
+    addClone(v) {
+        let result = this.clone();
         result.add(v);
         return result;
     }
@@ -270,17 +271,22 @@ export class Vec3 {
         return this;
     }
 
-    subCopy(v) {
-        let result = this.copy();
+    subClone(v) {
+        let result = this.clone();
         result.sub(v);
         return result;
     }
 
     normalize() {
-        const magnitude = this.mag();
-        if (magnitude !== 0) {
-            this.div(magnitude);
+        const {x, y, z} = this;
+        const sum = x*x + y*y + z*z;
+        if(Math.abs(sum - 1) < Number.EPSILON) {
+            return this;
         }
+        const sumsqrt = Math.sqrt(sum);
+        this.x /= sumsqrt;
+        this.y /= sumsqrt;
+        this.z /= sumsqrt;
         return this;
     }
 
@@ -288,6 +294,66 @@ export class Vec3 {
         if (vec instanceof Vec3) return vec.components;
         else if (Array.isArray(vec)) return vec;
         else throw Error('Unsupported vector format');
+    }
+
+    /**returns this vector as color components in the specified magnitude range
+     * x = red, y= green, z= blue. 
+     * The range defines the half the width of a cube. origin maps to gray. 
+     * black maps to (-range, -range, -range) 
+    */
+    asColor(range) {
+        return Vec3.vecAsColor(this.x, this.y, this.z, range);
+    }
+
+    /**
+     * returns a css color string for this vector.
+     *  x = red, y= green, z= blue. 
+     * The range defines the half the width of a cube. origin maps to gray. 
+     * black maps to (-range, -range, -range) 
+     * **/
+    asConsoleString(range) {
+        return Vec3.vecAsConsoleString(this.x, this.y, this.z, range);
+    }
+
+    static vecAsColor(x, y, z, range) {
+        const inverseLerp = (min, max, value) => {
+            return Math.min(Math.max((value - min) / (max - min), 0), 1);
+        };
+        const toColorValue = (normalized) => {
+            return Math.round(normalized * 255);
+        }
+        const togamma = (normalized) => {
+            return Math.pow(normalized, 2.2); //because dark-mode. always.
+        }
+        const r = inverseLerp(-range, range, x);
+        const g = inverseLerp(-range, range, y);
+        const b = inverseLerp(-range, range, z);
+        const rgamma = togamma(r);
+        const ggamma = togamma(g);
+        const bgamma = togamma(b);
+        return {r: toColorValue(rgamma), g: toColorValue(ggamma), b:toColorValue(bgamma), 
+            gamma_norm:{r: rgamma, g:ggamma, b:bgamma},
+            raw_norm: {r: r, g:g, b:b},
+        }; 
+    }
+
+    static vecAsConsoleString(x, y, z, range) {
+        const baseString = Vec3.vecAsString(x, y, z);
+        const colString = Vec3.vecAsColor(x, y, z, range);
+        
+        return {stringContent: baseString, consoleContent: `%c ${baseString}`, style:`color: rgb(${colString.r}, ${colString.g}, ${colString.b})`}
+    }
+
+    static vecAsString(x, y, z) {
+        return '('+x.toFixed(3)+', '+y.toFixed(3)+', '+z.toFixed(3)+')';
+    }
+
+    toString() {
+        return Vec3.vecAsString(this.x, this.y, this.z);
+    }
+    toConsole(range = 1) {
+        let consoleString = this.asConsoleString(range);
+        console.log(`${consoleString.stringContent} %c▇`, `${consoleString.style}`);
     }
 
     get components() {
@@ -309,6 +375,10 @@ export class Vec3 {
 }
 
 
+/**a pool for 3vectors backed by an array.
+ * 
+ * repetetive as hell because I don't trust JIT compilers
+ */
 export class Vec3Pool {
     persistentPool = [];
     reclaimedPool = []; //stores vecs that were previously
@@ -337,12 +407,11 @@ export class Vec3Pool {
     }
 
     
-    acquire(x = 0, y = 0, z = 0) {
+    acquire(x=0, y=0, z=0) {
         if(this.tempPool == null) 
             this.setTempPoolSize(this.tempSize);
         if (this.isFinalized) {
-            let isFree = false;
-            let vec;
+            //let vec;
             //let attempts =0;
             //while(!isFree && attempts < this.tempPool.length) {
                 /*if(this.lru >= this.length) { 
@@ -359,7 +428,12 @@ export class Vec3Pool {
                     }
                 }*/
                 this.lru = (this.lru + 1) % this.tempPool.length;
-                vec = this.tempPool[this.lru];
+                const vec = this.tempPool[this.lru];        
+                const odb = this.tempBuffer; 
+                const obase = vec.baseIdx;
+                odb[obase] = x;
+                odb[obase+1] = y; 
+                odb[obase+2] = y;
                 //isFree = vec.amFree || this.assumeFree
                 //vec.amFree = false;
                 //attempts++;
@@ -367,7 +441,7 @@ export class Vec3Pool {
             if(attempts > 10) {
                 console.log("attempted : "+attempts+" before finding " +this.lru);
             }*/
-            vec.x = x; vec.y =y; vec.z = z;
+            //vec.x = x; vec.y =y; vec.z = z;
             //console.log("temp: "+this.lru);
             return vec;
         } else {
@@ -383,6 +457,35 @@ export class Vec3Pool {
             return newV;
         }
     }
+
+    acquirefv(iv) {
+        if(this.tempPool == null) 
+            this.setTempPoolSize(this.tempSize);
+        if (this.isFinalized) {
+            this.lru = (this.lru + 1) % this.tempPool.length;
+            const vec = this.tempPool[this.lru];        
+            const ibase = iv.baseIdx;
+            const idb = iv.dataBuffer;         
+            const odb = this.tempBuffer; 
+            const obase = vec.baseIdx;
+            odb[obase] = idb[ibase]; 
+            odb[obase+1] = idb[ibase+1]; 
+            odb[obase+2] = idb[ibase+2]; 
+            return vec;
+        } else {
+            let newV;
+            if(this.reclaimedPool.length > 0) {
+                newV = this.reclaimedPool.pop();
+                newV.x = x; newV.y =y; newV.z = z;
+                this.inProgressPool.push(newV);
+            } else {
+                newV = new Vec3(x, y, z);
+                this.inProgressPool.push(newV);
+            }
+            return newV;
+        }
+    }
+
 
 
     temp_acquire(x=0, y=0, z=0) {
@@ -405,7 +508,7 @@ export class Vec3Pool {
                     }
                 }*/
         this.lru = (this.lru + 1) % this.tempPool.length;
-        let vec = this.tempPool[this.lru];
+        const vec = this.tempPool[this.lru];
                 //isFree = vec.amFree;
                 //attempts++
             //}
@@ -413,7 +516,27 @@ export class Vec3Pool {
                 console.log("attempted : "+attempts+"TEMP before finding " +this.lru);
             }
             vec.amFree = true; // since the user indicated that they will be discarding this anyway*/
-        vec.x = x; vec.y =y; vec.z = z;
+        const odb = this.tempBuffer; 
+        const obase = vec.baseIdx;
+        odb[obase] = x; 
+        odb[obase+1] = y; 
+        odb[obase+2] = z; 
+        return vec;
+    }
+
+    temp_acquirefv(iv) {
+        if(this.tempPool == null) 
+            this.setTempPoolSize(this.tempSize);
+        this.lru = (this.lru + 1) % this.tempPool.length;
+
+        const vec = this.tempPool[this.lru];
+        const ibase = iv.baseIdx;
+        const idb = iv.dataBuffer;         
+        const odb = this.tempBuffer; 
+        const obase = vec.baseIdx;
+        odb[obase] = idb[ibase]; 
+        odb[obase+1] = idb[ibase+1]; 
+        odb[obase+2] = idb[ibase+2]; 
         return vec;
     }
 
@@ -473,6 +596,21 @@ export class Vec3Pool {
     any_Vec3(x=0, y=0, z=0) {
         return this.temp_acquire(x, y, z);
     }
+
+    /**
+     * new pooled vec3 from vec
+     * @param {*} x 
+     * @param {*} y 
+     * @param {*} z 
+     * @returns 
+     */
+    new_Vec3fv(v) {
+        return this.acquirefv(v);
+    }
+
+    any_Vec3fv(v) {
+        return this.temp_acquirefv(v);
+    }
 }
 
 window.globalVecPool = new Vec3Pool(1000);
@@ -481,12 +619,24 @@ export function any_Vec3(x=0, y=0, z=0) {
     return globalVecPool.temp_acquire(x, y, z);
 }
 
+export function any_Vec3fv(v) {
+    return globalVecPool.temp_acquirefv(v);
+}
+
 export class NoPool {
     new_Vec3(x=0, y=0, z=0) {
         return new Vec3(x, y, z);
     }
     any_Vec3(x=0, y=0, z=0) {
         return new Vec3(x, y, z); 
+    }
+
+    new_Vec3fv(v) {
+        return new Vec3(v.x, v.y, v.z); 
+    }
+
+    any_Vec3fv(v) {
+        return new Vec3(v.x, v.y, v.z); 
     }
     releaseAll() {
         

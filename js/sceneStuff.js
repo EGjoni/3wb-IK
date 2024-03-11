@@ -9,6 +9,8 @@ dbgContainer.id = "info";
 document.querySelector("body").appendChild(dbgContainer);
 const intersectsDisplay = document.createElement('div');
 intersectsDisplay.innerHTML = `Intersected Coordinates:`
+window.dbgContainer = dbgContainer;
+window.intersectsDisplay = intersectsDisplay;
 dbgContainer.appendChild(intersectsDisplay);
 let debugstyle = document.createElement('style');
 debugstyle.innerHTML = `
@@ -88,13 +90,32 @@ async function select(item) {
     if (item instanceof THREE.Bone) {
         selectedPin = null;
         selectedPinIdx = -1;
-        selectedBone = item;
         window.selectedBone = item;
+        window.selectedBone = item;
+        pinOrientCtrls.detach();
+        pinOrientCtrls.enabled = false;
+        //pinTranslateCtrls.enabled = false;
+        boneCtrls.enabled = true;
+        boneCtrls.attach(selectedBone);
+        window.contextBone = selectedBone;
+        window.contextPin = selectedBone.getIKPin() ?? null;
+        window.contextArmature = selectedBone.parentArmature; 
+        window.contextConstraint = selectedBone.getConstraint() ?? null;
     }
     if (item instanceof IKPin) {
+        pinOrientCtrls.attach(targetsMeshList[selectedPinIdx]);
+        //pinTranslateCtrls.attach(targetsMeshList[selectedPinIdx]);
+        boneCtrls.detach();
+        boneCtrls.enabled = false;
+        pinOrientCtrls.enabled = true;
         selectedBone = null;
         selectedBoneIdx = -1;
-        selectedPin = item;
+        window.selectedPin = item;
+        window.selectedPinIdx = pinsList.indexOf(selectedPin);
+        window.contextPin = selectedPin;
+        window.contextBone = window.selectedPin.forBone;
+        window.contextArmature = window.contextBone.parentArmature; 
+        window.contextConstraint = window.contextBone.getConstraint() ?? null;
     }
     updateInfoPanel(item);
 }
@@ -104,6 +125,7 @@ function addSceneArmature(armature) {
     //window.armatures.push(armature);    
     //armature.inferOrientations(armature.rootBone);
     //initHumanoidRestConstraints(armature);
+    D.byid(window.autoSolve ? 'auto-solve' : 'interaction-solve').checked = true;
     initIK(armature);
     updateGlobalPinLists();
     updateGlobalBoneLists();
@@ -136,6 +158,7 @@ function updateGlobalBoneLists() {
 function makePinsList(pinSize, into = scene, armature) {
     armature.pinsList = [];
     armature.targetsMeshList = [];
+    let previouslySelected = selectedPin;
     let boneList = armature.bones;
     let i = 0;
     for (let b of boneList) {
@@ -171,6 +194,9 @@ function doSolve(bone = null, interacted = false, preSolveCallback = null, inSol
     for (let a of armatures) {
         if (a.ikReady) {
             if (autoSolve || (interacted && interactionSolve)) {
+                if(autoSolve) {
+                    bone = null; /*we're solving for the whole armature when autoSolve is on anyway so avoid intermittently specifying a new bone to work from, because this invalidates the cache*/
+                }
                 a.solve(bone);
             } else if (interacted && !interactionSolve) {
                 a.noOp(bone);
@@ -225,6 +251,7 @@ async function orthonormalize(startnode) {
 
 
 function initControls(THREE, renderer) {
+    D.byid(window.autoSolve ? 'auto-solve' : 'interaction-solve').checked = true;
     window.THREE = THREE;
     raycaster = new THREE.Raycaster();
     raycaster.layers.enable(window.boneLayer);
@@ -268,6 +295,9 @@ function initControls(THREE, renderer) {
         else
             selectedBone.setTempIKOrientationLock(false);
 
+        if (selectedBone?.parentArmature.ikReady) {
+            doSolve(selectedBone, true);//.parentArmature.solve();
+        }
         bone_transformDragging = true;
 
     });
@@ -296,7 +326,7 @@ function initControls(THREE, renderer) {
         const tracknode = pinsList[selectedPinIdx].targetNode;
         tracknode.adoptTrackedLocal();
         if (selectedPin?.forBone.parentArmature.ikReady) {
-            doSolve(selectedBone, true);//.parentArmature.solve();
+            doSolve(contextBone, true);//.parentArmature.solve();
         }
 
         pinOrientCtrls.visible = false;
@@ -366,21 +396,13 @@ function initControls(THREE, renderer) {
             //pinTranslateCtrls.detach();
             if (intersectsBone[0]?.object != null) {
                 selectedBone = boneList[selectedBoneIdx];
-                pinOrientCtrls.enabled = false;
-                //pinTranslateCtrls.enabled = false;
-                boneCtrls.enabled = true;
-                boneCtrls.attach(selectedBone);
                 select(selectedBone);
             }
             selectedPin = null;
         } else {
-            pinOrientCtrls.attach(targetsMeshList[selectedPinIdx]);
-            //pinTranslateCtrls.attach(targetsMeshList[selectedPinIdx]);
-            selectedPin = pinsList[selectedPinIdx];
-            boneCtrls.detach();
-            boneCtrls.enabled = false;
-            pinOrientCtrls.enabled = true;
+            
             //pinTranslateCtrls.enabled = true;
+            selectedPin = pinsList[selectedPinIdx];
             select(selectedPin);
         }
         if (selectedBoneIdx == -1) {
@@ -390,6 +412,9 @@ function initControls(THREE, renderer) {
                 selectedBone = null;
             }
         }
+        if(selectedPinIdx == -1 && selectedBoneIdx == -1) {
+            select(null);
+        }
     });
 
     boneCtrls.layers.set(window.boneLayer);
@@ -398,6 +423,7 @@ function initControls(THREE, renderer) {
 
     window.addEventListener('mousedown', (event) => {
         lastmousedown = Date.now();
+        window.setDOMtoInternalState();
         //pinOrientCtrls.visible = false;//!((pin_transformDragging || selectedPinIdx >= 0) && pinOrientCtrls.enabled);
         //pinTranslateCtrls.visible = false;//!((pin_transformDragging || selectedPinIdx >= 0) && pinTranslateCtrls.enabled);
         //boneCtrls.visible = false;//!(bone_transformDragging || selectedBoneIdx >= 0);
@@ -411,6 +437,7 @@ function initControls(THREE, renderer) {
         boneCtrls.visible = bone_transformDragging || selectedBoneIdx >= 0;
         bone_transformDragging = false;
         pin_transformDragging = false;
+        window.setDOMtoInternalState();
     }, false);
 
     boneCtrls.layers.set(window.boneLayer);
@@ -481,10 +508,7 @@ function printBoneNames(startNode, depth = 0) {
 }
 
 function initIK(armature) {
-
-    //new Rest(armature.bonetags["J_Bip_C_Neck"], armature.bonetags["J_Bip_C_Neck"].getIKBoneOrientation());
     makePinsList(1, armature.armatureObj3d, armature);
-
     armature.regenerateShadowSkeleton(true);
     //vrm.scene.scale.set(5,5,5);
     armature.showBones(0.1, true);
@@ -523,34 +547,19 @@ async function switchSelected(key) {
             document.getElementById("no-solve").checked = true;
             break;
         case 's': //button, do a single solver step, should be disabled if autosolve is true
-            doSolve(selectedBone, true);
+            armatureSolve()
             break;
         case '-': //button, do a single pullback iteration.
-            interactionSolve = false;
-            autoSolve = false;
-            document.getElementById("no-solve").checked = true;
-            if (window.contextArmature != null) {
-                if(contextArmature.ikReady) {
-                    contextArmature._doSinglePullbackStep(selectedBone);
-                }
-            } else {
-                for (let a of armatures) {
-                    if (a.ikReady)
-                        await a._doSinglePullbackStep(selectedBone);
-                }
-            }P
+            pullbackDebug();
             break;
         case 'a': //radio select, always solve. 
             autoSolve = !autoSolve;
             break;
         case 'b': 
-            contextArmature?._debug_bone(selectedBone);
+            bonestepDebug();
             break
         case '+':
-            interactionSolve = false;
-            autoSolve = false;
-            document.getElementById("no-solve").checked = true;
-            contextArmature?._debug_iteration(selectedBone);
+            armatureStepDebug();
             break;
         case 'i': //radio select, only solve when interacting with a pin.
             autoSolve = false;
@@ -566,6 +575,8 @@ async function switchSelected(key) {
             break;
     }
 }
+
+
 
 window.serializeInstance = function (instance, in_progress = {}) {
     const serialized = {};
@@ -584,7 +595,7 @@ window.serializeInstance = function (instance, in_progress = {}) {
             serialized[key] = value;
         } else if (value instanceof Object) {
             if (value.constructor.name === 'Rot' || value.constructor.name === 'Vec3') {
-                serialized[key] = value.constructor.name === 'Rot' ? [value.q0, value.q1, value.q2, value.q3] : [value.x, value.y, value.z];
+                serialized[key] = value.constructor.name === 'Rot' ? [value.x, value.y, value.z, value.w] : [value.x, value.y, value.z];
             } else if ('ikd' in value) {
                 // Check if this ikd has already been processed to avoid infinite loops
                 if (in_progress[value.constructor.name] && in_progress[value.constructor.name][value.ikd]) {
@@ -613,18 +624,18 @@ window.serializeInstance = function (instance, in_progress = {}) {
     return { serialized, in_progress };
 }
 
-
+window.getTranslationColor = (position, range) => {
+    const inverseLerp = (a, b, value) => {
+        return Maath.min(Math.max((value - a) / (b - a), 1), 0);
+    };
+    const r = inverseLerp(-range, range, position.x);
+    const g = inverseLerp(-range, range, position.y);
+    const b = inverseLerp(-range, range, position.z);
+    return `rgb(${toColorValue(r)}, ${toColorValue(g)}, ${toColorValue(b)})`;
+};
 
 function toDebugColor(debugObj, groupedelem, range, vert = null, horiz = null) {
-    const getTranslationColor = (range, position) => {
-        const inverseLerp = (a, b, value) => {
-            return Maath.min(Math.max((value - a) / (b - a), 1), 0);
-        };
-        const r = inverseLerp(-range, range, position.x);
-        const g = inverseLerp(-range, range, position.y);
-        const b = inverseLerp(-range, range, position.z);
-        return `rgb(${toColorValue(r)}, ${toColorValue(g)}, ${toColorValue(b)})`;
-    };
+    
 
     let titlefield = element.querySelector("name");
     let element = groupedelem.querySelector("debug-color-thingy");
@@ -640,8 +651,8 @@ function toDebugColor(debugObj, groupedelem, range, vert = null, horiz = null) {
         element.classList.add(horiz);
     }
 
-    element.style.backgroundColor = getTranslationColor(range, debugObj.localPosition);
-    element.style.borderColor = getTranslationColor(range, debugObj.worldPosition);
+    element.style.backgroundColor = getTranslationColor(debugObj.localPosition, range);
+    element.style.borderColor = getTranslationColor(debugObj.worldPosition, range);
 
     titlefield.innerText = debugObj.name;
     element.title = `${debugObj.name} translation. Range (${-range.toFixed(3)}, ${range.toFixed(3)}).\n
@@ -670,8 +681,7 @@ function addDebugFuncs(THREE) {
         return groupedelem;
     };
 
-    // Extend THREE.Object3D with a toConsole method
-    THREE.Object3D.prototype.toConsole = function () {
+    THREE.Object3D.prototype.toStr = function (showscale = false ) {
         // Helper function to convert quaternion to axis-angle
         function quaternionToAxisAngle(quaternion) {
             if (quaternion.w > 1) quaternion.normalize(); // if w > 1 acos and sqrt will produce errors, this cant happen if quaternion is normalised
@@ -705,15 +715,18 @@ function addDebugFuncs(THREE) {
         this.getWorldQuaternion(worldQuaternion);
         this.getWorldScale(worldScale);
         const worldAxisAngle = quaternionToAxisAngle(worldQuaternion);
-
-        console.log(`Space Info for object (${this.name}): 
-    GLOBAL Position: ${worldPosition.x.toFixed(4)}, ${worldPosition.y.toFixed(4)}, ${worldPosition.z.toFixed(4)}
-    GLOBAL Rotation: Axis(${worldAxisAngle.axis.x.toFixed(2)}, ${worldAxisAngle.axis.y.toFixed(2)}, ${worldAxisAngle.axis.z.toFixed(2)}), Angle(${THREE.MathUtils.radToDeg(worldAxisAngle.angle).toFixed(2)}°)
-    GLOBAL Scale: ${worldScale.x.toFixed(2)}, ${worldScale.y.toFixed(2)}, ${worldScale.z.toFixed(2)}
+        let globscalestr = showscale ? `Scale: ${worldScale.x.toFixed(3)}, ${worldScale.y.toFixed(3)}, ${worldScale.z.toFixed(3)}` : '';
+        let localScalestr = showscale ? `Scale: ${localScale.x.toFixed(3)}, ${localScale.y.toFixed(3)}, ${localScale.z.toFixed(3)}` : '';
+        return`GLOBAL Space Info for object (${this.name}): 
+Position: ${worldPosition.x.toFixed(3)}, ${worldPosition.y.toFixed(3)}, ${worldPosition.z.toFixed(3)}
+Rotation: Axis(${worldAxisAngle.axis.x.toFixed(3)}, ${worldAxisAngle.axis.y.toFixed(3)}, ${worldAxisAngle.axis.z.toFixed(3)}), Angle(${THREE.MathUtils.radToDeg(worldAxisAngle.angle).toFixed(3)}°)
+${globscalestr}
     ----
-    LOCAL Position: ${localPosition.x.toFixed(4)}, ${localPosition.y.toFixed(4)}, ${localPosition.z.toFixed(4)}
-    Local Rotation : Axis(${localAxisAngle.axis.x.toFixed(2)}, ${localAxisAngle.axis.y.toFixed(2)}, ${localAxisAngle.axis.z.toFixed(2)}), Angle(${THREE.MathUtils.radToDeg(localAxisAngle.angle).toFixed(2)}°)
-    Local Scale: ${localScale.x.toFixed(2)}, ${localScale.y.toFixed(2)}, ${localScale.z.toFixed(2)}
-    `);
+    LOCAL 
+${localPosition.x.toFixed(3)}, ${localPosition.y.toFixed(3)}, ${localPosition.z.toFixed(3)}
+Rotation : Axis(${localAxisAngle.axis.x.toFixed(3)}, ${localAxisAngle.axis.y.toFixed(3)}, ${localAxisAngle.axis.z.toFixed(3)}), Angle(${THREE.MathUtils.radToDeg(localAxisAngle.angle).toFixed(3)}°)
+${localScalestr}`;
     };
+    THREE.Object3D.prototype.toString = THREE.Object3D.prototype.toStr;
+    THREE.Object3D.prototype.toConsole = function (showscale = false ) { console.log(this.toStr(showscale))}
 }

@@ -24,7 +24,7 @@ export class Constraint {
         }
         this.ikd = ikd;
         this.pool = pool;    
-        this.tempOutRot = new Rot(); 
+        this.tempOutRot = Rot.IDENTITY.clone(); 
         this.basis = basis ?? new IKNode(null,null,undefined,this.pool);
         this.constraintResult = new ConstraintResult(this, this.pool);
     }
@@ -49,7 +49,7 @@ export class Constraint {
         let result = null;
         if(maybeNotNode instanceof Object3D) {  
             result = new IKNode(null, null, undefined, this.pool);
-            result.adoptLocalValuesFromObject3D(maybeNotNode, this.forBone.parentArmature.wScale);
+            result.adoptLocalValuesFromObject3D(maybeNotNode);
             result.markDirty();
         } else if (maybeNotNode instanceof IKNode) {
             result = maybeNotNode
@@ -63,7 +63,7 @@ export class Constraint {
         let result = null;
         if(maybeNotNode instanceof Object3D) {  
             result = this.tempNode1.reset();
-            result.adoptLocalValuesFromObject3D(maybeNotNode, this.forBone.parentArmature.wScale);
+            result.adoptLocalValuesFromObject3D(maybeNotNode);
             result.markDirty();
         } else if (maybeNotNode instanceof IKNode) {
             result = maybeNotNode
@@ -223,14 +223,9 @@ export class ConstraintStack extends LimitingReturnful {
 }
 
 
-
-
-
-
-
 export class ConstraintResult {
-    _fullRotation = new Rot(1,0,0,0);
-    _clampedRotation = new Rot(1,0,0,0);
+    _fullRotation = Rot.IDENTITY.clone();
+    _clampedRotation = Rot.IDENTITY.clone();
     _fullAngle = Math.TAU;
     _clampedAngle = Math.TAU;
     __preCallDiscomfort = null;
@@ -270,11 +265,11 @@ export class ConstraintResult {
     }
 
     set fullRotation(rot) {
-        this._fullRotation.setComponents(rot.q0, rot.q1, rot.q2, rot.q3);
+        this._fullRotation.setComponents(rot.x, rot.y, rot.z, rot.w);
     }
 
     set clampedRotation(rot) {
-        this._clampedRotation.setComponents(rot.q0, rot.q1, rot.q2, rot.q3);
+        this._clampedRotation.setComponents(rot.x, rot.y, rot.z, rot.w);
     }
 
     get fullRotation() {

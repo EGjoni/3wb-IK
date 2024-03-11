@@ -241,9 +241,9 @@ export class LimitCone {
 
     closestCone(next, input) {
         if (input.dot(controlPoint) > input.dot(next.controlPoint))
-            return this.controlPoint.copy();
+            return this.controlPoint.clone();
         else
-            return next.controlPoint.copy();
+            return next.controlPoint.clone();
     }
 
     /**
@@ -282,7 +282,7 @@ closestPointOnClosestCone(next, input, inBounds) {
 closestToCone(input, inBounds) {
     if (input.dot(this.getControlPoint()) > this.getRadiusCosine()) {
         inBounds[0] = true;
-        return null; // input.copy();
+        return null; // input.clone();
     } else {
         let axis = this.getControlPoint().cross(input);
         let rotTo = new Rot(axis, this.getRadius());
@@ -308,8 +308,8 @@ updateTangentAndCushionHandles(next) {
         let radA = this.radius;
         let radB = next.radius;
 
-        let A = this.getControlPoint().copy();
-        let B = next.getControlPoint().copy();
+        let A = this.getControlPoint().clone();
+        let B = next.getControlPoint().clone();
 
         let arcNormal = A.cross(B);
 

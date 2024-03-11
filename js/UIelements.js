@@ -4,6 +4,14 @@ import { Rest } from "./EWBIK/betterbones/Constraints/Rest/Rest.js";
 import { Twist } from "./EWBIK/betterbones/Constraints/Twist/Twist.js";*/
 
 import { IKPin } from "./EWBIK/betterbones/IKpin.js";
+import { CallbacksSequence } from "./EWBIK/CallbacksSequence.js"
+import { Bone, Vector3 } from "three";
+import { TransformState } from "./EWBIK/solver/SkeletonState.js";
+import { Vec3, any_Vec3 } from "./EWBIK/util/vecs.js";
+import { Rot } from "./EWBIK/util/Rot.js";
+
+window.Vec3 = Vec3; 
+window.Rot = Rot;
 
 window.armatures = [];
 window.pin_transformActive = false;
@@ -83,7 +91,10 @@ window.makeUI = function () {
         }
         #control-panel {
             z-index: 10; /* Ensure it's above other scene elements */
-            background: rgba(255, 255, 255, 0.8); /* Semi-transparent white background */
+            background: rgba(255, 255, 255, 0.6); /* Semi-transparent white background */
+            filter: invert(0.95);
+            font-family: sans-serif;
+            backdrop-filter: blur(2px) invert(1);
             padding: 10px;
             border-radius: 5px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
@@ -97,9 +108,41 @@ window.makeUI = function () {
         .hidden {
             display: none;
         }
+        .load-container {
+            display: grid;
+            grid-template-columns: 100%;
+            grid-template-rows: 2em;
+        }
+        
+        .progress-text {
+            grid-row: 1;
+            text-align: center;
+            grid-column: 1;
+            color: white;
+            position: relative;
+            z-index: 3;
+            align-self: center;
+        }
+        
+        .progress {
+            background: black;
+            position: relative;
+            border-radius: 5px;
+            z-index: 0;
+            height: 2em;
+            box-sizing: border-box;
+            box-shadow: 0px 0px 7px 4px #914848 inset;
+            grid-row: 1;
+            grid-column: 1;
+        }
 `
     document.querySelector("head").appendChild(panelStyle);
-
+    window.loadingBar = document.createElement('div');
+    window.loadingBar.classList.add("load-container");
+    window.loadingBar.innerHTML = `
+    <div class='progress-text'></div>
+    <div class="progress"></div>
+    `;
 
     let htmlcontrols = document.createElement('div');
     htmlcontrols.innerHTML = `
@@ -108,26 +151,30 @@ window.makeUI = function () {
 <div>
     <fieldset>
         <legend>Armature Options:</legend>
-        <div>Name: <span id="armature-name"></span></div>
-        <div style="width: fit-content">
-            <div class= "stretch-div">
-                <label for="default-dampening">Default Dampening:</label>            
-                <input type="range" id="default-dampening" name="default-dampening" min="0.00001" max="1.986" step="0.00001">
-                <output id="un-exp-output">0.1</output>
+        <div id="no-armature-opts-hint">Click on a bone or pin to see config options.</div>
+        <div class="hidden">
+            <div>Name: <span id="armature-name"></span></div>
+            <div style="width: fit-content">
+                <div class= "stretch-div">
+                    <label for="default-dampening">Default Dampening:</label>            
+                    <input type="range" id="default-dampening" name="default-dampening" min="0.00001" max="1.986" step="0.00001">
+                    <output id="un-exp-output">0.1</output>
+                </div>
+            </div>
+            <div>
+                <button id="solve-btn">Solve (s)</button>
+                <button id="pullback-btn">Pullback (-)</button>
+                <button id="solve-iteration-btn">1 Iteration (+)</button>
+                <button id="solve-bone-btn">1 Bone (b)</button>
+                <label for="iterations">Iterations:</label>
+                <input type="number" id="iterations" value ="15" name="iterations" min="0" max="200" step="1">
             </div>
         </div>
-        <div>
-            <button id="solve-btn">Solve (s)</button>
-            <button id="pullback-btn">Pullback (-)</button>
-            <button id="solve-iteration-btn">1 Iteration (+)</button>
-            <button id="solve-bone-btn">1 Bone (b)</button>
-            <label for="iterations">Iterations:</label>
-            <input type="number" id="iterations" value ="15" name="iterations" min="0" max="200" step="1">
-        </div>
+        <div id="loader-hints" class="hidden"></div>
     </fieldset>
 </div>
 <div>
-    <fieldset>
+    <fieldset id ="bone-fields" class="hidden">
         <legend>Bone Options:</legend>
         <div>Name: <span id="bone-name"></span> (<span id="internal-bone-name"></span>)</div>
         <label for="stiffness">Stiffness:</label>
@@ -158,12 +205,12 @@ window.makeUI = function () {
                     <button id="change-pin-parent">Change</button>
                 </div>
             </div>
-        </fieldset>
-        <fieldset>
-            <legend>Constraints:</legend>
-            <div id="constraints-div">
-            </div>
-        </fieldset>
+            <fieldset>
+                <legend>Constraints:</legend>
+                    <div id="constraints-div">
+                </div>
+            </fieldset>            
+        </fieldset>        
     </fieldset>
 </div>
 <div>
@@ -174,7 +221,7 @@ window.makeUI = function () {
             <label for="auto-solve">Auto Solve (A)</label>
         </div>
         <div>
-            <input type="radio" id="interaction-solve" name="solve-mode" value="interaction">
+            <input type="radio" id="interaction-solve" name="solve-mode" value="interaction" checked>
             <label for="interaction-solve">Interaction Solve (I)</label>
         </div>
         <div>
@@ -208,233 +255,488 @@ window.makeUI = function () {
 </div>
 `;
 
-htmlcontrols.id = 'control-panel';
-document.querySelector("body").appendChild(htmlcontrols);
-
-
-
-
-
-
-
-
-D.byid('solve-btn').addEventListener('click', () => {
+window.armatureSolve = () => { 
+    autoSolve = false;
     let prevstate = interactionSolve;
     interactionSolve = true;
-    doSolve(contextBone);
+    window.contextBone?.parentArmature?.solve(window.contextBone);//doSolve(contextBone);
     interactionSolve = prevstate
-});
+    setDOMtoInternalState();
+}
 
-D.byid('pullback-btn').addEventListener('click', async () => {
+window.updateLoadStream = (xhr, loadId) => {
+    let hints = D.byid("loader-hints");
+    hints.classList.remove("hidden");
+    let thisBar = hints.qs(`.load-container[data-id="${loadId}"`);
+    if(thisBar == null) {
+        thisBar = window.loadingBar.cloneNode(true);
+        hints.appendChild(thisBar);
+        thisBar.dataset.id = loadId; 
+    }
+    thisBar.qs(".progress").style.width = (100*xhr.loaded/xhr.total).toFixed(3)+'%';
+    thisBar.qs(".progress-text").innerText = (100*xhr.loaded/xhr.total).toFixed(3)+"% loaded";
+    if(xhr.loaded == xhr.total) {
+        thisBar.qs(".progress-text").innerText  = "Instantiating Scene...";
+        setDOMtoInternalState();
+    }
+}
+
+window.updateParseStream = (parseText, loadId) => {
+    let hints = D.byid("loader-hints");
+    let thisBar = hints.qs(`.load-container[data-id="${loadId}"`);
+    //thisBar.qs(".progress").style.width = (100*xhr.loaded/xhr.total).toFixed(3)+'%';
+    thisBar.qs(".progress-text").innerText = parseText;
+    if(parseText == null) {
+        thisBar.remove();
+        if(thisBar.children.length == 0) {
+            thisBar.classList.add("hidden");
+        }
+    }
+}
+
+
+window.notifyStreamError = (error, loadId) => {
+    let hints = D.byid("loader-hints");
+    hints.classList.remove("hidden");
+    let thisBar = hints.qs(`.load-container[data-id="${loadId}"`);
+    if(thisBar == null) {
+        thisBar = window.loadingBar.cloneNode(true);
+        hints.appendChild(thisBar);
+        thisBar.dataset.id = loadId; 
+    }
+    thisBar.qs(".progress-text").innerText = error;
+}
+ 
+    htmlcontrols.id = 'control-panel';
+    document.querySelector("body").appendChild(htmlcontrols);
+
+
+
+
+    D.byid('solve-btn').addEventListener('click', () => {
+       armatureSolve();
+    });
+
+    D.byid('solve-iteration-btn').addEventListener('click', () => {
+        autoSolve = false;
+        let prevstate = interactionSolve;
+        interactionSolve = true;
+        window.armatureStepDebug();
+        interactionSolve = prevstate
+        setDOMtoInternalState();
+    });
+
+    window.getdbgstring = function (bone, ts, wb) {
+        let solveString = `
+PreSolve for ${bone.ikd}.\n
+%%%%%% Initial WB condition:                                            
+${wb.simLocalAxes.getLocalMBasis().toString()} 
+${wb.simLocalAxes.getGlobalMBasis().toString()}
+
+######Initial Bone condition:
+${bone.toString()}
+`;
+        return solveString;
+    }
+
+
+    class RayDrawer {
+        constructor(source, scene, acquirefunc, updatefunc) {
+            this.raysgeo = [];
+            this.source = source;
+            this.acquirefunc = acquirefunc;
+            this.updatefunc = updatefunc;
+            this.scene = scene; 
+        }
+        makeLine(startPoint, endPoint, color) {
+            const geometry = new THREE.BufferGeometry().setFromPoints([startPoint, endPoint]);
+            const material = new THREE.LineBasicMaterial({ color: color });
+            const line = new THREE.Line(geometry, material);
+            this.scene.add(line);
+            return line;
+        }
+        die() {
+            for(let rg of this.raysgeo) {
+                this.scene.remove(rg);
+                rg.geometry.dispose();
+                rg.material.dispose();              
+            }
+            this.raysgeo = [];
+            this.scene.deta
+        }
+        draw(color) {
+            let results = this.acquirefunc(this);
+            for(let i=this.raysgeo.length-1; i>=results.length; i--) {
+                this.scene.remove(this.raysgeo[i]);
+                this.raysgeo[i].geometry.dispose();
+                this.raysgeo[i].material.dispose();
+                this.raysgeo.pop();
+            }
+            let i = this.raysgeo.length;
+            while(i < results.length) {
+                let rg = this.makeLine(any_Vec3(), results[i], color);
+                rg.correspondsTo = results[i];
+                this.raysgeo.push(rg); 
+                i++;
+            }
+            for(let rg of this.raysgeo) {
+                let newpoints = this.updatefunc(rg, this);
+                let newStartPoint = newpoints[0];
+                let newEndPoint = newpoints[1];
+                const positions = rg.geometry.attributes.position;
+                positions.array[0] = newStartPoint.x;
+                positions.array[1] = newStartPoint.y;
+                positions.array[2] = newStartPoint.z;
+
+                positions.array[3] = newEndPoint.x;
+                positions.array[4] = newEndPoint.y;
+                positions.array[5] = newEndPoint.z;
+
+                positions.needsUpdate = true;
+            }
+        }
+    }
+
+    let prevwb = null;
+    function initLines(wb) {
+        if(prevwb != wb && prevwb != null) {
+            prevwb?.chain.targetDrawer.die();
+            prevwb?.chain.tipDrawer.die();
+        }
+        prevwb = wb;
+        let getGlobalizedBoneOrigin = (wb)  => {
+            let bOrg = wb.simLocalAxes.origin();
+            let globalizedOrig = new THREE.Vector3(bOrg.x,bOrg.y,bOrg.z);
+            globalizedOrig = wb.forBone.directRef.parentArmature.armatureObj3d.localToWorld(globalizedOrig);
+            return globalizedOrig;
+        }
+        if(wb.chain.targetDrawer == null) { 
+            wb.chain.targetDrawer = new RayDrawer(wb.chain, window.scene,
+            (drawer)=>{return drawer.source.boneCenteredTargetHeadings;},
+            (rg, drawer)=>{
+                    // boneOrig = wb.simLocalAxes.origin();
+                    let go = getGlobalizedBoneOrigin(wb);
+                    let p = rg.correspondsTo;
+                    const dir = new THREE.Vector3(p.x+go.x, p.y+go.y, p.z+go.z);
+                    //rg.correspondsTo.p2.subClone(boneOrig);
+                    return [go, dir];
+                }  
+            );
+        }
+        if(wb.chain.tipDrawer == null) { 
+            wb.chain.tipDrawer = new RayDrawer(wb.chain, window.scene,
+            (drawer)=>{return drawer.source.boneCenteredTipHeadings;},
+            (rg, drawer)=>{
+                    
+                    let go = getGlobalizedBoneOrigin(wb);
+                    let p = rg.correspondsTo;
+
+                    const dir = new THREE.Vector3(p.x+go.x, p.y+go.y, p.z+go.z);
+                    return [go, dir];
+                }  
+            );
+        }
+    }
+
+    
+window.armatureStepDebug = () => {
     interactionSolve = false;
     autoSolve = false;
-    for (let a of armatures) {
-        if (a.ikReady) await a._doSinglePullbackStep(contextBone);
-    }
-});
-
-D.byid('auto-solve').addEventListener('change', (e) => {
-    if (e.target.checked) {
-        autoSolve = true;
-        interactionSolve = false; // Ensure exclusive selection
-    }
-});
-
-D.byid('interaction-solve').addEventListener('change', (e) => {
-    if (e.target.checked) {
-        autoSolve = false;
-        interactionSolve = true;
-    }
-});
-
-
-D.byid('no-solve').addEventListener('change', (e) => {
-    if (e.target.checked) {
-        autoSolve = false;
-        interactionSolve = false;
-    }
-});
-
-D.byid('rotate-widget').addEventListener('change', (e) => {
-    pinOrientCtrls.enabled = e.target.checked;
-});
-
-D.byid('translate-widget').addEventListener('change', (e) => {
-    pinTranslateCtrls.enabled = e.target.checked;
-});
-
-// Initialize solve mode based on existing variables
-D.byid(autoSolve ? 'auto-solve' : 'interaction-solve').checked = true;
-
-D.byid('pin-enabled').addEventListener("input", (event) => {
-    let state = event.target.checked;
-    let diddisable = false;
-    if(state) {
-        if(contextPin != null) { 
-            contextPin.disable();
-            diddisable = true;
-        } else if(contextBone != null) {
-            let newPin = new IKPin(contextBone);
-        }
-        makePinsList(1, contextBone.parentArmature.armatureObj3d, contextBone.parentArmature);
-        contextBone.parentArmature.showBones(0.1, true);
-        updateGlobalPinLists();
-        if(diddisable)
-            select(contextPin.forBone);
-    } else if(contextPin != null) {
-        contextPin.disable();
-        makePinsList(1, contextBone.parentArmature.armatureObj3d, contextBone.parentArmature);
-        contextBone.parentArmature.showBones(0.1, true);
-        updateGlobalPinLists();
-        select(contextPin.forBone);
-    }
-})
-
-D.byid("x-priority").addEventListener("input", (event) => {
-    contextPin?.setXPriority(event.target.value);
-    contextArmature?.solve(contextBone);
-});
-D.byid("y-priority").addEventListener("input", (event) => {
-    contextPin?.setYPriority(event.target.value);
-    contextArmature?.solve(contextBone);
-});
-D.byid("z-priority").addEventListener("input", (event) => {
-    contextPin?.setZPriority(event.target.value);
-    contextArmature?.solve(contextBone);
-});
-
-
-const defaultDampeningInput = D.byid('default-dampening');
-const unexp = D.byid('un-exp-output');
-const iterationsInput = D.byid('iterations');
-const solveBtn = D.byid('solve-btn');
-const pullbackBtn = D.byid('pullback-btn');
-
-defaultDampeningInput.addEventListener('input', (event) => {
-    contextBone?.parentArmature?.setDampening((Math.pow(Math.E, event.target.value)-1));
-    unexp.value = (Math.pow(Math.E, event.target.value)-1).toFixed(3);
-});
-
-iterationsInput.addEventListener('input', (event) => {
-    contextBone?.parentArmature?.setDefaultIterations(event.target.value);
-});
-
-solveBtn.addEventListener('click', (e) => {
-    contextBone?.parentArmature?.solve(contextBone);
-});
-
-pullbackBtn.addEventListener('click', () => {
-    contextBone?.parentArmature?.doSinglePullbackStep(contextBone)
-});
-
-async function doNothing() {
-return false;
+    setDOMtoInternalState();
+    
+    let callbacks = new CallbacksSequence(
+        {
+            beforeIteration: (bone, ts, wb) => {
+                if (bone == window.contextBone) {
+                    let solveString = getdbgstring(bone, ts, wb);
+                    //console.log(solveString);
+                    window.intersectsDisplay.innerText = solveString;
+                }
+            },
+            afterIteration: (bone, ts, wb) => {
+                if (bone == window.contextBone) {
+                    let solveString = getdbgstring(bone, ts, wb);
+                    //console.log(solveString);
+                    window.intersectsDisplay.innerText = `${solveString}`;
+                }
+            },
+        });
+    window.contextArmature?._debug_iteration(selectedBone, undefined, undefined);
 }
-window.doNothing = doNothing;
-window.awaitingSelect = doNothing;
 
-window.toInterstitial = async function(intersticeMessage, onSelected) {
-    D.byid("interstitial").classList.remove("hidden");
-    D.byid("interstitial").innerText = intersticeMessage;
-    D.byid("mod-panel").classList.add("hidden");
-    window.awaitingSelect = async (selected) => {
-        onSelected(selected);
+
+    window.bonestepDebug = () => {
+        interactionSolve = false;
+        autoSolve = false;
+        setDOMtoInternalState();
+        const tempOrig = new THREE.Vector3(0,0,0);
+        let callbacks = new CallbacksSequence(
+            {
+                beforeIteration: (bone, ts, wb) => {
+                    if (bone == window.contextBone) {
+                        initLines(wb);
+                        wb.chain.targetDrawer.draw(new THREE.Color('red'));
+                        wb.chain.tipDrawer.draw(new THREE.Color('green'));
+                        //let solveString = getdbgstring(bone, ts, wb);
+                        //console.log("pre");
+                        //wb.simLocalAxes.toCons(true);
+                        //window.intersectsDisplay.innerText = solveString;
+                    }
+                },
+                afterIteration: (bone, ts, wb) => {
+                    if (bone == window.contextBone) {
+                        wb.chain.targetDrawer.draw(new THREE.Color('red'));
+                        wb.chain.tipDrawer.draw(new THREE.Color('green'));
+                        //console.log("post")
+                        //wb.simLocalAxes.toCons(true)
+                        //console.log("----");
+                        //window.intersectsDisplay.innerText = `${solveString}`;
+                    }
+                }
+            });
+        window.contextArmature?._debug_bone(selectedBone, undefined, callbacks);
+    }
+
+
+    window.pullbackDebug = () => {
+        interactionSolve = false;
+        autoSolve = false;
+        setDOMtoInternalState();
+        
+        let callbacks = new CallbacksSequence(
+            {
+                beforePullback: (bone, ts, wb) => {
+                    if (bone == window.contextBone) {
+                        initLines(wb);
+                        //let solveString = getdbgstring(bone, ts, wb);
+                        //console.log(wb.lastReturnfulResult.fullRotation.toString());
+                        //window.intersectsDisplay.innerText = solveString;
+                    }
+                },
+                afterPullback: (bone, ts, wb) => {
+                    if (bone == window.contextBone) {
+                        let solveString = getdbgstring(bone, ts, wb);
+                        wb.lastReturnfulResult.fullRotation.toConsole();
+                        wb.lastReturnfulResult.fullRotation.length();
+                        window.intersectsDisplay.innerText = `${solveString}`;
+                    }
+                }
+            });
+            window.contextArmature?._doSinglePullbackStep(window.contextBone, undefined, 0, callbacks);
+    }
+
+    D.byid('pullback-btn').addEventListener('click', async () => {
+        interactionSolve = false;
+        autoSolve = false;
+        setDOMtoInternalState();        
+        window.pullbackDebug(window.contextArmature);
+    });
+
+    D.byid('solve-bone-btn').addEventListener('click', async () => {
+        bonestepDebug()
+
+    });
+
+    D.byid('auto-solve').addEventListener('change', (e) => {
+        if (e.target.checked) {
+            autoSolve = true;
+            interactionSolve = false; // Ensure exclusive selection
+        }
+    });
+
+    D.byid('interaction-solve').addEventListener('change', (e) => {
+        if (e.target.checked) {
+            autoSolve = false;
+            interactionSolve = true;
+        }
+    });
+
+
+    D.byid('no-solve').addEventListener('change', (e) => {
+        if (e.target.checked) {
+            autoSolve = false;
+            interactionSolve = false;
+        }
+    });
+
+    D.byid('rotate-widget').addEventListener('change', (e) => {
+        pinOrientCtrls.enabled = e.target.checked;
+    });
+
+    D.byid('translate-widget').addEventListener('change', (e) => {
+        pinTranslateCtrls.enabled = e.target.checked;
+    });
+
+    D.byid('pin-enabled').addEventListener("input", (event) => {
+        let state = event.target.checked;
+        let diddisable = false;
+        if (state) {
+            if (window.contextPin != null) {
+                window.contextPin.disable();
+                diddisable = true;
+            } else if (window.contextBone != null) {
+                let newPin = new IKPin(window.contextBone);
+            }
+            makePinsList(1, window.contextBone.parentArmature.armatureObj3d, window.contextBone.parentArmature);
+            window.contextBone.parentArmature.showBones(0.1, true);
+            updateGlobalPinLists();
+            if (diddisable) {
+                select(window.contextPin.forBone);
+            }
+        } else if (window.contextPin != null) {
+            window.contextPin.disable();
+            makePinsList(1, window.contextBone.parentArmature.armatureObj3d, window.contextBone.parentArmature);
+            window.contextBone.parentArmature.showBones(0.1, true);
+            updateGlobalPinLists();
+            select(window.contextPin.forBone);
+        }
+    })
+
+    D.byid("x-priority").addEventListener("input", (event) => {
+        window.contextPin?.setXPriority(event.target.value);
+        window.contextArmature?.solve(window.contextBone);
+    });
+    D.byid("y-priority").addEventListener("input", (event) => {
+        window.contextPin?.setYPriority(event.target.value);
+        window.contextArmature?.solve(window.contextBone);
+    });
+    D.byid("z-priority").addEventListener("input", (event) => {
+        window.contextPin?.setZPriority(event.target.value);
+        window.contextArmature?.solve(window.contextBone);
+    });
+
+
+    const defaultDampeningInput = D.byid('default-dampening');
+    const unexp = D.byid('un-exp-output');
+    const iterationsInput = D.byid('iterations');
+    const solveBtn = D.byid('solve-btn');
+    const pullbackBtn = D.byid('pullback-btn');
+
+    defaultDampeningInput.addEventListener('input', (event) => {
+        window.contextBone?.parentArmature?.setDampening((Math.pow(Math.E, event.target.value) - 1));
+        unexp.value = (Math.pow(Math.E, event.target.value) - 1).toFixed(3);
+    });
+
+    iterationsInput.addEventListener('input', (event) => {
+        window.contextBone?.parentArmature?.setDefaultIterations(event.target.value);
+    });
+
+    /*solveBtn.addEventListener('click', (e) => {
+        window.contextBone?.parentArmature?.solve(window.contextBone);
+    });
+
+    pullbackBtn.addEventListener('click', () => {
+        window.contextBone?.parentArmature?.doSinglePullbackStep(window.contextBone)
+    });*/
+
+    async function doNothing() {
+        return false;
+    }
+    window.doNothing = doNothing;
+    window.awaitingSelect = doNothing;
+
+    window.toInterstitial = async function (intersticeMessage, onSelected) {
+        D.byid("interstitial").classList.remove("hidden");
+        D.byid("interstitial").innerText = intersticeMessage;
+        D.byid("mod-panel").classList.add("hidden");
+        window.awaitingSelect = async (selected) => {
+            onSelected(selected);
+            D.byid("interstitial").classList.add("hidden");
+            D.byid("mod-panel").classList.remove("hidden");
+            window.awaitingSelect = window.doNothing;
+            return true;
+        }
+    }
+
+    window.cancelInterstice = async function () {
         D.byid("interstitial").classList.add("hidden");
         D.byid("mod-panel").classList.remove("hidden");
         window.awaitingSelect = window.doNothing;
-        return true; 
     }
-}
 
-window.cancelInterstice = async function() {
-    D.byid("interstitial").classList.add("hidden");
-    D.byid("mod-panel").classList.remove("hidden");
-    window.awaitingSelect = window.doNothing;
-}
+    D.byid("change-pin-parent").addEventListener('click', (e) => {
+        if (window.contextPin != null) {
+            window.toInterstitial("Click a bone or target to attach to. Or hit Esc to cancel",
+                (selected) => {
+                    if (selected != null) {
+                        let transform = selected?.targetNode ?? selected;
+                        window.contextPin.targetNode.setParent(transform);
+                    }
+                });
+        }
+    })
 
-D.byid("change-pin-parent").addEventListener('click', (e) => {
-    if(contextPin != null) {
-        window.toInterstitial( "Click a bone or target to attach to. Or hit Esc to cancel", 
-        (selected)=>{
-            if(selected != null) {
-                let transform = selected?.targetNode ?? selected; 
-                contextPin.targetNode.setParent(transform);
-            }
-        });
-    }
-})
+    D.byid('show-mesh').addEventListener('change', function (e) {
+        window.rendlrs.layerState(window.meshLayer, e.target.checked);
+    });
 
-D.byid('show-mesh').addEventListener('change', function (e) {
-    window.rendlrs.layerState(window.meshLayer, e.target.checked);
-});
-
-D.byid('show-ik-bones').addEventListener('change', function (e) {
-    for(let a of armatures) {
-        if(a.ikReady) {
-            for(let b of a.bones) {
-                if(b.bonegeo != null && a.skelState.getBoneStateById(b.ikd) != null) {
-                    if(e.target.checked) {
-                        b.bonegeo.layers.enable(boneLayer);
-                    } else {
-                        b.bonegeo.layers.disable(boneLayer); 
+    D.byid('show-ik-bones').addEventListener('change', function (e) {
+        for (let a of armatures) {
+            if (a.ikReady) {
+                for (let b of a.bones) {
+                    if (b.bonegeo != null && a.skelState.getBoneStateById(b.ikd) != null) {
+                        if (e.target.checked) {
+                            b.bonegeo.layers.enable(boneLayer);
+                        } else {
+                            b.bonegeo.layers.disable(boneLayer);
+                        }
                     }
                 }
             }
         }
-    }
-    if(e.target.checked == false && D.byid('show-nonik-bones').checked == false) {
-        rendlrs.hide(boneLayer);
-    } else {
-        rendlrs.show(boneLayer);
-    }
-});
+        if (e.target.checked == false && D.byid('show-nonik-bones').checked == false) {
+            rendlrs.hide(boneLayer);
+        } else {
+            rendlrs.show(boneLayer);
+        }
+    });
 
-D.byid('show-nonik-bones').addEventListener('change', function (e) {
-    for(let a of armatures) {
-        if(a.ikReady) {
-            for(let b of a.bones) {
-                if(b.bonegeo != null && a.skelState.getBoneStateById(b.ikd) == null) {
-                    if(e.target.checked) {
-                        b.bonegeo.layers.enable(boneLayer);
-                    } else {
-                        b.bonegeo.layers.disable(boneLayer); 
+    D.byid('show-nonik-bones').addEventListener('change', function (e) {
+        for (let a of armatures) {
+            if (a.ikReady) {
+                for (let b of a.bones) {
+                    if (b.bonegeo != null && a.skelState.getBoneStateById(b.ikd) == null) {
+                        if (e.target.checked) {
+                            b.bonegeo.layers.enable(boneLayer);
+                        } else {
+                            b.bonegeo.layers.disable(boneLayer);
+                        }
                     }
                 }
             }
         }
-    }
-    if(e.target.checked == false && D.byid('show-ik-bones').checked == false) {
-        rendlrs.hide(boneLayer);
-    } else {
-        rendlrs.show(boneLayer);
-    }
-});
+        if (e.target.checked == false && D.byid('show-ik-bones').checked == false) {
+            rendlrs.hide(boneLayer);
+        } else {
+            rendlrs.show(boneLayer);
+        }
+    });
 
-D.byid('save').addEventListener('click', () => {
-    serializeInstance(contextBone.parentArmature)
-})
+    D.byid('save').addEventListener('click', () => {
+        serializeInstance(window.contextBone.parentArmature)
+    })
 
-    
+
     let emptyConstraintNode = document.createElement("div");
     emptyConstraintNode.id = "default-stack";
     emptyConstraintNode.classList.add("constraint-stack");
     emptyConstraintNode.innerHTML = constraintStackHTML;
 
     emptyConstraintNode.qs(".add-constraint").addEventListener("click", (e) => {
-        if (contextBone != null) {
+        if (window.contextBone != null) {
             let addType = (e).target.parentNode.qs(".constraint-select").value;
-            let stack = contextBone.getConstraint();
-            if (contextBone.getConstraint() == null) {
-                stack = new ConstraintStack(contextBone);
+            let stack = window.contextBone.getConstraint();
+            if (window.contextBone.getConstraint() == null) {
+                stack = new ConstraintStack(window.contextBone);
             }
             emptyConstraintNode.remove();
             let constController = getMakeConstraint_DOMElem(forBone.getConstraint());
             htmlcontrols.byid("constraints-div").appendChild(constController);
             let subcst = null;
-            if (val == "kusudama") subcst = initKusudama(contextBone);
-            if (val == "twist") subcst = initTwist(contextBone);
-            if (val == "rest") subcst = initRest(contextBone);
-            if (val == "stack") subcst = initStack(contextBone);
+            if (val == "kusudama") subcst = initKusudama(window.contextBone);
+            if (val == "twist") subcst = initTwist(window.contextBone);
+            if (val == "rest") subcst = initRest(window.contextBone);
+            if (val == "stack") subcst = initStack(window.contextBone);
             constController.qs(".subconstraints").appendChild(subcst);
         }
     })
@@ -457,11 +759,12 @@ D.byid('save').addEventListener('click', () => {
     window.constraintStackControls = document.createElement("div");
     constraintStackControls.classList.add("constraint-stack");
     constraintStackControls.innerHTML = constraintStackHTML;
+    setDOMtoInternalState();
 }
 
 
-window.updateInfoPanel  = function(item) {
-    let armature = null; 
+window.updateInfoPanel = function (item) {
+    let armature = null;
     let bone = null;
     let pin = null;
     let constraintStack = null;
@@ -476,7 +779,7 @@ window.updateInfoPanel  = function(item) {
         `;
         bone = item;
         pin = bone.getIKPin();
-        if(bone.getConstraint() != null) constraintStack = bone.getConstraint();
+        if (bone.getConstraint() != null) constraintStack = bone.getConstraint();
         armature = bone.parentArmature;
     } else if (item instanceof IKPin) {
         intersectsDisplay.innerText = `
@@ -484,12 +787,12 @@ window.updateInfoPanel  = function(item) {
         `;
         pin = item;
         bone = pin.forBone;
-        if(bone.getConstraint() != null) constraintStack = bone.getConstraint();
-        armature = bone.parentArmature; 
+        if (bone.getConstraint() != null) constraintStack = bone.getConstraint();
+        armature = bone.parentArmature;
     } else {
         D.byid("armature-name").innerText = "None Selected";
-        
-        if(constraintStack != null) {
+
+        if (constraintStack != null) {
             let domConstraint = getMakeConstraint_DOMElem(constraintStack);
             D.byid("constraints-div").appendChild(domConstraint);
         } else {
@@ -497,66 +800,75 @@ window.updateInfoPanel  = function(item) {
         }
     }
 
+    /**@type {EWBIK} */
     window.contextArmature = armature;
+    /**@type {Constraint} */
     window.contextConstraint = constraintStack;
+    /**@type {IKPin} */
     window.contextPin = pin;
+    /**@type {Bone} */
     window.contextBone = bone;
-    
-    const armDomName = D.byid("armature-name")
-    const armDom = armDomName.parentNode;
 
-    if(contextArmature == null) {
+    const armDomName = D.byid("armature-name")
+    const armDom = armDomName.parentNode.parentNode;
+
+    if (window.contextArmature == null) {
+        armDom.classList.add("hidden");
+        D.byid("no-armature-opts-hint").classList.add("hidden");
         armDomName.innerText = "None Selected";
         D.byid("default-dampening").value = Math.pow(Math.E, 0.1);
         D.byid("un-exp-output").value = 0.1;
-        D.byid("iterations").value = contextArmature.getDefaultIterations();
-       
+
     } else {
-        armDomName.innerText = contextArmature.ikd;
-        D.byid("default-dampening").value = Math.log(contextArmature.getDampening()+1).toFixed(4);
-        D.byid("un-exp-output").value = Math.log(contextArmature.getDampening()+1).toFixed(4);
-        D.byid("iterations").value = contextArmature.getDefaultIterations();
+        armDom.classList.remove("hidden");
+        D.byid("no-armature-opts-hint").classList.remove("hidden");
+        armDomName.innerText = window.contextArmature.ikd;
+        D.byid("default-dampening").value = Math.log(window.contextArmature.getDampening() + 1).toFixed(4);
+        D.byid("un-exp-output").value = Math.log(window.contextArmature.getDampening() + 1).toFixed(4);
+        D.byid("iterations").value = window.contextArmature.getDefaultIterations();
     }
 
-    if(contextBone == null) {
+    if (window.contextBone == null) {
+        D.byid("bone-fields").classList.add("hidden");
         D.byid("bone-name").innerText = "None Selected";
-        D.byid("internal-bone-name").innerText = "None";       
+        D.byid("internal-bone-name").innerText = "None";
         D.byid("stiffness").value = 0;
         constraintStackControls.remove();
     } else {
-        D.byid("bone-name").innerText = contextBone.name;
-        D.byid("internal-bone-name").innerText = contextBone.ikd;       
-        D.byid("stiffness").value = contextBone.getStiffness();
+        D.byid("bone-fields").classList.remove("hidden");
+        D.byid("bone-name").innerText = window.contextBone.name;
+        D.byid("internal-bone-name").innerText = window.contextBone.ikd;
+        D.byid("stiffness").value = window.contextBone.getStiffness();
         constraintStackControls.remove();
     }
 
     const pinDom = D.byid("pin-options")
-    if(contextPin == null || contextPin.isEnabled() == false) {
+    if (window.contextPin == null || window.contextPin.isEnabled() == false) {
         pinDom.classList.add("hidden");
-        pinDom.parentNode.qs("#pin-enabled").checked = false; 
+        pinDom.parentNode.qs("#pin-enabled").checked = false;
     }
     else {
         pinDom.classList.remove("hidden");
         pinDom.parentNode.qs("#pin-enabled").checked = true;
-        pinDom.qs("#weight").value = contextPin.getPinWeight();
-        pinDom.qs("#x-priority").value = contextPin.getXPriority();
-        pinDom.qs("#y-priority").value = contextPin.getYPriority();
-        pinDom.qs("#z-priority").value = contextPin.getZPriority();
-        if(contextPin?.targetNode?.toTrack?.parent) {
+        pinDom.qs("#weight").value = window.contextPin.getPinWeight();
+        pinDom.qs("#x-priority").value = window.contextPin.getXPriority();
+        pinDom.qs("#y-priority").value = window.contextPin.getYPriority();
+        pinDom.qs("#z-priority").value = window.contextPin.getZPriority();
+        if (window.contextPin?.targetNode?.toTrack?.parent) {
             pinDom.qs("#pin-parent-mode-hint").innerText = "Current parent: ";
-            let obj3dParentobj3d = contextPin.targetNode.toTrack.parent;
-            let targetNodeParent = contextPin.targetNode.parent;
-            let targetNodeParentobj3d = contextPin.targetNode.parent.toTrack;
+            let obj3dParentobj3d = window.contextPin.targetNode.toTrack.parent;
+            let targetNodeParent = window.contextPin.targetNode.parent;
+            let targetNodeParentobj3d = window.contextPin.targetNode.parent.toTrack;
             let name = obj3dParentobj3d.name;
-            if(name.length == 0) name = obj3dParentobj3d.ikd;
-            if(name == null) name = targetNodeParentobj3d?.name;
-            if(name.length == 0) name = targetNodeParentobj3d?.ikd; 
-            if(name == null) name = targetNodeParent.ikd;
+            if (name.length == 0) name = obj3dParentobj3d.ikd;
+            if (name == null) name = targetNodeParentobj3d?.name;
+            if (name.length == 0) name = targetNodeParentobj3d?.ikd;
+            if (name == null) name = targetNodeParent.ikd;
             pinDom.qs("#current-pin-parent").innerHTML = name;
-        } 
+        }
     }
 
-    
+
 }
 
 /**
@@ -604,6 +916,46 @@ window.getMakeConstraint_DOMElem = function (c) {
 }
 
 
+
+/**updates the solver mode to a viable value in the dom if it's in a weird state */
+window.setInternalStatetoDOM = function () {
+    // Initialize solve mode based on existing variables
+
+    if (D.byid('auto-solve')?.checked) {
+        window.autoSolve = true;
+        window.interactionSolve = false;
+    }
+    if (D.byid('interaction-solve')?.checked) {
+        window.interactionSolve = true;
+        window.autoSolve = false;
+    } else if (D.byid('no-solve').checked) {
+        window.interactionSolve = false;
+        window.autoSolve = false;
+    }
+}
+
+/**updates the dom to match the internal interaction mode */
+window.setDOMtoInternalState = function () {
+    // Initialize solve mode based on existing variables
+    if (window.autoSolve) {
+        D.byid('auto-solve').checked = true;
+        D.byid('no-solve').checked = false;
+        D.byid('no-solve').checked = false;
+    } else if (window.interactionSolve) {
+        D.byid('auto-solve').checked = false;
+        D.byid('interaction-solve').checked = true;
+        D.byid('no-solve').checked = false;
+    } else {
+        D.byid('auto-solve').checked = false;
+        D.byid('interaction-solve').checked = false;
+        D.byid('no-solve').checked = true;
+    }
+    window.setInternalStatetoDOM();
+}
+
+
+
+
 function determineConstraintName(corb) {
     let bone = corb instanceof THREE.Bone ? corb : corb.forBone;
     let parconstr = corb instanceof Constraint ? corb : null;
@@ -626,7 +978,7 @@ function initStack(corb) {
  * @param {(ConstraintStack|Bone)} corb the constraintstack or bone to add the new constraint to
  * @return {Element}
  */
- function initTwist(corb) {
+function initTwist(corb) {
     let ident = determineConstraintName(corb)
     let newC = new Twist(corb, null, ident);
     resultConst = getMakeConstraint_DOMElem(newC);
@@ -637,7 +989,7 @@ function initStack(corb) {
  * @param {(ConstraintStack|Bone)} corb the constraintstack or bone to add the new constraint to
  * @return {Element}
  */
- function initKusudama(corb) {
+function initKusudama(corb) {
     let ident = determineConstraintName(corb)
     let newC = new Kusudama(corb, null, ident);
     resultConst = getMakeConstraint_DOMElem(newC);

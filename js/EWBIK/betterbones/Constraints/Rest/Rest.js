@@ -21,21 +21,21 @@ export class Rest extends Returnful {
 
     /**
      * @param {Bone} forBone the bone to apply this constraint to 
-     * @param {(Object3D|IKNode)} restPose the ideal pose the bone should try to be in. This input pose is expected to be defined in the space of the bone's parent. This constraint will nudge the bone such that the transform returned by bone.getIKBoneOrientation() aligns with this restPose.
+     * @param {(Object3D|IKNode)} restPose the ideal pose the bone should try to be in. This input pose is expected to be defined in the space of the bone's parent. This constraint will nudge the bone such that the transform returned by bone.getIKBoneOrientation()  aligns with this restPose. (Remember that the IKBoneOrientation of any bone doesn't necessarily have to align with the bone transform, as it is defined in the space of the bone transform. This means it's very easy to use this function when you are looking at the armature and want to just click a button to trigger the current pose as a rest pose, but considerably more annoying to use if you want to programmatically define a restpose in terms of what the current IKBoneOrientation is with respect to limitCones or other more complex directional constraints.)
      * the ewbIK solver will always try to reach the target, but this tells it that it should try to also keep near this region if it can.
      * @param {(Object3D|IKNode)} ikd optional unique string identifier
      * 
      * Note that the solver needs to run at least 2 iterations per solve in order for this to accomplish anything. And the more iterations the merrier
      */
-    constructor(forBone, restPose, ikd='RestConstrain-'+(Rest.totalRestConstraints++), pool = noPool) {
-        super(forBone, restPose, ikd, pool);
+    constructor(forBone, ikd='RestConstrain-'+(Rest.totalRestConstraints++), pool = noPool) {
+        super(forBone, undefined, ikd, pool);
         /**@type {IKNode}*/
         this.boneFrameRest =new IKNode(null, null, undefined, this.pool); //inferred orientation of the boneframe which would be required for IKBoneOrientation to be align with the transform the user specified.
         this.restPose_three = null;
         if (this.forBone != null) {            
-            if(restPose != null)
-            this.setRestPose(restPose);
-            else 
+            //if(restPose != null)
+             //   this.setRestPose(restPose);
+           // else 
                 this.setCurrentAsRest();
             if(this.forBone)
                 this.forBone.springy = true;
@@ -46,33 +46,15 @@ export class Rest extends Returnful {
      * @return {Rest} this for chainning
     */
     setCurrentAsRest() {
-        let wScale = this.forBone.parentArmature.wScale;
-        let newRest = IKNode.fromObj3dGlobal(this.forBone.getIKBoneOrientation(), wScale).setRelativeTo(IKNode.fromObj3dGlobal(this.forBone.parent, wScale));
-        this.setRestPose(newRest);
+        this.boneFrameRest.adoptLocalValuesFromObject3D(this.forBone);
+        //let oldBoneFrameRest = this.boneFrameRest.freeclone();
+        //this.boneFrameRest.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());//.setRelativeTo(IKNode.fromObj3dGlobal(this.forBone.parent));
+        //let globalParent = this.tempNode1.reset().adoptGlobalValuesFromObject3D(this.forBone.parent);
+        //this.boneFrameRest.setRelativeTo(globalParent);
+        //this.setRestPose(newRest);
         return this;
     }
     
-    /**
-     * @param {(Object3D|IKNode)} idealOrientIn_ParSpace 
-     * @return {Rest} this for chainning
-     */
-    setRestPose(idealOrientIn_ParSpace) {
-        let wScale = this.forBone.parentArmature.wScale;
-        let currentBoneFrame = Rest.tempNode1.reset();
-        currentBoneFrame.adoptLocalValuesFromObject3D(this.forBone, wScale);
-        let localFrameSpace = currentBoneFrame.getLocalMBasis().rotation;
-
-        let idealOrient = this.asTempNode(idealOrientIn_ParSpace).getLocalMBasis().rotation; 
-        
-        let currentOrientIn_FrameSpace = Rest.tempNode3.reset().adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation(), wScale).getLocalMBasis().rotation
-        let currentOrientIn_ParSpace = new Rot();
-        localFrameSpace.applyToRot(currentOrientIn_FrameSpace, currentOrientIn_ParSpace);
-
-        let currentToIdeal = currentOrientIn_ParSpace.applyInverseTo(idealOrient, new Rot());
-        currentToIdeal.applyToRot(localFrameSpace, this.boneFrameRest.getLocalMBasis().rotation);
-        this.boneFrameRest.markDirty();
-        return this;
-    }
 
     getPreferenceRotation(currentState, currentBoneOrientation, previousState, previousBoneOrientation, iteration, calledBy, storeDiscomfort = false) {
         if(this.forBone.name == 'CC_Base_R_Upperarm') {
@@ -81,15 +63,30 @@ export class Rest extends Returnful {
             this.boneFrameRest.getLocalMBasis().rotation.toConsole();
         }
         /**@type {Rot} */
-        let locRotFrame = currentState.getLocalMBasis().inverseRotation; //A
+        let targframe = this.boneFrameRest.getLocalMBasis().rotation;
+        let inv_targFrame = this.boneFrameRest.getLocalMBasis().inverseRotation;
+
+        /**@type {Rot} */
+        let currRotFrame = currentState.getLocalMBasis().rotation;
+        /**@type {Rot} */
+        let inv_currRotFrame = currentState.getLocalMBasis().inverseRotation; //A
         /*if(this.qdot(locRotFrame, this.boneFrameRest.getLocalMBasis().rotation) < 0) {
             locRotFrame = locRotFrame.getFlipped();//.rotation.multiply(-1);
         }*/
-        let rotBy = locRotFrame.applyToRot(this.boneFrameRest.getLocalMBasis().rotation);  // C = (-A)*B
+        //currRotFrame.toConsole();
+        //targframe.toConsole();
+        let nA_B = inv_currRotFrame.applyToRot(targframe);  // C = (-A)*B
+        let nB_A = inv_targFrame.applyToRot(currRotFrame);
+        let B_nA = targframe.applyToRot(inv_currRotFrame);
+        let A_nB = currRotFrame.applyToRot(inv_targFrame)
+        let truepath = currRotFrame.getRotationTo(targframe);
+        let rotBy = truepath;
+
+
         this.constraintResult.reset(iteration);
         this.constraintResult.fullRotation = rotBy;
         if(iteration < this.leewayCache.length) {
-            rotBy.rotation.clampToQuadranceAngle(this.leewayCache[iteration]);
+            rotBy.clampToCosHalfAngle(this.leewayCache[iteration]);
             this.constraintResult.clampedRotation = rotBy;
         } else {
             this.constraintResult.clampedRotation = Rot.IDENTITY;
@@ -124,26 +121,37 @@ export class Rest extends Returnful {
      _computePast_Post_RawDiscomfortFor(previousResult) {
         return this.remainingPain(previousResult.fullRotation, previousResult.clampedRotation);
      }
-
-    qdot(a, b) {
-        return a.q0 * b.q0 + a.q1 * b.q1 + a.q2 * b.q2 + a.q3 * b.q3;
-    }
-    
-    angToIdentity(q) {
-        const dot = this.qdot(q, Rot.IDENTITY);
-        const clampedDot = Math.min(Math.max(dot, -1), 1);
-        const angleRadians = 2 * Math.acos(clampedDot);
-        return angleRadians;
-    }
     
     remainingPain(A, B) {
-        const painA = this.angToIdentity(A);
-        const painB = this.angToIdentity(B);
+        const painA = A.getAngle();
+        const painB = B.getAngle();
         const remainingPain = Math.abs(painA - painB)/Math.PI;
         return remainingPain;
     }
 
 
+
+    
+    /**
+     * @param {(Object3D|IKNode)} idealOrientIn_ParSpace 
+     * @return {Rest} this for chainning
+     */
+    /**setRestPose(idealOrientIn_ParSpace) {
+        let currentBoneFrame = Rest.tempNode1.reset();
+        currentBoneFrame.adoptLocalValuesFromObject3D(this.forBone);
+        let localFrameSpace = currentBoneFrame.getLocalMBasis().rotation;
+
+        let idealOrient = this.asTempNode(idealOrientIn_ParSpace).getLocalMBasis().rotation; 
+        
+        let currentOrientIn_FrameSpace = Rest.tempNode3.reset().adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation()).getLocalMBasis().rotation
+        let currentOrientIn_ParSpace = Rot.IDENTITY.clone();
+        localFrameSpace.applyToRot(currentOrientIn_FrameSpace, currentOrientIn_ParSpace);
+
+        let currentToIdeal = currentOrientIn_ParSpace.getRotationTo(idealOrient);
+        currentToIdeal.applyToRot(localFrameSpace, this.boneFrameRest.getLocalMBasis().rotation);
+        this.boneFrameRest.markDirty();
+        return this;
+    }*/
 
     /**@type {IKNode}*/
     static tempNode1= new IKNode();

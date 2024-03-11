@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Three.js Skeleton Interaction</title>
+    <script type="importmap">
+        {
+          "imports": {
+            "three": "https://unpkg.com/three@latest/build/three.module.js",
+            "gltf" : "https://unpkg.com/three/examples/jsm/loaders/GLTFLoader.js",
+            "vrm" : "https://unpkg.com/@pixiv/three-vrm@2.1.0/lib/three-vrm.module.js"
+          }
+        }
+    </script>
+</head>
+<body>
+    <script> 
+        const pinsList = [];
+        const loader = new GLTFLoader();        
+        loader.register((parser) => VRMLoaderPlugin(parser));
+        loader.load(
+            './vrmtests/testmodel.vrm', //path to your .vrm model
+            (vrm) => {
+                scene.add(vrm.scene);
+                rootBone = vrm.scene.children[0];
+                armature = new EWBIK(rootBone, false);                    
+                boneList = armature.bones;
+                armature.inferOrientations(rootBone);
+
+                pinsList.push(
+                    IKPin(armature.bonetags["J_Bip_C_Head"]), 
+                    IKPin(armature.bonetags["J_Bip_R_Foot"]),
+                    IKPin(armature.bonetags["J_Bip_R_Hand"]),
+                    IKPin(armature.bonetags["J_Bip_L_Foot"]),
+                    IKPin(armature.bonetags["J_Bip_L_Hand"])
+                );
+                for(let pin of pinsList) pin.alignToBone();
+
+                for(let b of armature.bones) {
+                    if(b.parent instanceof THREE.Bone)
+                        new Rest(b); // dumb and easy constraints
+                }
+                armature.regenerateShadowSkeleton(true);
+            }
+        );
+        
+    </script>
+    <style>
+        body {margin: 0;}
+        canvas {display: block;}
+    </style>
+</body>

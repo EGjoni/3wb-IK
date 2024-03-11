@@ -1,11 +1,12 @@
 import { BoneState, SkeletonState } from "./solver/SkeletonState.js"
 import { ShadowSkeleton } from "./solver/ShadowSkeleton.js"
 import { IKTransform } from "./util/IKTransform.js";
-import { Vec3, any_Vec3, Vec3Pool, NoPool } from "./util/vecs.js";
+import { Vec3, any_Vec3, Vec3Pool, NoPool }  from "./util/vecs.js";
+import { CallbacksSequence } from "./CallbacksSequence.js";
 import { Rot } from "./util/Rot.js";
 import { IKNode, TrackingNode } from "./util/IKNodes.js";
 import { IKPin } from "./betterbones/IKpin.js";
-import { Kusudama } from "./betterbones/Constraints/Kusudama/Kusudama.js";;
+import { Kusudama } from "./betterbones/Constraints/Kusudama/Kusudama.js";
 const THREE = await import('three');
 import { Bone } from "three";
 //import * as THREE from 'three';
@@ -90,13 +91,15 @@ const regularBoneLayer = 4;
  */
 
 export class EWBIK {
-    static defaultWScale = -1;
-    wScale = -1;
     static __default_dampening = 0.1;
     static totalEWBIKs = 0;
+    static XDIR = new Vec3(1, 0, 0);
+    static YDIR = new Vec3(0, 1, 0);
+    static ZDIR = new Vec3(0, 0, 1);
     defaultIterations = 15;
     dampening = EWBIK.__default_dampening;
     defaultStabilizingPassCount = 0;
+    
     /** @type {SkeletonState} */
     skelState;
     armature = null;
@@ -132,12 +135,11 @@ export class EWBIK {
      * @param {*} defaultIterations 
      * @param {*} ikd 
      */
-    constructor(root, asNode = true, defaultIterations = this.defaultIterations, ikd = 'EWBIKArmature-' + EWBIK.totalEWBIKs, pool = new Vec3Pool(10000), wScale = EWBIK.defaultWScale) {
+    constructor(root, asNode = true, defaultIterations = this.defaultIterations, ikd = 'EWBIKArmature-' + EWBIK.totalEWBIKs, pool = new Vec3Pool(10000)) {
         this.ikd = ikd;
         this.armatureObj3d = asNode ? new THREE.Object3D() : root.parent;
         this.armatureObj3d.ikd = 'EWBIK_root-' + EWBIK.totalEWBIKs;
         this.pool = pool;
-        this.wScale = wScale;
         EWBIK.totalEWBIKs += 1;
         let rootBone = EWBIK.findRootBoneIn(root);
         if (asNode) {
@@ -149,7 +151,7 @@ export class EWBIK {
         if (!rootBone.isIKType) {
             Needles.injectInto(rootBone);
         }
-        this.armatureNode = new TrackingNode(this.armatureObj3d, this.armatureObj3d.ikd, this.wScale, false);
+        this.armatureNode = new TrackingNode(this.armatureObj3d, this.armatureObj3d.ikd, false);
         if (this.armatureObj3d != null) {
             this.armatureNode.adoptTrackedGlobal();
         }
@@ -278,18 +280,7 @@ export class EWBIK {
         }
         return this.lastRequestedSolveFromBoneState;
     }
-    /**
-    * Represents a sequence of callbacks to call at various points in the solver loop. These are called once per object that the solver reads or writes from. The scene object being read or written to is provided as the first argument, which you can use to determine if its one you care about. The second argument will be either one of TransformState or WorkingBone, these are used for intermediary and internal representations of your armature. WorkingBone in particular has a lot of properties that spider out into the rest of the solver, which you can use to inspect any number of things you may care about. 
-    * @typedef {Object} CallbacksSequence
-    * @property {function(Object, TransformState)} beforeShadow - called before transferring the scene object's current state to the ShadowSkeleton. 
-    * @property {function(Object, TransformState)} afterShadow - called after transferring the scene object's current state to the ShadowSkeleton.
-    * @property {function(Object, WorkingBone)} beforeIteration - called once per solver iteration before attempting to optimize a bone's transform. WorkingBone refers to the internal bone representation that is about to be optimized.
-    * @property {function(Object, WorkingBone)} beforePullack - called once per solver iteration before attempting to pull a bone back to a comfortable region. WorkingBone refers to the internal bone representation that is about to be optimized.
-    * @property {function(Object, WorkingBone)} afterPullack - called once per solver after attempting to pull a bone back to a comfortable region. WorkingBone refers to the internal bone representation that is about to be optimized.
-    * @property {function(Object, WorkingBone)} afterIteration - called once per solver iteration after attempting to optimize a bone's transform. WorkingBone refers to the internal bone representation that is was just optimized.
-    * @property {function(Object, WorkingBone, TransformState)} afterSolve - called once per bone after solving has completed and the results are transferred to the transformState. 
-    * @property {function(Object, WorkingBone, TransformState)} afterScene - called once per bone after solving has completed and the results are transferred to the Object3d's. 
-    */
+    
 
     /**
      * automatically solves the IK system of this armature from the given bone using
@@ -300,9 +291,9 @@ export class EWBIK {
      * @param stabilizingPasses number of stabilization passes to run. Set this to -2 if you want to use the armature's default. -1 tells it to break constraints if need be, 0 means no stabilization, 1 means a single (very cheap) stabilization pass which may increase grindiness in extreme poses. Greater than 1 reduces grindiness, but at signifcant cost.
      * @param {CallbacksSequence} callbacks to snoop on solver state
      */
-    async solve(bone, iterations = this.getDefaultIterations(), stabilizingPasses = this.getDefaultStabilizingPassCount(), prealignCallback = null, postAlignCallback = null) {
-        this.pendingSolve = async function (armature, bone, iterations, stabilizingPasses, prealignCallback, postAlignCallback) {
-            return await armature.__solve(bone, iterations, stabilizingPasses, prealignCallback, postAlignCallback);
+    async solve(bone, iterations = this.getDefaultIterations(), stabilizingPasses = this.getDefaultStabilizingPassCount(), callbacks) {
+        this.pendingSolve = async function (armature, bone, iterations, stabilizingPasses, callbacks) {
+            return await armature.__solve(bone, iterations, stabilizingPasses, callbacks);
         };
         if (this.activeSolve != null) {
             //console.log("waiting. . .");
@@ -314,7 +305,7 @@ export class EWBIK {
             this.pendingSolve = null;
             //console.log("solving");
             if (bone == null || this.boneToStateMap.get(bone) != null) {
-                this.activeSolve = doSolve(this, bone, iterations, stabilizingPasses, prealignCallback, postAlignCallback);
+                this.activeSolve = doSolve(this, bone, iterations, stabilizingPasses, callbacks);
                 await this.activeSolve;
             }
             this.activeSolve = null;
@@ -328,11 +319,13 @@ export class EWBIK {
         if (this.dirtyRate)
             this._updateShadowSkelRateInfo(iterations);
         this.updateskelStates();
-        this.shadowSkel.noOp(fromBone, iterations, (bonestate) => this.updateBoneColors(bonestate), callbacks);
+        this.shadowSkel.noOp(fromBone, iterations, (bonestate, workingBone) => this.updateBoneColors(bonestate, workingBone), callbacks);
         this.pool.releaseAll();
     }
 
     /**
+     * 
+     * internal async version of solve()
      * automatically solves the IK system of this armature from the given bone using
      * the given parameters.
      * 
@@ -350,18 +343,31 @@ export class EWBIK {
         //performance.startPerformanceMonitor();
         this.updateskelStates(callbacks);
         //let forBoneState = this.getBoneStateFor(bone);
+        callbacks?.__initStep((callme, bs, ts, wb) => this.stepWiseUpdateResult(callme, bs, ts, wb));
+        //let ds = this.shadowSkel.debugState;
+        
         this.shadowSkel.solve(
             iterations == -1 ? this.getDefaultIterations() : iterations,
             stabilizingPasses == -2 ? this.getDefaultStabilizingPassCount : stabilizingPasses,
             bone,
-            (bonestate, transformstate) => this.alignBoneToSolverResult(bonestate, transformstate, callbacks), callbacks);
+            (bs, ts, wb) => this.alignBoneToSolverResult(bs, ts, wb), callbacks);
         this.pool.releaseAll();
+        //ds.currentIteration = 0;
+        //ds.solveCalls += 1;
+        //console.log('solve#: ' +ds.solveCalls +'\t:: itr :: ' +ds.currentIteration);
         return true;
         //performance.solveFinished(iterations == -1 ? this.IKIterations : iterations);
     }
 
-    async doSinglePullbackStep(bone, iterations = this.getDefaultIterations(), stabilizingPasses = this.getDefaultStabilizingPassCount()) {
-        this.pendingSolve = async () => await this._doSinglePullbackStep(bone, iterations, stabilizingPasses);
+    /**
+     * brings each bone one step toward their most comfortable pose. maybe useful if you want to inspect your pain values and stockholm rates. 
+     * @param {Bone} bone optional, if given, the solver will only solve for the segment the given bone is on (and any of its descendant segments). Otherwise, the solver will solve for all segments.
+     * @param {Number} iterations  number of iterations to run. Set this to null or -1 if you want to use the armature's default.
+     * @param stabilizingPasses number of stabilization passes to run. Set this to -2 if you want to use the armature's default. -1 tells it to break constraints if need be, 0 means no stabilization, 1 means a single (very cheap) stabilization pass which may increase grindiness in extreme poses. Greater than 1 reduces grindiness, but at signifcant cost.
+     * @param {CallbacksSequence} callbacks to snoop on solver state
+     */
+    async doSinglePullbackStep(bone, iterations = this.getDefaultIterations(), stabilizingPasses = this.getDefaultStabilizingPassCount(), callbacks) {
+        this.pendingSolve = async () => await this._doSinglePullbackStep(bone, iterations, stabilizingPasses, callbacks);
         if (this.activeSolve != null) {
             //console.log("waiting. . .");
             await this.activeSolve;
@@ -378,8 +384,15 @@ export class EWBIK {
         }
     }
 
-
-    async _doSinglePullbackStep(callbacks) {
+    /**
+     * internal async version of doSinglePullbackStep
+     * brings each bone one step toward their most comfortable pose. maybe useful if you want to inspect your pain values and stockholm rates. 
+     * @param {Bone} bone optional, if given, the solver will only solve for the segment the given bone is on (and any of its descendant segments). Otherwise, the solver will solve for all segments.
+     * @param {Number} iterations  number of iterations to run. Set this to null or -1 if you want to use the armature's default.
+     * @param stabilizingPasses number of stabilization passes to run. Set this to -2 if you want to use the armature's default. -1 tells it to break constraints if need be, 0 means no stabilization, 1 means a single (very cheap) stabilization pass which may increase grindiness in extreme poses. Greater than 1 reduces grindiness, but at signifcant cost.
+     * @param {CallbacksSequence} callbacks to snoop on solver state
+     */
+    async _doSinglePullbackStep(bone = null, iterations = this.getDefaultIterations(), stabilizationPasses= this.getDefaultStabilizingPassCount(), callbacks) {
         if (this.dirtySkelState)
             this._regenerateShadowSkeleton();
         if (this.dirtyRate) {
@@ -388,7 +401,8 @@ export class EWBIK {
             this.dirtyRate = false;
         }
         this.updateskelStates(callbacks);
-        this.shadowSkel.pullBackAll(this.getDefaultIterations(), null, (bonestate, transformstate) => this.alignBoneToSolverResult(bonestate, transformstate, callbacks), callbacks, 0);
+        callbacks?.__initStep((callme, bs, ts, wb) => this.stepWiseUpdateResult(callme, bs, ts, wb));
+        this.shadowSkel.pullBackAll(this.getDefaultIterations(), null, (bs, ts, wb) => this.alignBoneToSolverResult(bs, ts, wb), callbacks, 0);
     }
 
     /**
@@ -403,17 +417,20 @@ export class EWBIK {
         }
     }*/
 
-    updateBoneColors(bs) {
+    updateBoneColors(bs, ts, wb) {
         const bsi = bs.getIndex();
         const currBoneAx = this.skelStateBoneRefs[bsi];
-        let pain = bs.readBonePain() / this.shadowSkel.maxPain;
+        let pain = bs.readBonePain();
         let bonecol = currBoneAx.getIKBoneOrientation().bonegeo.material.color;
         bonecol.r = pain;
         bonecol.g = 1 - pain;
         bonecol.b = 0.2;
     }
 
-
+    stepWiseUpdateResult(callMe, bone, ts, wb) {
+        this.alignBoneToSolverResult(wb.forBone, ts, wb);
+        callMe(bone, ts, wb);
+    }
     
     /**
      * read back the solver results from the given BoneState to the corresponding AbstractBone. 
@@ -423,17 +440,16 @@ export class EWBIK {
      * @param {BoneState} bonestate
      */
 
-    alignBoneToSolverResult(bs, ts, callbacks) {
+    alignBoneToSolverResult(bs, ts, wb) {
         const bsi = bs.getIndex();
         const currBoneAx = this.skelStateBoneRefs[bsi];
         currBoneAx.position.set(...ts.translation);//, ts.rotation, ts.scale);
-        currBoneAx.quaternion.w = this.wScale * ts.rotation[0];
-        currBoneAx.quaternion.x = ts.rotation[1];
-        currBoneAx.quaternion.y = ts.rotation[2];
-        currBoneAx.quaternion.z = ts.rotation[3];
+        currBoneAx.quaternion.x = ts.rotation[0];
+        currBoneAx.quaternion.y = ts.rotation[1];
+        currBoneAx.quaternion.z = ts.rotation[2];
+        currBoneAx.quaternion.w = ts.rotation[3];
         this.updateBoneColors(bs);
         currBoneAx.IKUpdateNotification();
-
     }
 
     printpains() {
@@ -464,6 +480,28 @@ export class EWBIK {
     }
 
 
+    /**
+     * tries to guess the what the armature format is presuming.
+     * The possibilities it looks at are: 
+     * 1. all bones are defined in global space. (creates new boneOrientations from parents to general direction of children)
+     * 2. all bones are pointing in the general direction of their children on either the x, y, or z axis (sets a bone orientation pointing along that axis)
+     * @param {Bone3d} this function works recursively.
+     * @return object of form {
+     *  globalAlignment: Number, 
+     * negX: Number, portion of direct chldren that reside to -X local space of this bone
+     * posX: Number, portion of direct chldren that reside to +X local space of this bone
+     * negY: Number, portion of direct chldren that reside to -Y local space of this bone
+     * posY: Number, portion of direct chldren that reside to +Y local space of this bone
+     * negZ: Number, portion of direct chldren that reside to -Z local space of this bone
+     * posZ: Number, portion of direct chldren that reside to +Z local space of this bone
+     * }
+     * 
+    */
+    getLikeliestForm(fromBone) {
+
+
+    }
+
     _maybeInferOrientation(fromBone, override = false, depth = Infinity) {
         let orientation = fromBone.getIKBoneOrientation();
         if (orientation.placeholder == true || override) {
@@ -482,11 +520,8 @@ export class EWBIK {
                 normeddir = sumVec.div(count).normalize();
                 fromBone.height = Math.sqrt(sumheight) / Math.sqrt(count);
             }
-            let rotTo = new Rot(this.pool.any_Vec3(0, 1, 0), normeddir);
-            orientation.quaternion.w = this.wScale * rotTo.q0;
-            orientation.quaternion.x = rotTo.q1;
-            orientation.quaternion.y = rotTo.q2;
-            orientation.quaternion.z = rotTo.q3;
+            let rotTo = Rot.fromVecs(EWBIK.YDIR, normeddir);
+            orientation.quaternion.set(rotTo.x, rotTo.y, rotTo.z, rotTo.w);
 
             fromBone.setIKBoneOrientation(orientation);
             for (let cb of fromBone.childBones()) {
@@ -507,8 +542,8 @@ export class EWBIK {
         this.skelState.addTransform(
             this.armatureNode.ikd,
             armatureTransform.translate.components,
-            [armatureTransform.rotation.q0, armatureTransform.rotation.q1, armatureTransform.rotation.q2, armatureTransform.rotation.q3],
-            [1.0, 1.0, 1.0],
+            [armatureTransform.rotation.x, armatureTransform.rotation.y, armatureTransform.rotation.z, armatureTransform.rotation.w],
+            [this.armatureNode.getLocalMBasis().x, this.armatureNode.getLocalMBasis().scale.y, this.armatureNode.getLocalMBasis().scale.z],
             null, this.armatureNode);
 
         for (let bone of this.bones) {
@@ -741,8 +776,8 @@ export class EWBIK {
         this.skelState.addTransform(
             axes.ikd,
             [translate.x, translate.y, translate.z],
-            [rotation.q0, rotation.q1, rotation.q2, rotation.q3], //
-            [1.0, 1.0, 1.0],
+            [rotation.x, rotation.y, rotation.z, rotation.w], //
+            [basis.scale.x, basis.scale.y, basis.scale.z],
             parent_id, axes);
     }
 
@@ -761,7 +796,7 @@ export class EWBIK {
         }
         if (this.armatureNodeUpdated == false) {
             if (this.armatureObj3d != null) {
-                this.armatureNode.adoptGlobalValuesFromObject3D(this.armatureObj3d, this.wScale);
+                this.armatureNode.adoptGlobalValuesFromObject3D(this.armatureObj3d);
             } else {
                 this.armatureNode.toIdentity();
             }
@@ -772,8 +807,8 @@ export class EWBIK {
         let node = axes;
         if (axes instanceof THREE.Object3D) {
             if (reparentTo != axes.parent)
-                this.tempNode.adoptGlobalValuesFromObject3D(axes, this.wScale);
-            this.tempNode.adoptLocalValuesFromObject3D(axes, this.wScale);
+                this.tempNode.adoptGlobalValuesFromObject3D(axes);
+            this.tempNode.adoptLocalValuesFromObject3D(axes);
             basis = this.tempNode.getLocalMBasis();
             if (IjustWantABasis && reparentTo == null)
                 return basis;
@@ -813,10 +848,10 @@ export class EWBIK {
 
     updateSkelStateAxes(a, ts, setRelativeTo = null, quiet = false) {
         let basis = this.getReparentedBasis(a, setRelativeTo, quiet);
-        ts.rotation[0] = basis.rotation.q0;
-        ts.rotation[1] = basis.rotation.q1;
-        ts.rotation[2] = basis.rotation.q2;
-        ts.rotation[3] = basis.rotation.q3;
+        ts.rotation[0] = basis.rotation.x;
+        ts.rotation[1] = basis.rotation.y;
+        ts.rotation[2] = basis.rotation.z;
+        ts.rotation[3] = basis.rotation.w;
         ts.translation[0] = basis.translate.x;
         ts.translation[1] = basis.translate.y;
         ts.translation[2] = basis.translate.z;
@@ -851,26 +886,62 @@ export class EWBIK {
 
 
     _debug_iteration(solveFrom, iterations = this.defaultIterations, callbacks = null) {
-        let i = 0;
-        let ds=this.shadowSkel.debugState;
-        while (i < ds.steps.length * ds.endOnIndex) {
-            this.shadowSkel.incrStep();
-            let doalign = null;
-            if (ds.willCompleteIteration) {
-                doalign = (boneState, transformState) => this.alignBoneToSolverResult(boneState, transformState);
-            }
-            this.shadowSkel.debug_solve(iterations, this.getDefaultStabilizingPassCount(), solveFrom, doalign, callbacks);
-            i++;
-            if (doalign != null) {
-                break;
-            }
+        if (this.dirtySkelState)
+            this._regenerateShadowSkeleton();
+        if (this.dirtyRate)
+            this._updateShadowSkelRateInfo(iterations);
+
+
+        let ds =  this.shadowSkel.debugState;
+        if(ds.currentIteration == 0) {
+            this.updateskelStates();
+            this.shadowSkel.updateReturnfulnessDamps(iterations);
+            this.shadowSkel.alignSimAxesToBoneStates();
         }
+        let i = 0;
+        //let doNothing = ()=>{};
+         
+        let endOnIndex = this.shadowSkel.getEndOnIndex(solveFrom);
+        this.shadowSkel.updateReturnfulnessDamps(iterations);
+        callbacks?.__initStep((callme, bs, ts, wb) => this.stepWiseUpdateResult(callme, bs, ts, wb));
+        let doalign = (bs, ts, wb) => this.alignBoneToSolverResult(bs, ts, wb);    
+        
+        this.shadowSkel.solveToTargets(this.getDefaultStabilizingPassCount(), endOnIndex, doalign, callbacks, ds.currentIteration);
+        ds.currentIteration = ds.currentIteration+1;
+        if(ds.currentIteration == iterations) {
+            ds.solveCalls++;
+            ds.currentIteration = 0;
+        }
+        console.log('solve#: ' +ds.solveCalls +'\t:: itr :: ' +ds.currentIteration);
     }
 
-
+    /**
+     * calls the solver step by step, bone by bone, iteration by iteration so you can debug the hell out of whatever you want.
+     * @param {Bone} bone optional, if given, the solver will only solve for the segment the given bone is on (and any of its descendant segments). Otherwise, the solver will solve for all segments.
+     * @param {Number} iterations  number of iterations to run. Set this to null or -1 if you want to use the armature's default.
+     * @param {CallbacksSequence} callbacks to snoop on solver state
+     */
     _debug_bone(solveFrom, iterations = this.defaultIterations, callbacks = null) {
+        if (this.dirtySkelState)
+            this._regenerateShadowSkeleton();
+        if (this.dirtyRate)
+            this._updateShadowSkelRateInfo(iterations);
+        let ds = this.shadowSkel.debugState;
+        if(ds.currentIteration == 0) {
+            this.updateskelStates();
+            this.shadowSkel.updateReturnfulnessDamps(iterations);
+            this.shadowSkel.alignSimAxesToBoneStates();
+        }
         this.shadowSkel.incrStep();
-        this.shadowSkel.debug_solve(iterations, this.getDefaultStabilizingPassCount(), solveFrom, (boneState, transformState) => this.alignBoneToSolverResult(boneState, transformState), callbacks);
+        callbacks?.__initStep((callme, bs, ts, wb) => this.stepWiseUpdateResult(callme, bs, ts, wb));
+        this.shadowSkel.debug_solve(iterations, this.getDefaultStabilizingPassCount(), solveFrom, (bs, ts, wb) => this.alignBoneToSolverResult(bs, ts, wb), callbacks);
+        if(ds.completedIteration) {
+            if(ds.currentIteration == iterations) {
+                ds.solveCalls++;
+                ds.currentIteration = 0;
+                console.log('solve#: ' +ds.solveCalls +'\t:: itr :: ' +ds.currentIteration);
+            }
+        }
     }
 
 

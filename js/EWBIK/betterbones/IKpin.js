@@ -40,12 +40,12 @@ export class IKPin {
         this.ikd = ikd;
         
         if (targetNode == null) {
-            this.targetNode = new TrackingNode(null, undefined, this.forBone.parentArmature.wScale);           
+            this.targetNode = new TrackingNode(null, undefined);           
             this.targetNode.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());
             this.targetNode.setParent(forBone.parentArmature.armatureNode);
             this.targetNode.updateUnderlyingFrom_Global(true)
         } else if(targetNode instanceof THREE.Object3D) {
-            let trackNode = new TrackingNode(targetNode, undefined, this.forBone.parentArmature.wScale);
+            let trackNode = new TrackingNode(targetNode, undefined);
             this.targetNode = trackNode;
             this.targetNode.setParent(forBone.parentArmature.armatureNode);
             this.target_threejs = targetNode;
@@ -350,7 +350,7 @@ export class IKPin {
         (this.forBone.getIKBoneOrientation()?.children[0] ?? this.forBone.getIKBoneOrientation()).add(object); 
         object.updateWorldMatrix();
         this.forBone.getIKBoneOrientation()?.children[0] ?? this.forBone.getIKBoneOrientation().attach();
-        this.targetNode.adoptGlobalValuesFromObject3D(object, this.forBone.parentArmature.wScale, true);
+        this.targetNode.adoptGlobalValuesFromObject3D(object, true);
         prevPar.attach(object);
 
         //this.targetNode.sendTrackedToGlobal(this.forBone.getIKBoneOrientation()?.children[0] ?? this.forBone.getIKBoneOrientation());

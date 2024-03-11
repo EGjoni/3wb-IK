@@ -16,7 +16,8 @@ export class LayeredRender {
 
     initRenderTargets(width, height) {
         for (let i = 0; i < this.callbacks.length; i++) {
-            const renderTarget = new THREE.WebGLRenderTarget(width, height);
+            const renderTarget = new THREE.WebGLRenderTarget(width, height, { antialias: i==0 });
+            
             this.renderTargets.push(renderTarget);
         }
     }
@@ -77,22 +78,26 @@ export class LayeredRender {
             uniform sampler2D textures[${numTextures}];
             varying vec2 vUv;
 
+            vec4 applyGammaCorrection(vec4 color, float gamma) {
+                return vec4(pow(color.rgb, vec3(1.0 / gamma)), color.a);
+            }
+
             void main() {
-                vec4 color = texture2D(textures[0], vUv); // Start with the first texture as the base
-                vec4 srcColor = vec4(color.rgb, 1.0);
+                float gamma = 2.0;
+                vec4 color = applyGammaCorrection(texture2D(textures[0], vUv), gamma);
+                vec4 srcColor = vec4(color.rgb, color.a);
         `;
 
         let dynamicShaderPart = ``;
-        for (let i = 1; i < numTextures; i++) { // Start loop at 1 since the base color is already texture 0
+        for (let i = 0; i < numTextures; i++) { // Start loop at 1 since the base color is already texture 0
             dynamicShaderPart += `
-                srcColor = texture2D(textures[${i}], vUv);
-                color.rgb = (srcColor.rgb * srcColor.a) + (color.rgb * (1.0 - srcColor.a));
-                color.a = srcColor.a + color.a * (1.0 - srcColor.a); // An example of handling alpha
+                srcColor = applyGammaCorrection(texture2D(textures[${i}], vUv), gamma);
+                color = (srcColor + color * (1.0 - srcColor.a));
             `;
         }
 
         let fragmentShaderPart2 = `
-                gl_FragColor = vec4(color.rgb, 1.0); // Assuming final output is fully opaque
+                gl_FragColor = vec4(color.rgb, 1.0);
             }
         `;
 
@@ -100,7 +105,7 @@ export class LayeredRender {
 
         return new THREE.ShaderMaterial({
             uniforms: {
-                textures: { value: new Array(numTextures).fill(null) }, // Initialize with nulls or actual textures
+                textures: { value: new Array(numTextures).fill(null) },
             },
             vertexShader: `
                 varying vec2 vUv;
