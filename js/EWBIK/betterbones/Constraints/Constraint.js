@@ -200,7 +200,7 @@ export class ConstraintStack extends LimitingReturnful {
 
     
     getPreferenceRotation(desiredState, desiredBoneOrientation, currentState, currentBoneOrientation) {
-        let accumulatedRot = this.tempOutRot.set(1,0,0,0);
+        let accumulatedRot = this.tempOutRot.set(0,0,0, 1);
         if(this.lastCalled > this.giveup) return accumulatedRot;
 
         this.lastPrefState.localMBasis.adoptValues(currentState.localMBasis);
@@ -242,8 +242,8 @@ export class ConstraintResult {
     }
     reset(iteration) {
         this.iteration = iteration;
-        this._fullRotation.setComponents(1,0,0,0);
-        this._clampedRotation.setComponents(1,0,0,0);
+        this._fullRotation.setComponents(0,0,0, 1);
+        this._clampedRotation.setComponents(0,0,0, 1);
         this.__preCallDiscomfort = null;
         this.__postCallDiscomfort = null;
         this.__raw_preCallDiscomfort = null;
