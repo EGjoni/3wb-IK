@@ -615,15 +615,28 @@ export class Vec3Pool {
 
 window.globalVecPool = new Vec3Pool(1000);
 
+/**
+ * ephemeral vector from components
+ * @param {Number} x,
+ * @param {Number} y,
+ * @param {Number} z,
+ * @returns {Vec3} an ephemeral vector from the default pool, or creates a new one if there is no pool
+ */
 export function any_Vec3(x=0, y=0, z=0) {
     return globalVecPool.temp_acquire(x, y, z);
 }
 
+/**
+ * ephemeral vector from another vector
+ * @param {Vec3} x
+ * @returns {Vec3} an ephemeral vector from the default pool, or creates a new one if there is no pool
+ */
 export function any_Vec3fv(v) {
     return globalVecPool.temp_acquirefv(v);
 }
 
 export class NoPool {
+    
     new_Vec3(x=0, y=0, z=0) {
         return new Vec3(x, y, z);
     }

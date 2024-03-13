@@ -347,9 +347,9 @@ export class IKPin {
         object.quaternion.set(0, 0, 0, 1);
         object.scale.set(1, 1, 1);
         object.updateMatrix();
-        (this.forBone.getIKBoneOrientation()?.children[0] ?? this.forBone.getIKBoneOrientation()).add(object); 
+        this.forBone.getIKBoneOrientation().add(object); 
         object.updateWorldMatrix();
-        this.forBone.getIKBoneOrientation()?.children[0] ?? this.forBone.getIKBoneOrientation().attach();
+        this.forBone.getIKBoneOrientation().attach(object);
         this.targetNode.adoptGlobalValuesFromObject3D(object, true);
         prevPar.attach(object);
 

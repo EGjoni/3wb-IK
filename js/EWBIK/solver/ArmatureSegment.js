@@ -99,22 +99,30 @@ export class ArmatureSegment {
     }
 
     buildReverseTraversalArray() {
-        const reverseTraversalArray = [];
+        const reverseTraversalSet = new Set();
         for (const wb of this.solvableStrandBones) {           
-            reverseTraversalArray.push(wb);
+            reverseTraversalSet.add(wb);
         }
 
         for (const subsgmt of this.immediateSubSegments) {
-            reverseTraversalArray.push(...subsgmt.reversedTraversalArray);
+            subsgmt.reversedTraversalArray.forEach(wb => reverseTraversalSet.add(wb));
         }
 
         for (const childsgmt of this.childSegments) {
-            reverseTraversalArray.push(...childsgmt.reversedTraversalArray);
+            childsgmt.reversedTraversalArray.forEach(wb => reverseTraversalSet.add(wb));
         }
 
-        
+        this.reversedTraversalArray = [...reverseTraversalSet];
+    }
 
-        this.reversedTraversalArray = reverseTraversalArray;
+    toConsole(currentDepth) {
+        for(let sb of this.solvableStrandBones) {
+            console.log('\t'.repeat(currentDepth)+sb.forBone.directRef.ikd);
+            currentDepth++;
+        }
+        for(let iss of this.immediateSubSegments) {
+            iss.toConsole(currentDepth);
+        }
     }
 
     recursivelyCreateHeadingArrays() {
@@ -203,19 +211,26 @@ export class ArmatureSegment {
                 pinSequence.push(this.wb_segmentTip);
             }
             const thisFalloff = target == null ? 1 : target.getDepthFallOff();
-            for (const s of this.subSegments) {
+            for (const s of this.immediateSubSegments) {
                 s.recursivelyCreatePenaltyArray(weightArray, pinSequence, currentFalloff * thisFalloff);
             }
         }
     }
 
-    getDescendantSegments() {
-        const result = [];
-        result.push(this);
-        for (const child of this.childSegments) {
-            result.push(...child.getDescendantSegments());
+    /**returns all child and subsegments*/
+    getAllDescendantSegments() {
+        const result = new Set();
+        result.add(this);
+        for (const sub of this.immediateSubSegments) {
+            let descsub = sub.getAllDescendantSegments();
+            descsub.forEach(s => result.add(s));
         }
-        return result;
+
+        for (const child of this.childSegments) {
+            let descchi = child.getAllDescendantSegments();
+            descchi.forEach(c => result.add(c));
+        }
+        return [...result];
     }
 
     getManualMSD(locTips, locTargets, weights) {
@@ -467,7 +482,7 @@ class WorkingBone {
                 const res = this.constraint.getPreferenceRotation(this.simLocalAxes, this.simBoneAxes, this.previousState, this.previousBoneOrientation, iteration, this);
                 this.chain.previousDeviation = Infinity;
                 this.lastReturnfulResult = res;
-                this.simLocalAxes.rotateBy(res.clampedRotation);
+                //this.simLocalAxes.rotateBy(res.clampedRotation);
                 //callbacks?.afterPullback(this.forBone.directRef, this.forBone.getFrameTransform(), this);
             }
         }
@@ -491,7 +506,7 @@ class WorkingBone {
                 weights[hdx+1] = painScalar*baseWeights[hdx+1];
                 const xTarget = workingRay;
                 xTarget.set(targetAxes.xRay());
-                //xTarget.scaleBy(weights[hdx]);
+                xTarget.scaleBy(weights[hdx]);
                 localizedTargetHeadings[hdx].set(xTarget.p2).sub(origin);
                 xTarget.setToInvertedTip(localizedTargetHeadings[hdx + 1]).sub(origin);
                 hdx += 2;
@@ -501,7 +516,7 @@ class WorkingBone {
                 weights[hdx+1] = painScalar*baseWeights[hdx+1];
                 const yTarget = workingRay;
                 yTarget.set(targetAxes.yRay());
-                //yTarget.scaleBy(weights[hdx]);
+                yTarget.scaleBy(weights[hdx]);
                 localizedTargetHeadings[hdx].set(yTarget.p2).sub(origin);
                 yTarget.setToInvertedTip(localizedTargetHeadings[hdx + 1]).sub(origin);
                 
@@ -512,7 +527,7 @@ class WorkingBone {
                 weights[hdx+1] = painScalar*baseWeights[hdx+1];
                 const zTarget = workingRay;
                 zTarget.set(targetAxes.zRay());
-                //zTarget.scaleBy(weights[hdx]);
+                zTarget.scaleBy(weights[hdx]);
                 localizedTargetHeadings[hdx].set(zTarget.p2).sub(origin);
                 zTarget.setToInvertedTip(localizedTargetHeadings[hdx + 1]).sub(origin);
                 hdx += 2;
@@ -522,7 +537,7 @@ class WorkingBone {
 
     updateTipHeadings(localizedTipHeadings, scale) {
         let hdx = 0;
-        const origin = this.simBoneAxes.origin();
+        const origin = this.simLocalAxes.origin();
         const workingRay = this.workingRay;
         for (let i = 0; i < this.chain.pinnedBones.length; i++) {
             const sb = this.chain.pinnedBones[i];
@@ -535,7 +550,7 @@ class WorkingBone {
             targetAxes.updateGlobal();
 
             localizedTipHeadings[hdx].set(tipAxes.origin()).sub(origin);
-            let scaleBy = scale ? 1+origin.dist(targetAxes.origin()) : 1;
+            let scaleBy = scale ? 0.1+origin.dist(targetAxes.origin()) : 1;
             hdx++;
 
             if ((modeCode & TargetState.XDir) != 0) {
@@ -577,10 +592,35 @@ class WorkingBone {
             }
         }
     }
+    
 
     maybeSpringy() {
         return (this.constraint != null && (this.constraint instanceof Returnful || this.constraint instanceof LimitingReturnful ));
     }
+
+    //debug function
+    applyRotToVecArray(rot, vecArr) {
+        let result = [];
+        for(let v of vecArr) {
+            result.push(rot.applyToVec(v));
+        }
+        return result;
+    }
+
+    applyCompare(rot, arr1, arr2) {
+        console.log("pre-rotation");
+        this.compareAngDist(arr1, arr2);
+        let clr = this.applyRotToVecArray(rot, arr1);
+        this.compareAngDist(clr, arr2);
+        console.log("post-rotation");
+    }
+
+    compareAngDist(vecArr1, vecArr2) {
+        for(let i =0; i <vecArr1.length; i++) {
+            Rot.fromVecs(vecArr1[i], vecArr2[i]).toConsole(); 
+        }
+    }
+
 }
 
 export default ArmatureSegment;

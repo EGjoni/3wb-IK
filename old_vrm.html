@@ -8,9 +8,11 @@
           "imports": {
             "three": "https://unpkg.com/three@latest/build/three.module.js",
             "orbitControls": "https://unpkg.com/three/examples/jsm/controls/OrbitControls.js",
-            "transformControls": "https://unpkg.com/three/examples/jsm/controls/TransformControls.js",
+            "transformControls": "./js/penziltransform.js",
             "gltf" : "https://unpkg.com/three/examples/jsm/loaders/GLTFLoader.js",
-            "vrm" : "https://unpkg.com/@pixiv/three-vrm@2.1.0/lib/three-vrm.module.js"
+            "vrm" : "https://unpkg.com/@pixiv/three-vrm@2.1.0/lib/three-vrm.module.js",
+            "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
+            "pca" : "https://cdn.jsdelivr.net/npm/pca-js@1.0.0/pca.min.js"
           }
         }
     </script>
@@ -26,15 +28,17 @@
 </head>
 
 <body>
+    <script type = "module" src="./js/UIelements.js"></script>
+    <script src="js/sceneStuff.js"></script>
     <script type="module">
         const THREE = await import('three');
+        import { LayeredRender } from "./js/LayeredRender.js"
         import { TransformControls } from 'transformControls';
         import { OrbitControls } from 'orbitControls';
-        import{ GLTFLoader } from 'gltf';
+        import { GLTFLoader } from 'gltf';
         import { VRMLoaderPlugin } from 'vrm';
         import { EWBIK } from "./js/EWBIK/EWBIK.js";
         import { IKNode, TrackingNode } from "./js/EWBIK/util/IKNodes.js";
-        import { Rot} from "./js/EWBIK/util/Rot.js";
         import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
         import { Rest } from "./js/EWBIK/betterbones/Constraints/Rest/Rest.js";
         window.Rest = Rest;
@@ -71,6 +75,18 @@
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
+            window.camera = camera;
+            window.renderer = renderer;
+            window.rendlrs = new LayeredRender(renderer, window.innerWidth, window.innerHeight, 
+                (renderer, target) => { //renders mesh stuff
+                    camera.layers.set(meshLayer);
+                    renderer.render(scene, camera);
+                },
+                (renderer, target) => { //renders bones
+                    camera.layers.set(boneLayer);
+                    renderer.render(scene, camera);
+                }
+            );
 
             // Lighting
             const ambientLight = new THREE.AmbientLight(0x404040);
@@ -99,8 +115,8 @@
                     armature.armatureNode.forceOrthonormality = false;
                     armature.inferOrientations(rootBone);
                     
-                    initRests();
-                    initIK();
+                    initRests(armature);
+                    initIK(armature);
                 },
                 // called while loading is progressing
                 (xhr) => {
@@ -148,31 +164,33 @@
             }
         }
         
-        window.initRests = function () {
-            window.l_arm_upp = armature.bonetags["J_Bip_L_UpperArm"];
-            window.r_arm_upp = armature.bonetags["J_Bip_R_UpperArm"];
-            window.l_arm_lower = armature.bonetags["J_Bip_L_LowerArm"];
-            window.r_arm_lower = armature.bonetags["J_Bip_R_LowerArm"];
-            window.l_leg_upp = armature.bonetags["J_Bip_L_UpperLeg"];
-            window.r_leg_upp = armature.bonetags["J_Bip_R_UpperLeg"];
-            window.l_leg_lower = armature.bonetags["J_Bip_L_LowerLeg"];
-            window.r_leg_lower = armature.bonetags["J_Bip_R_LowerLeg"];
+        window.initRests = function (armature) {
+            armature.l_arm_upp = armature.bonetags["J_Bip_L_UpperArm"];
+            armature.r_arm_upp = armature.bonetags["J_Bip_R_UpperArm"];
+            armature.l_arm_lower = armature.bonetags["J_Bip_L_LowerArm"];
+            armature.r_arm_lower = armature.bonetags["J_Bip_R_LowerArm"];
+            armature.l_leg_upp = armature.bonetags["J_Bip_L_UpperLeg"];
+            armature.r_leg_upp = armature.bonetags["J_Bip_R_UpperLeg"];
+            armature.l_leg_lower = armature.bonetags["J_Bip_L_LowerLeg"];
+            armature.r_leg_lower = armature.bonetags["J_Bip_R_LowerLeg"];
+            armature.c_head = armature.bonetags["J_Bip_C_Head"];
+            armature.c_chest = armature.bonetags["J_Bip_C_Chest"];
 
             //l_arm_lower.rotate
-            window.l_arm_upp.rotateZ(0.5);
-            window.r_arm_upp.rotateZ(-0.5);
+            armature.l_arm_upp.rotateZ(0.5);
+            armature.r_arm_upp.rotateZ(-0.5);
 
-            window.l_arm_lower.rotateX(0.5);
-            window.r_arm_lower.rotateX(0.5);
+            armature.l_arm_lower.rotateX(0.5);
+            armature.r_arm_lower.rotateX(0.5);
 
-            window.l_arm_lower.rotateY(-0.75);
-            window.r_arm_lower.rotateY(0.75);
+            armature.l_arm_lower.rotateY(-0.75);
+            armature.r_arm_lower.rotateY(0.75);
 
-            window.r_leg_upp.rotateX(1);
-            window.l_leg_upp.rotateX(1);
+            armature.r_leg_upp.rotateX(1);
+            armature.l_leg_upp.rotateX(1);
 
-            window.r_leg_lower.rotateX(-1.75);
-            window.l_leg_lower.rotateX(-1.75);
+            armature.r_leg_lower.rotateX(-1.75);
+            armature.l_leg_lower.rotateX(-1.75);
 
             for(let b of armature.bones) {
                 if(b.parent instanceof THREE.Bone)
@@ -180,23 +198,23 @@
             }
             //window.larm_rest = new Rest(l_arm_upp);
             //window.rarm_rest = new Rest(r_arm_upp);
-            window.r_leg_upp.rotateX(-1);
-            window.l_leg_upp.rotateX(-1);
+            armature.r_leg_upp.rotateX(-1);
+            armature.l_leg_upp.rotateX(-1);
 
-            window.r_leg_lower.rotateX(1.75);
-            window.l_leg_lower.rotateX(1.75);
+            armature.r_leg_lower.rotateX(1.75);
+            armature.l_leg_lower.rotateX(1.75);
             
-            window.l_arm_lower.rotateY(0.75);
-            window.r_arm_lower.rotateY(-0.75);
+            armature.l_arm_lower.rotateY(0.75);
+            armature.r_arm_lower.rotateY(-0.75);
 
-            window.l_arm_lower.rotateX(-0.5);
-            window.r_arm_lower.rotateX(-0.5);
+            armature.l_arm_lower.rotateX(-0.5);
+            armature.r_arm_lower.rotateX(-0.5);
 
-            window.l_arm_upp.rotateZ(-0.5);
-            window.r_arm_upp.rotateZ(0.5);
+            armature.l_arm_upp.rotateZ(-0.5);
+            armature.r_arm_upp.rotateZ(0.5);
         }
 
-        window.initIK = function () {
+        window.initIK = function (armature) {
             //armature.root = new IKPin(armature.bonetags["Root"]);
             armature.head_pin = new IKPin(armature.c_head);
             armature.chest_pin = new IKPin(armature.c_chest);
@@ -410,10 +428,10 @@
             render(true);
         }
 
-        function render(incrFrame = false) {
+        window.render = function(incrFrame = false) {
             if(incrFrame) frameCount++;
-            //setPinVisibility(frameCount%2 == 0);
-            renderer.render(scene, camera);
+            doSolve();
+            window.rendlrs.render();
         }
 
         init();

@@ -358,13 +358,15 @@ export class IKNode {
 
     reset() {
         this.emancipate();
-        this.setLocalsToIdentity();
-        this.setGlobalsToIdentity();
         for (let c in this.children) {
             c.emancipate();
         }
+        this.localMBasis.setToIdentity();
+        this.globalMBasis.setToIdentity();
+        this.markDirty();
         return this;
     }
+
 
     setLocalsToIdentity() {
         this.localMBasis.setToIdentity();
@@ -376,7 +378,7 @@ export class IKNode {
     setGlobalsToIdentity() {
         this.getGlobalMBasis().setToIdentity();
         if (this.getParentAxes() != null) {
-            this.setRelativeTo(this.parent.getParentAxes());
+            this.setAsIfParent(this.getParentAxes());
         }
         this.markDirty();
         return this;
@@ -385,7 +387,7 @@ export class IKNode {
     /**sets the local values of this node to what they would need to be in order 
      * for the global values to remain unchanged if the input node were made the parent of this node
      */
-    setRelativeTo(input) {
+    setAsIfParent(input) {
         this.updateGlobal();
         input.getGlobalMBasis().setTransformToLocalOf(this.getGlobalMBasis(), this.getLocalMBasis());
         this.markDirty();

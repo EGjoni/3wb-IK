@@ -177,7 +177,8 @@ class QuaternionD {
 
 		// assumes axis is normalized
 
-		const halfAngle = angle / 2;s = Math.sin( halfAngle );
+		const halfAngle = angle / 2;
+		const s = Math.sin( halfAngle );
 
 		this._x = axis.x * s;
 		this._y = axis.y * s;
@@ -599,12 +600,16 @@ export class Rot extends QuaternionD {
     };
 
     static fromRot(r) {
-        return new Rot(r._x, r._y, r._z, r._w);
+        return new Rot(
+			r._x, 
+			r._y, 
+			r._z, 
+			r._w);
     }
 
     static fromAxisAngle(axis, angle) {
-        const resultmrot = new Rot(1, 0, 0, 0).setFromAxisAngle(axis, angle);
-        return new Rot(resultmrot); //.rotation.fromAxisAngle(axis, angle);
+        const resultmrot = new Rot(0, 0, 0, 1).setFromAxisAngle(axis.normalize(), angle);
+        return resultmrot; //.rotation.fromAxisAngle(axis, angle);
     }
 
     static fromVecs(u, v) {
@@ -629,8 +634,9 @@ export class Rot extends QuaternionD {
         this._x = x;
         this._y = y;
         this._z = z;
+		if(normalize) this.normalize();
 
-        return this.normalize();
+        return;
     }
 
     set(x, y, z, w) {

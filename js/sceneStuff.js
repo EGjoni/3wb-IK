@@ -2,8 +2,6 @@
 //import { EWBIK } from "./EWBIK/EWBIK.js";
 
 
-
-
 const dbgContainer = document.createElement('div');
 dbgContainer.id = "info";
 document.querySelector("body").appendChild(dbgContainer);
@@ -91,7 +89,7 @@ async function select(item) {
         selectedPin = null;
         selectedPinIdx = -1;
         window.selectedBone = item;
-        window.selectedBone = item;
+        window.selectedBoneIdx = boneList.indexOf(item);
         pinOrientCtrls.detach();
         pinOrientCtrls.enabled = false;
         //pinTranslateCtrls.enabled = false;
@@ -101,21 +99,29 @@ async function select(item) {
         window.contextPin = selectedBone.getIKPin() ?? null;
         window.contextArmature = selectedBone.parentArmature; 
         window.contextConstraint = selectedBone.getConstraint() ?? null;
+        window.contextBone.add(boneAxesHelper);
+        boneAxesHelper.layers.set(window.boneLayer);
+        window?.contextPin?.targetNode?.toTrack.add(pinAxesHelper);
+        pinAxesHelper.layers.set(window.boneLayer);
     }
     if (item instanceof IKPin) {
+        window.selectedPin = item;
+        window.selectedPinIdx = pinsList.indexOf(selectedPin);
+        selectedBone = null;
+        selectedBoneIdx = -1;
         pinOrientCtrls.attach(targetsMeshList[selectedPinIdx]);
         //pinTranslateCtrls.attach(targetsMeshList[selectedPinIdx]);
         boneCtrls.detach();
         boneCtrls.enabled = false;
-        pinOrientCtrls.enabled = true;
-        selectedBone = null;
-        selectedBoneIdx = -1;
-        window.selectedPin = item;
-        window.selectedPinIdx = pinsList.indexOf(selectedPin);
+        pinOrientCtrls.enabled = true;        
         window.contextPin = selectedPin;
         window.contextBone = window.selectedPin.forBone;
         window.contextArmature = window.contextBone.parentArmature; 
         window.contextConstraint = window.contextBone.getConstraint() ?? null;
+        window.contextBone.add(boneAxesHelper);
+        boneAxesHelper.layers.set(window.boneLayer);
+        window.contextPin.targetNode.toTrack.add(pinAxesHelper);
+        pinAxesHelper.layers.set(window.boneLayer);
     }
     updateInfoPanel(item);
 }
@@ -167,16 +173,21 @@ function makePinsList(pinSize, into = scene, armature) {
             let baseSize = ikpin.forBone.height;
             if (ikpin.targetNode.toTrack == null) {
                 //let boneHeight = b.height
-                const geometry = new THREE.BoxGeometry(baseSize * pinSize / 2, b.height, baseSize * pinSize);
+                const geometry = ikpin.forBone?.bonegeo?.geometry ?? new THREE.BoxGeometry(baseSize * pinSize / 2, b.height, baseSize * pinSize);
                 const material = new THREE.MeshLambertMaterial({ color: 0xff0000, transparent: true, opacity: 0.6 });
                 const targMesh = new THREE.Mesh(geometry, material);
-                into.add(targMesh);
-                targMesh.name = ikpin.ikd;
-                targMesh.ikd = ikpin.ikd;
+                //targMesh.position.set(0, b.height/2, 0);
+                const meshWrapper = new THREE.Object3D();
+                meshWrapper.add(targMesh);
+                into.add(meshWrapper);
+                meshWrapper.name = ikpin.ikd;
+                meshWrapper.ikd = ikpin.ikd;
+                meshWrapper.meshHint = targMesh;
+                meshWrapper.layers.set(boneLayer);
                 targMesh.layers.set(boneLayer);
-                ikpin.targetNode.toTrack = targMesh;
+                ikpin.targetNode.toTrack = meshWrapper;
                 ikpin.alignToBone();
-                //targMesh.position.set(0, b.height/2, 0)
+                
             }
             armature.pinsList.push(ikpin);
             armature.targetsMeshList.push(ikpin.targetNode.toTrack);
@@ -194,10 +205,14 @@ function doSolve(bone = null, interacted = false, preSolveCallback = null, inSol
     for (let a of armatures) {
         if (a.ikReady) {
             if (autoSolve || (interacted && interactionSolve)) {
+                let callbacks = undefined;
                 if(autoSolve) {
                     bone = null; /*we're solving for the whole armature when autoSolve is on anyway so avoid intermittently specifying a new bone to work from, because this invalidates the cache*/
                 }
-                a.solve(bone);
+                if(interacted && interactionSolve) {
+                    callbacks = window.bonestepcallbacks;
+                }
+                a.solve(bone, undefined, 0, callbacks);
             } else if (interacted && !interactionSolve) {
                 a.noOp(bone);
             }
@@ -251,6 +266,9 @@ async function orthonormalize(startnode) {
 
 
 function initControls(THREE, renderer) {
+    window.axesHelperSize = 1;
+    window.boneAxesHelper = new THREE.AxesHelper(axesHelperSize);
+    window.pinAxesHelper = new THREE.AxesHelper(axesHelperSize);
     D.byid(window.autoSolve ? 'auto-solve' : 'interaction-solve').checked = true;
     window.THREE = THREE;
     raycaster = new THREE.Raycaster();
@@ -377,6 +395,7 @@ function initControls(THREE, renderer) {
     //scene.add(pinTranslateCtrls);
 
 
+
     window.addEventListener('click', (event) => {
         let downdelta = Date.now() - lastmousedown;
         if (pin_transformActive || downdelta > 250 || bone_transformActive) {
@@ -387,9 +406,9 @@ function initControls(THREE, renderer) {
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
         raycaster.setFromCamera(mouse, camera);
-        const intersectsPin = raycaster.intersectObjects(targetsMeshList, false);
-        selectedPinIdx = targetsMeshList.indexOf(intersectsPin[0]?.object);
-        const intersectsBone = raycaster.intersectObjects(boneMeshList, false);
+        const intersectsPin = raycaster.intersectObjects(targetsMeshList, true).filter(elem => elem.object instanceof THREE.AxesHelper == false);
+        selectedPinIdx = targetsMeshList.indexOf(intersectsPin[0]?.object.parent);
+        const intersectsBone = raycaster.intersectObjects(boneMeshList, false).filter(elem => elem.object instanceof THREE.AxesHelper == false);
         selectedBoneIdx = boneList.indexOf(intersectsBone[0]?.object.forBone);
         if (selectedPinIdx == -1) {
             pinOrientCtrls.detach();
@@ -529,7 +548,7 @@ async function switchSelected(key) {
             select(selectedBone)
             break;
         case '2':
-            selectedBoneIdx = Math.abs(selectedBoneIdx - 1) % boneList.length
+            selectedBoneIdx = (selectedBoneIdx + (boneList.length-1)) % boneList.length
             selectedBone = boneList[selectedBoneIdx];
             boneCtrls.attach(selectedBone);
             selectedBone.add(boneAxesHelper);

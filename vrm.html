@@ -3,6 +3,7 @@
 
 <head>
     <title>Three.js Skeleton Interaction</title>
+    <script> global = window;</script>
     <script type="importmap">
         {
           "imports": {
@@ -10,7 +11,9 @@
             "orbitControls": "https://unpkg.com/three/examples/jsm/controls/OrbitControls.js",
             "transformControls": "./js/penziltransform.js",
             "gltf" : "https://unpkg.com/three/examples/jsm/loaders/GLTFLoader.js",
-            "vrm" : "https://unpkg.com/@pixiv/three-vrm@2.1.0/lib/three-vrm.module.js"
+            "vrm" : "https://unpkg.com/@pixiv/three-vrm@2.1.0/lib/three-vrm.module.js",
+            "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
+            "pca" : "https://cdn.jsdelivr.net/npm/pca-js@1.0.0/pca.min.js"
           }
         }
     </script>
@@ -61,8 +64,7 @@
                 renderer.render(scene, camera);
             }
         );
-        const axesHelperSize = 14; // Adjust the size as needed
-        window.boneAxesHelper = new THREE.AxesHelper(axesHelperSize);
+        
         const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.5);
         const ambientLight = new THREE.AmbientLight(0x404040);
         hemisphereLight.layers.enable(boneLayer);

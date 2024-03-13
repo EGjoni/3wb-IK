@@ -48,9 +48,9 @@ export class Rest extends Returnful {
     setCurrentAsRest() {
         this.boneFrameRest.adoptLocalValuesFromObject3D(this.forBone);
         //let oldBoneFrameRest = this.boneFrameRest.freeclone();
-        //this.boneFrameRest.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());//.setRelativeTo(IKNode.fromObj3dGlobal(this.forBone.parent));
+        //this.boneFrameRest.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());//.setAsIfParent(IKNode.fromObj3dGlobal(this.forBone.parent));
         //let globalParent = this.tempNode1.reset().adoptGlobalValuesFromObject3D(this.forBone.parent);
-        //this.boneFrameRest.setRelativeTo(globalParent);
+        //this.boneFrameRest.setAsIfParent(globalParent);
         //this.setRestPose(newRest);
         return this;
     }

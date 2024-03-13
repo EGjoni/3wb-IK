@@ -138,7 +138,7 @@ export class QCP {
 		} else {
 			if (!this.innerProductCalculated)
 				this.innerProduct(y, x);
-			calcWeightedRmsd(wsum);
+			this.calcWeightedRmsd(this.wsum);
 		}
 	}
 
@@ -374,7 +374,7 @@ export class QCP {
 			min = q3 < min ? q3: min;
 			min = q4 < min ? q4 : min;
 
-			return new Rot(q2, q3, q4, -q1, true);
+			return new Rot(-q2, -q3, -q4, q1, true);
 		}
 	}
     /**

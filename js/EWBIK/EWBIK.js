@@ -5,6 +5,7 @@ import { Vec3, any_Vec3, Vec3Pool, NoPool }  from "./util/vecs.js";
 import { CallbacksSequence } from "./CallbacksSequence.js";
 import { Rot } from "./util/Rot.js";
 import { IKNode, TrackingNode } from "./util/IKNodes.js";
+import { convexBlob, pcaOrientation } from "./util/mathdump/mathdump.js";
 import { IKPin } from "./betterbones/IKpin.js";
 import { Kusudama } from "./betterbones/Constraints/Kusudama/Kusudama.js";
 const THREE = await import('three');
@@ -174,18 +175,20 @@ export class EWBIK {
         return this.defaultIterations;
     }
 
-    makeBoneGeo(boneRef, height, radius, mat) {
+    makeBoneGeo(boneRef, height, radius, mat, hullpoints) {
         if (boneRef?.boneGeo != null) boneRef.boneGeo.parent.remove(boneGeo);
-        const geometry = new THREE.ConeGeometry(radius * height, height, 20);
+        const cone = new THREE.ConeGeometry(radius * height, height, 5);
+        cone.translate(0, height/2, 0);
+        const hull = convexBlob(cone, ...hullpoints);
         const material = new THREE.MeshPhongMaterial(mat);
-        const prism = new THREE.Mesh(geometry, material);
-        prism.position.y = height / 2;
-        prism.isBoneMesh = true;
-        prism.forBone = boneRef;
-        boneRef.boneGeo = prism;
-        prism.name = 'bonegeo';
-        prism.layers.set();
-        return prism;
+        const boneplate = new THREE.Mesh(hull, material);
+        //boneplate.position.y = height / 2;
+        boneplate.isBoneMesh = true;
+        boneplate.forBone = boneRef;
+        boneplate.boneGeo = boneplate;
+        boneplate.name = 'bonegeo';
+        boneplate.layers.set();
+        return boneplate;
     }
 
     static findRootBoneIn(startNode) {
@@ -206,6 +209,7 @@ export class EWBIK {
      * @param solvedOnly if true, will render all bones, not just the solver relevant ones.
      */
     showBones(radius = 0.5, solvedOnly = false) {
+        const minSize = 0.001;
         this.meshList.slice(0, 0);
         if (this.dirtySkelState) this._regenerateShadowSkeleton();
         for (const bone of this.bones) {
@@ -217,7 +221,12 @@ export class EWBIK {
                 } else {
                     matObj = {color: bone.color, transparent: true, opacity: 1.0 };
                 }
-                let bonegeo = this.makeBoneGeo(bone, bone.height ?? bone.parent?.height ?? 1, radius, matObj);
+                let hullPoints = []; 
+                for(let c of bone.childBones()) {
+                    hullPoints.push(orientation.worldToLocal(bone.localToWorld(c.position.clone())));
+                }
+                let thisRadius = bone.parent instanceof THREE.Bone? radius : radius/2; //sick and tired of giant root bones. Friggen whole ass trunks.
+                let bonegeo = this.makeBoneGeo(bone, Math.max(bone.height ?? bone.parent?.height ?? minSize, minSize), thisRadius, matObj, hullPoints);
                 orientation.add(bonegeo);
                 orientation.bonegeo = bonegeo;
                 bone.bonegeo = bonegeo;
@@ -461,11 +470,11 @@ export class EWBIK {
         }
     }
 
-    regenerateShadowSkeleton(force) {
-        this.dirtySkelState = true;
+    async regenerateShadowSkeleton(force) {
+        this.dirtySkelState = true;        
         this.pendingSolve = null; //invalidate any pending solve
-        if (force)
-            this._regenerateShadowSkeleton();
+        if (force)         
+            return this._regenerateShadowSkeleton();
         this.dirtyRate = true;
     }
 
@@ -473,9 +482,10 @@ export class EWBIK {
      * If this bone has no orientation transform, or does have one but the overwrite argument is true, infers an orientation for this bone. 
      * The orientation is inferred to be the smallest rotation which would cause the y-axis of the bone's transformFrame to point toward the average position of its child bones.
      * @param {THREE.Bone} fromBone
+     * @param {string} cane be either 'plate' or 'cone'. The former is appropriate where parents and children aren't in direct contact.
      */
-    inferOrientations(fromBone, override = false, depth = Infinity) {
-        this._maybeInferOrientation(fromBone, override, depth - 1);
+    inferOrientations(fromBone, mode, override = false, depth = Infinity) {
+        this._maybeInferOrientation(fromBone, mode, override, depth - 1);
         this.regenerateShadowSkeleton();
     }
 
@@ -501,34 +511,53 @@ export class EWBIK {
 
 
     }
-
-    _maybeInferOrientation(fromBone, override = false, depth = Infinity) {
+    _maybeInferOrientation(fromBone, mode = 'plate', override = false, depth = Infinity) {
         let orientation = fromBone.getIKBoneOrientation();
         if (orientation.placeholder == true || override) {
             let sumVec = this.pool.any_Vec3(0, 0, 0);
             let sumheight = fromBone.height ?? 0;
             let count = 0;
+            let minChild = 999;
+            let maxChild = -1;
+            let sum_sqheight = sumheight;
+            let childPoints = [];
             for (let cb of fromBone.childBones()) {
                 count++;
                 let childvec = this.pool.any_Vec3(cb.position.x, cb.position.y, cb.position.z);
-                sumheight += childvec.magSq(); //helps weigh in favor of further bones, because a lot of rigs do weird annoying things with twist bones.
+                let childMagSq = childvec.magSq();
+                let childMag = Math.sqrt(childMagSq);
+                sum_sqheight += childMagSq; //helps weigh in favor of further bones, because a lot of rigs do weird annoying things with twist bones.
+                sumheight += childMag; 
+                minChild = Math.max(Math.min(minChild, childMag), 0.01);
+                maxChild = Math.max(maxChild, sumheight);
                 sumVec.add(childvec);
+                childPoints.push(childvec);
             }
             let normeddir = sumVec;
             fromBone.height = fromBone.parent.height;
             if (count > 0) {
                 normeddir = sumVec.div(count).normalize();
-                fromBone.height = Math.sqrt(sumheight) / Math.sqrt(count);
+                if(mode == 'cone')
+                    fromBone.height = Math.sqrt(sum_sqheight)/Math.sqrt(count);
+                if(mode == 'plate')
+                    fromBone.height = minChild;
             }
-            let rotTo = Rot.fromVecs(EWBIK.YDIR, normeddir);
+
+            let rotTo = pcaOrientation(childPoints, fromBone, 
+                (vecs, refBasis) => {                    
+                    let rotTo = Rot.fromVecs(EWBIK.YDIR, normeddir);
+                    return rotTo; 
+                }
+            );
+            
             orientation.quaternion.set(rotTo.x, rotTo.y, rotTo.z, rotTo.w);
 
             fromBone.setIKBoneOrientation(orientation);
             for (let cb of fromBone.childBones()) {
-                this._maybeInferOrientation(cb, override, depth - 1);
+                this._maybeInferOrientation(cb, mode, override, depth - 1);
             }
         }
-        this.regenerateShadowSkeleton();
+        //this.regenerateShadowSkeleton();
     }
 
 
@@ -908,7 +937,7 @@ export class EWBIK {
         
         this.shadowSkel.solveToTargets(this.getDefaultStabilizingPassCount(), endOnIndex, doalign, callbacks, ds.currentIteration);
         ds.currentIteration = ds.currentIteration+1;
-        if(ds.currentIteration == iterations) {
+        if(ds.currentIteration >= iterations) {
             ds.solveCalls++;
             ds.currentIteration = 0;
         }
@@ -936,7 +965,7 @@ export class EWBIK {
         callbacks?.__initStep((callme, bs, ts, wb) => this.stepWiseUpdateResult(callme, bs, ts, wb));
         this.shadowSkel.debug_solve(iterations, this.getDefaultStabilizingPassCount(), solveFrom, (bs, ts, wb) => this.alignBoneToSolverResult(bs, ts, wb), callbacks);
         if(ds.completedIteration) {
-            if(ds.currentIteration == iterations) {
+            if(ds.currentIteration >= iterations) {
                 ds.solveCalls++;
                 ds.currentIteration = 0;
                 console.log('solve#: ' +ds.solveCalls +'\t:: itr :: ' +ds.currentIteration);

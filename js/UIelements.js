@@ -9,11 +9,15 @@ import { Bone, Vector3 } from "three";
 import { TransformState } from "./EWBIK/solver/SkeletonState.js";
 import { Vec3, any_Vec3 } from "./EWBIK/util/vecs.js";
 import { Rot } from "./EWBIK/util/Rot.js";
+import { ConvexGeometry } from "convexGeo";
+import { ChainRots, BoneRots, RayDrawer } from "./EWBIK/util/debugViz/debugViz.js";
 
-window.Vec3 = Vec3; 
+window.Vec3 = Vec3;
 window.Rot = Rot;
 
 window.armatures = [];
+window.meshLayer = 0;
+window.boneLayer = 1;
 window.pin_transformActive = false;
 window.bone_transformActive = false;
 window.pin_transformDragging = false;
@@ -255,58 +259,58 @@ window.makeUI = function () {
 </div>
 `;
 
-window.armatureSolve = () => { 
-    autoSolve = false;
-    let prevstate = interactionSolve;
-    interactionSolve = true;
-    window.contextBone?.parentArmature?.solve(window.contextBone);//doSolve(contextBone);
-    interactionSolve = prevstate
-    setDOMtoInternalState();
-}
-
-window.updateLoadStream = (xhr, loadId) => {
-    let hints = D.byid("loader-hints");
-    hints.classList.remove("hidden");
-    let thisBar = hints.qs(`.load-container[data-id="${loadId}"`);
-    if(thisBar == null) {
-        thisBar = window.loadingBar.cloneNode(true);
-        hints.appendChild(thisBar);
-        thisBar.dataset.id = loadId; 
-    }
-    thisBar.qs(".progress").style.width = (100*xhr.loaded/xhr.total).toFixed(3)+'%';
-    thisBar.qs(".progress-text").innerText = (100*xhr.loaded/xhr.total).toFixed(3)+"% loaded";
-    if(xhr.loaded == xhr.total) {
-        thisBar.qs(".progress-text").innerText  = "Instantiating Scene...";
+    window.armatureSolve = () => {
+        autoSolve = false;
+        let prevstate = interactionSolve;
+        interactionSolve = true;
+        window.contextBone?.parentArmature?.solve(window.contextBone);//doSolve(contextBone);
+        interactionSolve = prevstate
         setDOMtoInternalState();
     }
-}
 
-window.updateParseStream = (parseText, loadId) => {
-    let hints = D.byid("loader-hints");
-    let thisBar = hints.qs(`.load-container[data-id="${loadId}"`);
-    //thisBar.qs(".progress").style.width = (100*xhr.loaded/xhr.total).toFixed(3)+'%';
-    thisBar.qs(".progress-text").innerText = parseText;
-    if(parseText == null) {
-        thisBar.remove();
-        if(thisBar.children.length == 0) {
-            thisBar.classList.add("hidden");
+    window.updateLoadStream = (xhr, loadId) => {
+        let hints = D.byid("loader-hints");
+        hints.classList.remove("hidden");
+        let thisBar = hints.qs(`.load-container[data-id="${loadId}"`);
+        if (thisBar == null) {
+            thisBar = window.loadingBar.cloneNode(true);
+            hints.appendChild(thisBar);
+            thisBar.dataset.id = loadId;
+        }
+        thisBar.qs(".progress").style.width = (100 * xhr.loaded / xhr.total).toFixed(3) + '%';
+        thisBar.qs(".progress-text").innerText = (100 * xhr.loaded / xhr.total).toFixed(3) + "% loaded";
+        if (xhr.loaded == xhr.total) {
+            thisBar.qs(".progress-text").innerText = "Instantiating Scene...";
+            setDOMtoInternalState();
         }
     }
-}
 
-
-window.notifyStreamError = (error, loadId) => {
-    let hints = D.byid("loader-hints");
-    hints.classList.remove("hidden");
-    let thisBar = hints.qs(`.load-container[data-id="${loadId}"`);
-    if(thisBar == null) {
-        thisBar = window.loadingBar.cloneNode(true);
-        hints.appendChild(thisBar);
-        thisBar.dataset.id = loadId; 
+    window.updateParseStream = (parseText, loadId) => {
+        let hints = D.byid("loader-hints");
+        let thisBar = hints.qs(`.load-container[data-id="${loadId}"`);
+        //thisBar.qs(".progress").style.width = (100*xhr.loaded/xhr.total).toFixed(3)+'%';
+        thisBar.qs(".progress-text").innerText = parseText;
+        if (parseText == null) {
+            thisBar.remove();
+            if (thisBar.children.length == 0) {
+                thisBar.classList.add("hidden");
+            }
+        }
     }
-    thisBar.qs(".progress-text").innerText = error;
-}
- 
+
+
+    window.notifyStreamError = (error, loadId) => {
+        let hints = D.byid("loader-hints");
+        hints.classList.remove("hidden");
+        let thisBar = hints.qs(`.load-container[data-id="${loadId}"`);
+        if (thisBar == null) {
+            thisBar = window.loadingBar.cloneNode(true);
+            hints.appendChild(thisBar);
+            thisBar.dataset.id = loadId;
+        }
+        thisBar.qs(".progress-text").innerText = error;
+    }
+
     htmlcontrols.id = 'control-panel';
     document.querySelector("body").appendChild(htmlcontrols);
 
@@ -314,7 +318,7 @@ window.notifyStreamError = (error, loadId) => {
 
 
     D.byid('solve-btn').addEventListener('click', () => {
-       armatureSolve();
+        armatureSolve();
     });
 
     D.byid('solve-iteration-btn').addEventListener('click', () => {
@@ -340,161 +344,144 @@ ${bone.toString()}
     }
 
 
-    class RayDrawer {
-        constructor(source, scene, acquirefunc, updatefunc) {
-            this.raysgeo = [];
-            this.source = source;
-            this.acquirefunc = acquirefunc;
-            this.updatefunc = updatefunc;
-            this.scene = scene; 
-        }
-        makeLine(startPoint, endPoint, color) {
-            const geometry = new THREE.BufferGeometry().setFromPoints([startPoint, endPoint]);
-            const material = new THREE.LineBasicMaterial({ color: color });
-            const line = new THREE.Line(geometry, material);
-            this.scene.add(line);
-            return line;
-        }
-        die() {
-            for(let rg of this.raysgeo) {
-                this.scene.remove(rg);
-                rg.geometry.dispose();
-                rg.material.dispose();              
-            }
-            this.raysgeo = [];
-            this.scene.deta
-        }
-        draw(color) {
-            let results = this.acquirefunc(this);
-            for(let i=this.raysgeo.length-1; i>=results.length; i--) {
-                this.scene.remove(this.raysgeo[i]);
-                this.raysgeo[i].geometry.dispose();
-                this.raysgeo[i].material.dispose();
-                this.raysgeo.pop();
-            }
-            let i = this.raysgeo.length;
-            while(i < results.length) {
-                let rg = this.makeLine(any_Vec3(), results[i], color);
-                rg.correspondsTo = results[i];
-                this.raysgeo.push(rg); 
-                i++;
-            }
-            for(let rg of this.raysgeo) {
-                let newpoints = this.updatefunc(rg, this);
-                let newStartPoint = newpoints[0];
-                let newEndPoint = newpoints[1];
-                const positions = rg.geometry.attributes.position;
-                positions.array[0] = newStartPoint.x;
-                positions.array[1] = newStartPoint.y;
-                positions.array[2] = newStartPoint.z;
+    
 
-                positions.array[3] = newEndPoint.x;
-                positions.array[4] = newEndPoint.y;
-                positions.array[5] = newEndPoint.z;
 
-                positions.needsUpdate = true;
-            }
-        }
+    window.getArmatureGlobalized = (v, wb) => {
+        let globalized = new THREE.Vector3(v.x, v.y, v.z);
+        globalized = wb.forBone.directRef.parentArmature.armatureObj3d.localToWorld(globalized);
+        return globalized;
     }
 
     let prevwb = null;
     function initLines(wb) {
-        if(prevwb != wb && prevwb != null) {
-            prevwb?.chain.targetDrawer.die();
-            prevwb?.chain.tipDrawer.die();
+        if (prevwb != wb && prevwb != null) {
+            prevwb?.targetDrawer?.die();
+            prevwb?.tipDrawer?.die();
         }
         prevwb = wb;
-        let getGlobalizedBoneOrigin = (wb)  => {
-            let bOrg = wb.simLocalAxes.origin();
-            let globalizedOrig = new THREE.Vector3(bOrg.x,bOrg.y,bOrg.z);
-            globalizedOrig = wb.forBone.directRef.parentArmature.armatureObj3d.localToWorld(globalizedOrig);
-            return globalizedOrig;
-        }
-        if(wb.chain.targetDrawer == null) { 
-            wb.chain.targetDrawer = new RayDrawer(wb.chain, window.scene,
-            (drawer)=>{return drawer.source.boneCenteredTargetHeadings;},
-            (rg, drawer)=>{
-                    // boneOrig = wb.simLocalAxes.origin();
-                    let go = getGlobalizedBoneOrigin(wb);
-                    let p = rg.correspondsTo;
-                    const dir = new THREE.Vector3(p.x+go.x, p.y+go.y, p.z+go.z);
-                    //rg.correspondsTo.p2.subClone(boneOrig);
-                    return [go, dir];
-                }  
-            );
-        }
-        if(wb.chain.tipDrawer == null) { 
-            wb.chain.tipDrawer = new RayDrawer(wb.chain, window.scene,
-            (drawer)=>{return drawer.source.boneCenteredTipHeadings;},
-            (rg, drawer)=>{
-                    
-                    let go = getGlobalizedBoneOrigin(wb);
-                    let p = rg.correspondsTo;
 
-                    const dir = new THREE.Vector3(p.x+go.x, p.y+go.y, p.z+go.z);
-                    return [go, dir];
-                }  
+        let dirDraw = (rg, drawer) => {
+            let bo = wb.simLocalAxes.origin();
+            let p = rg.correspondsTo;            
+            let po = getArmatureGlobalized(p, wb);
+            let go = getArmatureGlobalized(bo, wb);
+            //console.log(go.y.toFixed(3) + ': ' + wb.forBone.ikd + ' (target)');
+            const dir = new THREE.Vector3(po.x + go.x, po.y + go.y, po.z + go.z);
+            rg.lastDir = dir;
+            //rg.correspondsTo.p2.subClone(boneOrig);
+            return [go, dir];
+        }
+
+
+        let rotDrawer = (rg, drawer) => {
+            let bo = wb.simLocalAxes.origin();
+            let p = rg.correspondsTo;
+            let po = getArmatureGlobalized(p, wb);
+            let go = getArmatureGlobalized(bo, wb);
+            //console.log(go.y.toFixed(3) + ': ' + wb.forBone.ikd + ' (target)');
+            const dir = new THREE.Vector3(po.x + go.x, po.y + go.y, po.z + go.z);
+            //rg.correspondsTo.p2.subClone(boneOrig);
+            return [go, dir];
+        }
+
+        if (wb.targetDrawer == null) {
+            wb.targetDrawer = new RayDrawer(wb, window.scene,
+                (drawer) => { return drawer.source.chain.boneCenteredTargetHeadings; },
+                dirDraw
+            );            
+        }
+        if (wb.tipDrawer == null) {           
+            wb.tipDrawer = new RayDrawer(wb, window.scene,
+                (drawer) => { return drawer.source.chain.boneCenteredTipHeadings; },
+                dirDraw
             );
+            if(wb.chain.rottrack == null) 
+                new ChainRots(wb.chain);
         }
     }
 
-    
-window.armatureStepDebug = () => {
-    interactionSolve = false;
-    autoSolve = false;
-    setDOMtoInternalState();
-    
-    let callbacks = new CallbacksSequence(
+
+    window.armatureStepDebug = () => {
+        interactionSolve = false;
+        autoSolve = false;
+        setDOMtoInternalState();
+
+        let callbacks = new CallbacksSequence(
+            {
+                beforeIteration: (bone, ts, wb) => {
+                    if (bone == window.contextBone) {
+                        let solveString = getdbgstring(bone, ts, wb);
+                        //console.log(solveString);
+                        window.intersectsDisplay.innerText = solveString;
+                    }
+                },
+                afterIteration: (bone, ts, wb) => {
+                    if (bone == window.contextBone) {
+                        let solveString = getdbgstring(bone, ts, wb);
+                        //console.log(solveString);
+                        window.intersectsDisplay.innerText = `${solveString}`;
+                    }
+                },
+            });
+        window.contextArmature?._debug_iteration(selectedBone, undefined, undefined);
+    }
+
+
+    window.bonestepcallbacks = new CallbacksSequence(
         {
             beforeIteration: (bone, ts, wb) => {
-                if (bone == window.contextBone) {
-                    let solveString = getdbgstring(bone, ts, wb);
-                    //console.log(solveString);
-                    window.intersectsDisplay.innerText = solveString;
-                }
+                //if (bone == window.contextBone) {
+                initLines(wb);
+                wb.targetDrawer.draw(new THREE.Color('grey'),
+                    new THREE.Color(0.6, 0.2, 0.2 ),//red
+                    new THREE.Color(0.6, 0.2, 0.6 ),//magenta
+                    new THREE.Color(0.2, 0.6, 0.2 ),//green
+                    new THREE.Color(0.5, 0.5, 0.1 ),//yellow
+                    new THREE.Color(0.2, 0.2, 0.8 ),//blue
+                    new THREE.Color(0.2, 0.6, 0.6 )//cyan
+                );
+                wb.tipDrawer.draw(new THREE.Color('white'),
+                    new THREE.Color(0.6, 0, 0 ),//red
+                    new THREE.Color(0.6, 0, 0.6 ),//magenta
+                    new THREE.Color(0, 0.6, 0 ),//green
+                    new THREE.Color(0.5, 0.5, 0 ),//yellow
+                    new THREE.Color(0, 0, 0.8 ),//blue
+                    new THREE.Color(0, 0.4, 0.6 )//cyan
+                );
+                wb.rotDraw.visible = false;
+                wb.rotDraw.update((v, wb)=> {return wb.simLocalAxes.origin().clone().add(v)}); 
+                console.log("before: ");
+                wb.rotDraw.visible = false;
+                //let solveString = getdbgstring(bone, ts, wb);
+                //console.log("pre");
+                //wb.simLocalAxes.toCons(true);
+                //window.intersectsDisplay.innerText = solveString;
+                //}
             },
             afterIteration: (bone, ts, wb) => {
-                if (bone == window.contextBone) {
-                    let solveString = getdbgstring(bone, ts, wb);
-                    //console.log(solveString);
-                    window.intersectsDisplay.innerText = `${solveString}`;
-                }
-            },
+                //if (bone == window.contextBone) {
+                wb.tipDrawer.draw(new THREE.Color('white'),
+                    new THREE.Color(1, 0, 0 ),//red
+                    new THREE.Color(1, 0, 1 ),//magenta
+                    new THREE.Color(0, 1, 0 ),//green
+                    new THREE.Color(1, 1, 0 ),//yellow
+                    new THREE.Color(0, 0, 1 ),//blue
+                    new THREE.Color(0, 1, 1 )//cyan
+                );
+                wb.rotDraw.update((v, wb)=> {return wb.simLocalAxes.origin().clone().add(v)});
+                wb.rotDraw.makeVisible();// = true; 
+                //}
+            }
         });
-    window.contextArmature?._debug_iteration(selectedBone, undefined, undefined);
-}
-
 
     window.bonestepDebug = () => {
         interactionSolve = false;
         autoSolve = false;
         setDOMtoInternalState();
-        const tempOrig = new THREE.Vector3(0,0,0);
-        let callbacks = new CallbacksSequence(
-            {
-                beforeIteration: (bone, ts, wb) => {
-                    if (bone == window.contextBone) {
-                        initLines(wb);
-                        wb.chain.targetDrawer.draw(new THREE.Color('red'));
-                        wb.chain.tipDrawer.draw(new THREE.Color('green'));
-                        //let solveString = getdbgstring(bone, ts, wb);
-                        //console.log("pre");
-                        //wb.simLocalAxes.toCons(true);
-                        //window.intersectsDisplay.innerText = solveString;
-                    }
-                },
-                afterIteration: (bone, ts, wb) => {
-                    if (bone == window.contextBone) {
-                        wb.chain.targetDrawer.draw(new THREE.Color('red'));
-                        wb.chain.tipDrawer.draw(new THREE.Color('green'));
-                        //console.log("post")
-                        //wb.simLocalAxes.toCons(true)
-                        //console.log("----");
-                        //window.intersectsDisplay.innerText = `${solveString}`;
-                    }
-                }
-            });
-        window.contextArmature?._debug_bone(selectedBone, undefined, callbacks);
+        const tempOrig = new THREE.Vector3(0, 0, 0);
+
+        window.contextArmature?._debug_bone(selectedBone, undefined, bonestepcallbacks);
     }
 
 
@@ -502,7 +489,7 @@ window.armatureStepDebug = () => {
         interactionSolve = false;
         autoSolve = false;
         setDOMtoInternalState();
-        
+
         let callbacks = new CallbacksSequence(
             {
                 beforePullback: (bone, ts, wb) => {
@@ -522,13 +509,13 @@ window.armatureStepDebug = () => {
                     }
                 }
             });
-            window.contextArmature?._doSinglePullbackStep(window.contextBone, undefined, 0, callbacks);
+        window.contextArmature?._doSinglePullbackStep(window.contextBone, undefined, 0, callbacks);
     }
 
     D.byid('pullback-btn').addEventListener('click', async () => {
         interactionSolve = false;
         autoSolve = false;
-        setDOMtoInternalState();        
+        setDOMtoInternalState();
         window.pullbackDebug(window.contextArmature);
     });
 
@@ -567,21 +554,29 @@ window.armatureStepDebug = () => {
         pinTranslateCtrls.enabled = e.target.checked;
     });
 
-    D.byid('pin-enabled').addEventListener("input", (event) => {
+    D.byid('pin-enabled').addEventListener("input", async (event) => {
         let state = event.target.checked;
         let diddisable = false;
         if (state) {
+            let newPin = null;
             if (window.contextPin != null) {
-                window.contextPin.disable();
+                window.contextPin.enable();
                 diddisable = true;
             } else if (window.contextBone != null) {
-                let newPin = new IKPin(window.contextBone);
+                newPin = new IKPin(window.contextBone);
             }
             makePinsList(1, window.contextBone.parentArmature.armatureObj3d, window.contextBone.parentArmature);
+            if (!autoSolve) {
+                await newPin?.forBone.parentArmature.regenerateShadowSkeleton(true);
+                render();
+            }
+
             window.contextBone.parentArmature.showBones(0.1, true);
             updateGlobalPinLists();
             if (diddisable) {
                 select(window.contextPin.forBone);
+            } else {
+                select(newPin);
             }
         } else if (window.contextPin != null) {
             window.contextPin.disable();
