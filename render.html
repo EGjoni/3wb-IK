@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Three.js Skeleton Interaction</title>
+    <script type="importmap">
+        {
+          "imports": {
+            "three": "https://unpkg.com/three@latest/build/three.module.js",
+            "orbitControls": "https://unpkg.com/three/examples/jsm/controls/OrbitControls.js",
+            "effectComposer": "https://unpkg.com/three/examples/jsm/postprocessing/EffectComposer.js",
+            "renderPass": "https://unpkg.com/three/examples/jsm/postprocessing/RenderPass.js",
+            "shaderPass": "https://unpkg.com/three/examples/jsm/postprocessing/ShaderPass.js",
+            "transformControls": "https://unpkg.com/three/examples/jsm/controls/TransformControls.js",
+            "gltf" : "https://unpkg.com/three/examples/jsm/loaders/GLTFLoader.js",
+            "vrm" : "https://unpkg.com/@pixiv/three-vrm@2.1.0/lib/three-vrm.module.js"
+          }
+        }
+    </script>
+    <style>
+        body {
+            margin: 0;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <script src="js/sceneStuff.js"></script>
+    <script type="module">
+        const THREE = await import('three');
+        import { TransformControls } from 'transformControls';
+        import { OrbitControls } from 'orbitControls';
+        import { EffectComposer } from "effectComposer";
+        import { RenderPass } from "renderPass";
+        import { ShaderPass } from "shaderPass";
+        import { GLTFLoader } from 'gltf';
+        import { VRMLoaderPlugin } from 'vrm';
+        import { EWBIK } from "./js/EWBIK/EWBIK.js";
+        import { IKNode, TrackingNode } from "./js/EWBIK/util/IKNodes.js";
+        import { Rot } from "./js/EWBIK/util/Rot.js";
+        import { LayeredRender } from "./js/LayeredRender.js"
+        import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
+        import { Rest } from "./js/EWBIK/betterbones/Constraints/Rest/Rest.js";
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const geometry = new THREE.BoxGeometry();
+
+        const blueMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+        const blueCube = new THREE.Mesh(geometry, blueMaterial);
+        scene.add(blueCube);
+
+        const greenMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const greenCube = new THREE.Mesh(geometry, greenMaterial);
+        greenCube.position.x = 0.5; // Position it next to the blue cube
+        greenCube.position.y = 0.5;
+        blueCube.add(greenCube);
+
+        const redMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        const redCube = new THREE.Mesh(geometry, redMaterial);
+        redCube.position.x = -0.5; // Position it on the other side of the blue cube
+        greenCube.position.y = 0.5;
+        blueCube.add(redCube);
+
+        // Camera positioning
+        camera.position.z = 10;
+        // Define layers
+        const layer1 = 0; // For blue and red cubes
+        const layer2 = 1; // For the green cube
+
+        // Assign layers to cubes
+        blueCube.layers.set(layer1);
+        redCube.layers.set(layer1);
+        greenCube.layers.set(layer2);
+
+        // Instantiate the MultiRenderTargetComposer with your renderer, callbacks, and viewport size
+        window.rendlrs = new LayeredRender(renderer, 
+            window.innerWidth, 
+            window.innerHeight, 
+            (renderer, target) => { //renders mesh stuff
+                camera.layers.set(layer1);
+                renderer.render(scene, camera);
+            },
+            (renderer, target) => { //renders bones
+                camera.layers.set(layer2);
+                renderer.render(scene, camera);
+            });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            // Rotate blue cube clockwise
+            blueCube.rotation.y += 0.01;
+          
+            greenCube.rotation.y += 0.02;
+          
+            redCube.rotation.y -= 0.02;
+            rendlrs.render();
+        }
+
+        animate();
+    </script>
+</body>
+
+</html>

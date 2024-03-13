@@ -1,6 +1,7 @@
 
 /**untyped vec3, use for any frequent instantiatons, as its faster to create than floatbuffer*/
 
+
 export class Vec3 {
     baseIdx = 0;
     dataBuffer = [0, 0, 0];
@@ -34,8 +35,8 @@ export class Vec3 {
     }
 
     /**takes this this.cross input and returns the result as a new vector*/
-    crossCopy(input) {
-        let newVec = this.copy();
+    crossClone(input) {
+        let newVec = this.clone();
         newVec.setComponents(
             this.y * input.z - this.z * input.y,
             this.z * input.x - this.x * input.z,
@@ -44,20 +45,14 @@ export class Vec3 {
         return newVec;
     }
 
-    copy() {
-        return new_Vec3(this.x, this.y, this.z);
+    clone() {
+        return new Vec3(this.x, this.y, this.z);
     }
 
-    toString() {
-        return '('+this.x.toFixed(4)+', '+this.y.toFixed(4)+', '+this.z.toFixed(4)+', )';
-    }
-    toConsole() {
-        console.log(this.toString());
-    }
-
+   
     getOrthogonal() {
         const { x, y, z } = this;
-        let result = this.copy();
+        let result = this.clone();
         result.setComponents(0, 0, 0);
         let threshold = this.mag() * 0.6;
         if (threshold > 0) {
@@ -93,7 +88,7 @@ export class Vec3 {
     }
 
     /** writes thes components of this vector into the given array. If no aray is given, one will be created and returned**/
-    intoArray(into = new Array(this.dims)) {
+    toArray(into = new Array(this.dims)) {
         for (let i = 0; i < this.dims; i++) {
             into[i] = this.dataBuffer[this.baseIdx+i];
         }
@@ -104,6 +99,21 @@ export class Vec3 {
         if (vec instanceof Vec3) return vec.components;
         else if (Array.isArray(vec)) return vec;
         else throw Error('Unsupported vector format');
+    }
+
+    /**swap the values of these variables */
+    static swap(v1, v2) {        
+        v1.components[v1.baseIdx] = v1.components[v1.baseIdx] ^ v2.components[v2.baseIdx];
+        v2.components[v2.baseIdx] = v1.components[v1.baseIdx] ^ v2.components[v2.baseIdx];
+        v1.components[v1.baseIdx] = v1.components[v1.baseIdx] ^ v2.components[v2.baseIdx];
+
+        v1.components[v1.baseIdx+1] = v1.components[v1.baseIdx+1] ^ v2.components[v2.baseIdx+1];
+        v2.components[v2.baseIdx+1] = v1.components[v1.baseIdx+1] ^ v2.components[v2.baseIdx+1];
+        v1.components[v1.baseIdx+1] = v1.components[v1.baseIdx+1] ^ v2.components[v2.baseIdx+1];
+
+        v1.components[v1.baseIdx+2] = v1.components[v1.baseIdx+2] ^ v2.components[v2.baseIdx+2];
+        v2.components[v2.baseIdx+2] = v1.components[v1.baseIdx+2] ^ v2.components[v2.baseIdx+2];
+        v1.components[v1.baseIdx+2] = v1.components[v1.baseIdx+2] ^ v2.components[v2.baseIdx+2];
     }
 
     mag() {
@@ -189,8 +199,8 @@ export class Vec3 {
         return this;
     }
 
-    divCopy(scalar) {
-        let result = this.copy();
+    divClone(scalar) {
+        let result = this.clone();
         result.div(scalar);
         return result;
     }
@@ -202,8 +212,8 @@ export class Vec3 {
         return this;
     }
 
-    multCopy(scalar) {
-        let result = this.copy();
+    multClone(scalar) {
+        let result = this.clone();
         result.mult(scalar);
         return result;
     }
@@ -233,6 +243,13 @@ export class Vec3 {
         return this;
     }
 
+    square() {
+        const {x, y, z} = this;
+        this.x *= x; 
+        this.y *= y;
+        this.z *= z;
+        return this;
+    }
 
     add(v) {
         this.x += v.x;
@@ -241,8 +258,8 @@ export class Vec3 {
         return this;
     }
 
-    addCopy(v) {
-        let result = this.copy();
+    addClone(v) {
+        let result = this.clone();
         result.add(v);
         return result;
     }
@@ -254,17 +271,22 @@ export class Vec3 {
         return this;
     }
 
-    subCopy(v) {
-        let result = this.copy();
+    subClone(v) {
+        let result = this.clone();
         result.sub(v);
         return result;
     }
 
     normalize() {
-        const magnitude = this.mag();
-        if (magnitude !== 0) {
-            this.div(magnitude);
+        const {x, y, z} = this;
+        const sum = x*x + y*y + z*z;
+        if(Math.abs(sum - 1) < Number.EPSILON) {
+            return this;
         }
+        const sumsqrt = Math.sqrt(sum);
+        this.x /= sumsqrt;
+        this.y /= sumsqrt;
+        this.z /= sumsqrt;
         return this;
     }
 
@@ -272,6 +294,66 @@ export class Vec3 {
         if (vec instanceof Vec3) return vec.components;
         else if (Array.isArray(vec)) return vec;
         else throw Error('Unsupported vector format');
+    }
+
+    /**returns this vector as color components in the specified magnitude range
+     * x = red, y= green, z= blue. 
+     * The range defines the half the width of a cube. origin maps to gray. 
+     * black maps to (-range, -range, -range) 
+    */
+    asColor(range) {
+        return Vec3.vecAsColor(this.x, this.y, this.z, range);
+    }
+
+    /**
+     * returns a css color string for this vector.
+     *  x = red, y= green, z= blue. 
+     * The range defines the half the width of a cube. origin maps to gray. 
+     * black maps to (-range, -range, -range) 
+     * **/
+    asConsoleString(range) {
+        return Vec3.vecAsConsoleString(this.x, this.y, this.z, range);
+    }
+
+    static vecAsColor(x, y, z, range) {
+        const inverseLerp = (min, max, value) => {
+            return Math.min(Math.max((value - min) / (max - min), 0), 1);
+        };
+        const toColorValue = (normalized) => {
+            return Math.round(normalized * 255);
+        }
+        const togamma = (normalized) => {
+            return Math.pow(normalized, 2.2); //because dark-mode. always.
+        }
+        const r = inverseLerp(-range, range, x);
+        const g = inverseLerp(-range, range, y);
+        const b = inverseLerp(-range, range, z);
+        const rgamma = togamma(r);
+        const ggamma = togamma(g);
+        const bgamma = togamma(b);
+        return {r: toColorValue(rgamma), g: toColorValue(ggamma), b:toColorValue(bgamma), 
+            gamma_norm:{r: rgamma, g:ggamma, b:bgamma},
+            raw_norm: {r: r, g:g, b:b},
+        }; 
+    }
+
+    static vecAsConsoleString(x, y, z, range) {
+        const baseString = Vec3.vecAsString(x, y, z);
+        const colString = Vec3.vecAsColor(x, y, z, range);
+        
+        return {stringContent: baseString, consoleContent: `%c ${baseString}`, style:`color: rgb(${colString.r}, ${colString.g}, ${colString.b})`}
+    }
+
+    static vecAsString(x, y, z) {
+        return '('+x.toFixed(3)+', '+y.toFixed(3)+', '+z.toFixed(3)+')';
+    }
+
+    toString() {
+        return Vec3.vecAsString(this.x, this.y, this.z);
+    }
+    toConsole(range = 1) {
+        let consoleString = this.asConsoleString(range);
+        console.log(`${consoleString.stringContent} %c▇`, `${consoleString.style}`);
     }
 
     get components() {
@@ -293,44 +375,50 @@ export class Vec3 {
 }
 
 
+/**a pool for 3vectors backed by an array.
+ * 
+ * repetetive as hell because I don't trust JIT compilers
+ */
 export class Vec3Pool {
-    static persistentPool = [];
-    static reclaimedPool = []; //stores vecs that were previously
-    static inProgressPool = [];
-    static persistentBuffer;
-    static tempSize = 10000;
-    static tempPool = null;// new Array(this.tempSize);
-    static tempBuffer; //= new Float64Array(tempSize * 3);
-    static isFinalized = false;
-    static lru = -1;
+    persistentPool = [];
+    reclaimedPool = []; //stores vecs that were previously
+    inProgressPool = [];
+    persistentBuffer;
+    tempSize = 30000;
+    tempPool = null;// new Array(this.tempSize);
+    tempBuffer; //= new Float64Array(tempSize * 3);
+    isFinalized = false;
+    lru = -1;
 
-    static reclaim() {
-        Vec3Pool.isFinalized = false;  
-        Vec3Pool.lru = -1;
-        if(Vec3Pool.persistentPool?.length > 0) {
-            Vec3Pool.reclaimedPool.push(...Vec3Pool.persistentPool);
-            Vec3Pool.inProgressPool = [];
-            Vec3Pool.persistentPool = [];
+    constructor(tempSize = 10000) {
+        this.setTempPoolSize(tempSize);
+    }
+
+    reclaim() {
+        this.isFinalized = false;  
+        this.lru = -1;
+        if(this.persistentPool?.length > 0) {
+            this.reclaimedPool.push(...this.persistentPool);
+            this.inProgressPool = [];
+            this.persistentPool = [];
         }
-        Vec3Pool.releaseAll();
-        console.log("RECLAIMED: " + Vec3Pool.reclaimedPool.length);
+        this.releaseAll();
+        console.log("RECLAIMED: " + this.reclaimedPool.length);
     }
 
-    static init() {
-        Vec3Pool.setTempPoolSize(Vec3Pool.tempSize);
-    }
-    static acquire(x = 0, y = 0, z = 0) {
-        if(Vec3Pool.tempPool == null) Vec3Pool.init();
-        if (Vec3Pool.isFinalized) {
-            let isFree = false;
-            let vec;
+    
+    acquire(x=0, y=0, z=0) {
+        if(this.tempPool == null) 
+            this.setTempPoolSize(this.tempSize);
+        if (this.isFinalized) {
+            //let vec;
             //let attempts =0;
-            //while(!isFree && attempts < Vec3Pool.tempPool.length) {
-                /*if(Vec3Pool.lru >= Vec3Pool.length) { 
-                    if(Vec3Pool.assumeFree) {
-                        Vec3Pool.assumeFree = false;
+            //while(!isFree && attempts < this.tempPool.length) {
+                /*if(this.lru >= this.length) { 
+                    if(this.assumeFree) {
+                        this.assumeFree = false;
                         //attempts = 0;
-                    } else if(attempts >= Vec3Pool.tempPool.length) {
+                    } else if(attempts >= this.tempPool.length) {
                         console.warn(`
                         ran out of vectors after ${attempts} attempts! Make sure you release any you're not using! You should either
                         1. call releaseAll when you're at a point in your logic where you're sure any vectors you didn't call .finalize() for are free, or o
@@ -339,40 +427,75 @@ export class Vec3Pool {
                         `)
                     }
                 }*/
-                Vec3Pool.lru = (Vec3Pool.lru + 1) % Vec3Pool.tempPool.length;
-                vec = Vec3Pool.tempPool[Vec3Pool.lru];
-                //isFree = vec.amFree || Vec3Pool.assumeFree
+                this.lru = (this.lru + 1) % this.tempPool.length;
+                const vec = this.tempPool[this.lru];        
+                const odb = this.tempBuffer; 
+                const obase = vec.baseIdx;
+                odb[obase] = x;
+                odb[obase+1] = y; 
+                odb[obase+2] = y;
+                //isFree = vec.amFree || this.assumeFree
                 //vec.amFree = false;
                 //attempts++;
             /*}
             if(attempts > 10) {
-                console.log("attempted : "+attempts+" before finding " +Vec3Pool.lru);
+                console.log("attempted : "+attempts+" before finding " +this.lru);
             }*/
-            vec.x = x; vec.y =y; vec.z = z;
-            //console.log("temp: "+Vec3Pool.lru);
+            //vec.x = x; vec.y =y; vec.z = z;
+            //console.log("temp: "+this.lru);
             return vec;
         } else {
             let newV;
-            if(Vec3Pool.reclaimedPool.length > 0) {
-                newV = Vec3Pool.reclaimedPool.pop();
+            if(this.reclaimedPool.length > 0) {
+                newV = this.reclaimedPool.pop();
                 newV.x = x; newV.y =y; newV.z = z;
-                Vec3Pool.inProgressPool.push(newV);
+                this.inProgressPool.push(newV);
             } else {
                 newV = new Vec3(x, y, z);
-                Vec3Pool.inProgressPool.push(newV);
+                this.inProgressPool.push(newV);
+            }
+            return newV;
+        }
+    }
+
+    acquirefv(iv) {
+        if(this.tempPool == null) 
+            this.setTempPoolSize(this.tempSize);
+        if (this.isFinalized) {
+            this.lru = (this.lru + 1) % this.tempPool.length;
+            const vec = this.tempPool[this.lru];        
+            const ibase = iv.baseIdx;
+            const idb = iv.dataBuffer;         
+            const odb = this.tempBuffer; 
+            const obase = vec.baseIdx;
+            odb[obase] = idb[ibase]; 
+            odb[obase+1] = idb[ibase+1]; 
+            odb[obase+2] = idb[ibase+2]; 
+            return vec;
+        } else {
+            let newV;
+            if(this.reclaimedPool.length > 0) {
+                newV = this.reclaimedPool.pop();
+                newV.x = x; newV.y =y; newV.z = z;
+                this.inProgressPool.push(newV);
+            } else {
+                newV = new Vec3(x, y, z);
+                this.inProgressPool.push(newV);
             }
             return newV;
         }
     }
 
 
-    static temp_acquire(x=0, y=0, z=0) {
-        if(Vec3Pool.tempPool == null) Vec3Pool.init();
+
+    temp_acquire(x=0, y=0, z=0) {
+        if(this.tempPool == null) 
+            this.setTempPoolSize(this.tempSize);
             //let isFree = false;
             //let vec = null;
             //let attempts = 0;
-            /*while(!isFree && attempts < 10) {//Vec3Pool.tempPool.length) {
-                if(Vec3Pool.lru >= Vec3Pool.tempPool.length) { 
+            /*while(!isFree && attempts < 10) {//this.tempPool.length) {
+                if(this.lru >= this.tempPool.length) { 
                     if(assumeFree) {
                         assumeFree = false;
                     } else {
@@ -384,45 +507,65 @@ export class Vec3Pool {
                         `)
                     }
                 }*/
-                Vec3Pool.lru = (Vec3Pool.lru + 1) % Vec3Pool.tempPool.length;
-                const vec = Vec3Pool.tempPool[Vec3Pool.lru];
+        this.lru = (this.lru + 1) % this.tempPool.length;
+        const vec = this.tempPool[this.lru];
                 //isFree = vec.amFree;
                 //attempts++
             //}
             /*if(attempts > 10) {
-                console.log("attempted : "+attempts+"TEMP before finding " +Vec3Pool.lru);
+                console.log("attempted : "+attempts+"TEMP before finding " +this.lru);
             }
             vec.amFree = true; // since the user indicated that they will be discarding this anyway*/
-            vec.x = x; vec.y =y; vec.z = z;
-            return vec;
+        const odb = this.tempBuffer; 
+        const obase = vec.baseIdx;
+        odb[obase] = x; 
+        odb[obase+1] = y; 
+        odb[obase+2] = z; 
+        return vec;
     }
 
-    static setTempPoolSize(newSize) {
-        Vec3Pool.tempSize = newSize
-        Vec3Pool.tempBuffer = new Float64Array(newSize*3);
-        Vec3Pool.tempPool = [];
-        for(let i=0; i<Vec3Pool.tempSize; i++) {
+    temp_acquirefv(iv) {
+        if(this.tempPool == null) 
+            this.setTempPoolSize(this.tempSize);
+        this.lru = (this.lru + 1) % this.tempPool.length;
+
+        const vec = this.tempPool[this.lru];
+        const ibase = iv.baseIdx;
+        const idb = iv.dataBuffer;         
+        const odb = this.tempBuffer; 
+        const obase = vec.baseIdx;
+        odb[obase] = idb[ibase]; 
+        odb[obase+1] = idb[ibase+1]; 
+        odb[obase+2] = idb[ibase+2]; 
+        return vec;
+    }
+
+    setTempPoolSize(newSize) {
+        this.tempSize = newSize
+        this.tempBuffer = new Float64Array(newSize*3);
+        this.tempPool = [];
+        for(let i=0; i<this.tempSize; i++) {
             const vec = new Vec3();
             vec.amFree = true;
-            vec.dataBuffer = Vec3Pool.tempBuffer;
+            vec.dataBuffer = this.tempBuffer;
             vec.baseIdx = i*3;
-            Vec3Pool.tempPool.push(vec.release());
+            this.tempPool.push(vec.release());
         }
     }
 
-    static finalize() {
-        if(Vec3Pool.reclaimedPool.length > 0) {
-            Vec3Pool.persistentPool = Vec3Pool.inProgressPool;
-            Vec3Pool.inProgressPool = [];   
-            Vec3Pool.isFinalized = true;         
+    finalize() {
+        if(this.reclaimedPool.length > 0) {
+            this.persistentPool = this.inProgressPool;
+            this.inProgressPool = [];   
+            this.isFinalized = true;         
             return;
         }
-        const prevBuffer = Vec3Pool.persistentBuffer;
-        Vec3Pool.persistentBuffer = new Float64Array(Vec3Pool.inProgressPool.length * 3);
-        const persistentBuffer = Vec3Pool.persistentBuffer;
-        for (let i = 0; i < Vec3Pool.inProgressPool.length; i++) {
+        const prevBuffer = this.persistentBuffer;
+        this.persistentBuffer = new Float64Array(this.inProgressPool.length * 3);
+        const persistentBuffer = this.persistentBuffer;
+        for (let i = 0; i < this.inProgressPool.length; i++) {
             const baseIdx = i*3;
-            const vec = Vec3Pool.inProgressPool[i];
+            const vec = this.inProgressPool[i];
             const vx = vec.x, vy = vec.y, vz = vec.z;
             persistentBuffer[baseIdx] = vx;
             persistentBuffer[baseIdx+1] = vy;
@@ -431,44 +574,87 @@ export class Vec3Pool {
             vec.baseIdx = baseIdx;
         }
 
-        Vec3Pool.persistentPool = Vec3Pool.inProgressPool;
-        Vec3Pool.inProgressPool = [];
-        console.log("REMAINING: " +Vec3Pool.reclaimedPool);
-        Vec3Pool.isFinalized = true;
-        Vec3Pool.lru = -1;
+        this.persistentPool = this.inProgressPool;
+        this.inProgressPool = [];
+        console.log("REMAINING: " +this.reclaimedPool);
+        this.isFinalized = true;
+        this.lru = -1;
     }
 
     /**
      * Let the VectorPool know that you're done with all of the temporary vectors you've been using so it doesn't need to yell at you.
      */
-    static releaseAll() {
-        Vec3Pool.lru = -1;
-        Vec3Pool.assumeFree = true;
+    releaseAll() {
+        this.lru = -1;
+        this.assumeFree = true;
     }
 
+    new_Vec3(x=0, y=0, z=0) {
+        return this.acquire(x, y, z);
+    }
+
+    any_Vec3(x=0, y=0, z=0) {
+        return this.temp_acquire(x, y, z);
+    }
+
+    /**
+     * new pooled vec3 from vec
+     * @param {*} x 
+     * @param {*} y 
+     * @param {*} z 
+     * @returns 
+     */
+    new_Vec3fv(v) {
+        return this.acquirefv(v);
+    }
+
+    any_Vec3fv(v) {
+        return this.temp_acquirefv(v);
+    }
 }
 
+window.globalVecPool = new Vec3Pool(1000);
 
 /**
- * create a pooled Vec3 object. Any calls to this function prior to calling Vec3Pool.finalize() will instantiate a new Vec3. Any calls to it after
- * will recycle an existing Vec3 from the temporary Vec3 pool (which is distinct from the finalized pool).
- * @param {Number} x 
- * @param {Number} y 
- * @param {Number} z 
- * @returns {Vec3} a potentially pool.
- */
-export function new_Vec3(x=0, y=0, z=0) {
-    return Vec3Pool.acquire(x, y, z);
-}
-
-
-/**
- * claim a pooled temporary Vec3 object. Will always recycle from the temp pool.
- * @param {Number} x 
- * @param {Number} y 
- * @param {Number} z 
- * @returns {Vec3} a potentially pool.
+ * ephemeral vector from components
+ * @param {Number} x,
+ * @param {Number} y,
+ * @param {Number} z,
+ * @returns {Vec3} an ephemeral vector from the default pool, or creates a new one if there is no pool
  */
 export function any_Vec3(x=0, y=0, z=0) {
-    return Vec3Pool.temp_acquire(x, y, z);
+    return globalVecPool.temp_acquire(x, y, z);
 }
+
+/**
+ * ephemeral vector from another vector
+ * @param {Vec3} x
+ * @returns {Vec3} an ephemeral vector from the default pool, or creates a new one if there is no pool
+ */
+export function any_Vec3fv(v) {
+    return globalVecPool.temp_acquirefv(v);
+}
+
+export class NoPool {
+    
+    new_Vec3(x=0, y=0, z=0) {
+        return new Vec3(x, y, z);
+    }
+    any_Vec3(x=0, y=0, z=0) {
+        return new Vec3(x, y, z); 
+    }
+
+    new_Vec3fv(v) {
+        return new Vec3(v.x, v.y, v.z); 
+    }
+
+    any_Vec3fv(v) {
+        return new Vec3(v.x, v.y, v.z); 
+    }
+    releaseAll() {
+        
+    }
+}
+
+
+window.noPool = new NoPool();

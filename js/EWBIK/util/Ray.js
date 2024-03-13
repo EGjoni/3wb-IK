@@ -1,12 +1,13 @@
 
-import { Vec3, new_Vec3} from "./vecs.js";
+import { Vec3, any_Vec3} from "./vecs.js";
 
 export class Ray {
     
-    constructor(p1, p2) {
-        this.workingVector = new_Vec3();
-        this.p1 = new_Vec3();
-        this.p2 = new_Vec3();
+    constructor(p1, p2, pool = noPool) {
+        this.pool = pool;
+        this.workingVector = this.pool.new_Vec3();
+        this.p1 = this.pool.new_Vec3();
+        this.p2 = this.pool.new_Vec3();
         this.setP1(p1);
         this.setP2(p2);
     }
@@ -40,8 +41,8 @@ export class Ray {
 
     setHeading(setTo) {
         if (!this.p2) {
-            if (!this.p1) this.p1 = new_Vec3();
-            this.p2 = this.p1.copy();
+            if (!this.p1) this.p1 = this.pool.new_Vec3();
+            this.p2 = this.p1.clone();
         }
         this.workingVector.set(setTo);
         this.workingVector.add(this.p1);
@@ -55,7 +56,7 @@ export class Ray {
         return storeIn;
     }
     origin() {
-        return this.p1.copy();
+        return this.p1.clone();
     }
     mag() {
         return this.heading().mag();
@@ -92,13 +93,13 @@ export class Ray {
         return result;
     }
     getDivideddBy(divisor) {
-        let result = this.heading().copy();
+        let result = this.heading().clone();
         result.mult(divisor);
         result.add(this.p1);
         return result;
     }
     getScaledTo(scale) {
-        let result = this.heading().copy();
+        let result = this.heading().clone();
         result.normalize();
         result.mult(scale);
         result.add(this.p1);
@@ -212,7 +213,7 @@ export class Ray {
         this.p2 = vectorNArray.push1(this.p2);
     }
 
-    copy() {
+    clone() {
         return new Ray(this.p1, this.p2);
     }
 
@@ -237,7 +238,7 @@ export class Rayd extends Ray {
     getRayScaledTo(scale) {
         return new Rayd(this.p1, this.getScaledTo(scale));
     }
-    copy() {
+    clone() {
         return new Rayd(this.p1, this.p2);
     }
 }
@@ -254,7 +255,7 @@ export class Rayf extends Ray {
     getRayScaledTo(scale) {
         return new Rayf(this.p1, this.getScaledTo(scale));
     }
-    copy() {
+    clone() {
         return new Rayf(this.p1, this.p2);
     }
 }

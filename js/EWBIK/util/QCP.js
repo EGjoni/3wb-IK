@@ -1,4 +1,4 @@
-import {Vec3, any_Vec3, new_Vec3} from "./vecs.js";
+import {Vec3, any_Vec3} from "./vecs.js";
 import {Rot} from "./Rot.js";
 
 export class QCP {	
@@ -138,7 +138,7 @@ export class QCP {
 		} else {
 			if (!this.innerProductCalculated)
 				this.innerProduct(y, x);
-			calcWeightedRmsd(wsum);
+			this.calcWeightedRmsd(this.wsum);
 		}
 	}
 
@@ -363,12 +363,18 @@ export class QCP {
 							/*
 							 * if qsqr is still too small, return the identity rotation
 							 */
-							return new Rot();
+							return Rot.IDENTITY;
 						}
 					}
 				}
 			}
-			return new Rot(q1, q2, q3, q4, true);
+
+			let min = q1;
+			min = q2 < min ? q2 : min; 
+			min = q3 < min ? q3: min;
+			min = q4 < min ? q4 : min;
+
+			return new Rot(-q2, -q3, -q4, q1, true);
 		}
 	}
     /**

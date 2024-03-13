@@ -1,844 +1,1001 @@
-import { Vec3, new_Vec3, any_Vec3 } from "./vecs.js";
-import { Ray } from "./Ray.js";
+import { Vec3, any_Vec3, any_Vec3fv } from './vecs.js';
+
+class QuaternionD {
+
+	constructor( x = 0, y = 0, z = 0, w = 1 ) {
+
+		this.isQuaternion = true;
+
+		this._x = x;
+		this._y = y;
+		this._z = z;
+		this._w = w;
+
+	}
+
+	get x() {
+
+		return this._x;
+
+	}
+
+	set x( value ) {
+
+		this._x = value;
+		this._onChangeCallback();
+
+	}
+
+	get y() {
+
+		return this._y;
+
+	}
+
+	set y( value ) {
+
+		this._y = value;
+		this._onChangeCallback();
+
+	}
+
+	get z() {
+
+		return this._z;
+
+	}
+
+	set z( value ) {
+
+		this._z = value;
+		this._onChangeCallback();
+
+	}
+
+	get w() {
+
+		return this._w;
+
+	}
+
+	set w( value ) {
+
+		this._w = value;
+		this._onChangeCallback();
+
+	}
+
+	set( x, y, z, w ) {
+
+		this._x = x;
+		this._y = y;
+		this._z = z;
+		this._w = w;
+
+		this._onChangeCallback();
+
+		return this;
+
+	}
+
+	clone() {
+
+		return new this.constructor( this._x, this._y, this._z, this._w );
+
+	}
+
+	copy( quaternion ) {
+
+		this._x = quaternion.x;
+		this._y = quaternion.y;
+		this._z = quaternion.z;
+		this._w = quaternion.w;
+
+		this._onChangeCallback();
+
+		return this;
+
+	}
+
+	setFromEuler( euler, update = true ) {
+
+		const x = euler._x, y = euler._y, z = euler._z, order = euler._order;
+
+		// http://www.mathworks.com/matlabcentral/fileexchange/
+		// 	20696-function-to-convert-between-dcm-euler-angles-quaternions-and-euler-vectors/
+		//	content/SpinCalc.m
+
+		const cos = Math.cos;
+		const sin = Math.sin;
+
+		const c1 = cos( x / 2 );
+		const c2 = cos( y / 2 );
+		const c3 = cos( z / 2 );
+
+		const s1 = sin( x / 2 );
+		const s2 = sin( y / 2 );
+		const s3 = sin( z / 2 );
+
+		switch ( order ) {
+
+			case 'XYZ':
+				this._x = s1 * c2 * c3 + c1 * s2 * s3;
+				this._y = c1 * s2 * c3 - s1 * c2 * s3;
+				this._z = c1 * c2 * s3 + s1 * s2 * c3;
+				this._w = c1 * c2 * c3 - s1 * s2 * s3;
+				break;
+
+			case 'YXZ':
+				this._x = s1 * c2 * c3 + c1 * s2 * s3;
+				this._y = c1 * s2 * c3 - s1 * c2 * s3;
+				this._z = c1 * c2 * s3 - s1 * s2 * c3;
+				this._w = c1 * c2 * c3 + s1 * s2 * s3;
+				break;
+
+			case 'ZXY':
+				this._x = s1 * c2 * c3 - c1 * s2 * s3;
+				this._y = c1 * s2 * c3 + s1 * c2 * s3;
+				this._z = c1 * c2 * s3 + s1 * s2 * c3;
+				this._w = c1 * c2 * c3 - s1 * s2 * s3;
+				break;
+
+			case 'ZYX':
+				this._x = s1 * c2 * c3 - c1 * s2 * s3;
+				this._y = c1 * s2 * c3 + s1 * c2 * s3;
+				this._z = c1 * c2 * s3 - s1 * s2 * c3;
+				this._w = c1 * c2 * c3 + s1 * s2 * s3;
+				break;
+
+			case 'YZX':
+				this._x = s1 * c2 * c3 + c1 * s2 * s3;
+				this._y = c1 * s2 * c3 + s1 * c2 * s3;
+				this._z = c1 * c2 * s3 - s1 * s2 * c3;
+				this._w = c1 * c2 * c3 - s1 * s2 * s3;
+				break;
+
+			case 'XZY':
+				this._x = s1 * c2 * c3 - c1 * s2 * s3;
+				this._y = c1 * s2 * c3 - s1 * c2 * s3;
+				this._z = c1 * c2 * s3 + s1 * s2 * c3;
+				this._w = c1 * c2 * c3 + s1 * s2 * s3;
+				break;
+
+			default:
+				console.warn( 'THREE.Quaternion: .setFromEuler() encountered an unknown order: ' + order );
+
+		}
+
+		if ( update === true ) this._onChangeCallback();
+
+		return this;
+
+	}
+
+	setFromAxisAngle( axis, angle ) {
+
+		// http://www.euclideanspace.com/maths/geometry/rotations/conversions/angleToQuaternion/index.htm
+
+		// assumes axis is normalized
+
+		const halfAngle = angle / 2;
+		const s = Math.sin( halfAngle );
+
+		this._x = axis.x * s;
+		this._y = axis.y * s;
+		this._z = axis.z * s;
+		this._w = Math.cos( halfAngle );
+
+		this._onChangeCallback();
+
+		return this;
+
+	}
+
+	setFromRotationMatrix( m ) {
+
+		// http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion/index.htm
+
+		// assumes the upper 3x3 of m is a pure rotation matrix (i.e, unscaled)
+
+		const te = m.elements,
+
+			m11 = te[ 0 ], m12 = te[ 4 ], m13 = te[ 8 ],
+			m21 = te[ 1 ], m22 = te[ 5 ], m23 = te[ 9 ],
+			m31 = te[ 2 ], m32 = te[ 6 ], m33 = te[ 10 ],
+
+			trace = m11 + m22 + m33;
+
+		if ( trace > 0 ) {
+
+			const s = 0.5 / Math.sqrt( trace + 1.0 );
+
+			this._w = 0.25 / s;
+			this._x = ( m32 - m23 ) * s;
+			this._y = ( m13 - m31 ) * s;
+			this._z = ( m21 - m12 ) * s;
+
+		} else if ( m11 > m22 && m11 > m33 ) {
+
+			const s = 2.0 * Math.sqrt( 1.0 + m11 - m22 - m33 );
+
+			this._w = ( m32 - m23 ) / s;
+			this._x = 0.25 * s;
+			this._y = ( m12 + m21 ) / s;
+			this._z = ( m13 + m31 ) / s;
+
+		} else if ( m22 > m33 ) {
+
+			const s = 2.0 * Math.sqrt( 1.0 + m22 - m11 - m33 );
+
+			this._w = ( m13 - m31 ) / s;
+			this._x = ( m12 + m21 ) / s;
+			this._y = 0.25 * s;
+			this._z = ( m23 + m32 ) / s;
+
+		} else {
+
+			const s = 2.0 * Math.sqrt( 1.0 + m33 - m11 - m22 );
+
+			this._w = ( m21 - m12 ) / s;
+			this._x = ( m13 + m31 ) / s;
+			this._y = ( m23 + m32 ) / s;
+			this._z = 0.25 * s;
+
+		}
+
+		this._onChangeCallback();
+
+		return this;
+
+	}
+
+	setFromUnitVectors( vFrom, vTo ) {
+
+		// assumes direction vectors vFrom and vTo are normalized
+
+		let r = vFrom.dot( vTo ) + 1;
+
+		if ( r < Number.EPSILON ) {
+
+			// vFrom and vTo point in opposite directions
+
+			r = 0;
+
+			if ( Math.abs( vFrom.x ) > Math.abs( vFrom.z ) ) {
+
+				this._x = - vFrom.y;
+				this._y = vFrom.x;
+				this._z = 0;
+				this._w = r;
+
+			} else {
+
+				this._x = 0;
+				this._y = - vFrom.z;
+				this._z = vFrom.y;
+				this._w = r;
+
+			}
+
+		} else {
+
+			// crossVectors( vFrom, vTo ); // inlined to avoid cyclic dependency on Vector3
+
+			this._x = vFrom.y * vTo.z - vFrom.z * vTo.y;
+			this._y = vFrom.z * vTo.x - vFrom.x * vTo.z;
+			this._z = vFrom.x * vTo.y - vFrom.y * vTo.x;
+			this._w = r;
+
+		}
+
+		return this.normalize();
+
+	}
+
+	angleTo( q ) {
+
+		return 2 * Math.acos( Math.abs( this.clamp( this.dot( q ), - 1, 1 ) ) );
+
+	}
+
+	rotateTowards( q, step ) {
+
+		const angle = this.angleTo( q );
+
+		if ( angle === 0 ) return this;
+
+		const t = Math.min( 1, step / angle );
+
+		this.slerp( q, t );
+
+		return this;
+
+	}
+
+	identity() {
+
+		return this.set( 0, 0, 0, 1 );
+
+	}
+
+	invert() {
+
+		// quaternion is assumed to have unit length
+
+		return this.conjugate();
+
+	}
+
+	conjugate() {
+
+		this._x *= - 1;
+		this._y *= - 1;
+		this._z *= - 1;
+
+		this._onChangeCallback();
+
+		return this;
+
+	}
+
+	dot( v ) {
+
+		return this._x * v._x + this._y * v._y + this._z * v._z + this._w * v._w;
+
+	}
+
+	lengthSq() {
+
+		return this._x * this._x + this._y * this._y + this._z * this._z + this._w * this._w;
+
+	}
+
+    clamp( value, min, max ) {
+
+        return Math.max( min, Math.min( max, value ) );
+    
+    }
+
+	length() {
+
+		return Math.sqrt( this._x * this._x + this._y * this._y + this._z * this._z + this._w * this._w );
+
+	}
+
+	normalize() {
+
+		let l = this.length();
+
+		if ( l === 0 ) {
+
+			this._x = 0;
+			this._y = 0;
+			this._z = 0;
+			this._w = 1;
+
+		} else {
+
+			l = 1 / l;
+
+			this._x = this._x * l;
+			this._y = this._y * l;
+			this._z = this._z * l;
+			this._w = this._w * l;
+
+		}
+
+		this._onChangeCallback();
+
+		return this;
+
+	}
+
+	multiply( q ) {
+
+		return this.multiplyQuaternions( this, q );
+
+	}
+
+	premultiply( q ) {
+
+		return this.multiplyQuaternions( q, this );
+
+	}
+
+	multiplyQuaternions( a, b ) {
+
+		// from http://www.euclideanspace.com/maths/algebra/realNormedAlgebra/quaternions/code/index.htm
+
+		const qax = a._x, qay = a._y, qaz = a._z, qaw = a._w;
+		const qbx = b._x, qby = b._y, qbz = b._z, qbw = b._w;
+
+		this._x = qax * qbw + qaw * qbx + qay * qbz - qaz * qby;
+		this._y = qay * qbw + qaw * qby + qaz * qbx - qax * qbz;
+		this._z = qaz * qbw + qaw * qbz + qax * qby - qay * qbx;
+		this._w = qaw * qbw - qax * qbx - qay * qby - qaz * qbz;
+
+		this._onChangeCallback();
+
+		return this;
+
+	}
+
+	slerp( qb, t ) {
+
+		if ( t === 0 ) return this;
+		if ( t === 1 ) return this.copy( qb );
+
+		const x = this._x, y = this._y, z = this._z, w = this._w;
+
+		// http://www.euclideanspace.com/maths/algebra/realNormedAlgebra/quaternions/slerp/
+
+		let cosHalfTheta = w * qb._w + x * qb._x + y * qb._y + z * qb._z;
+
+		if ( cosHalfTheta < 0 ) {
+
+			this._w = - qb._w;
+			this._x = - qb._x;
+			this._y = - qb._y;
+			this._z = - qb._z;
+
+			cosHalfTheta = - cosHalfTheta;
+
+		} else {
+
+			this.copy( qb );
+
+		}
+
+		if ( cosHalfTheta >= 1.0 ) {
+
+			this._w = w;
+			this._x = x;
+			this._y = y;
+			this._z = z;
+
+			return this;
+
+		}
+
+		const sqrSinHalfTheta = 1.0 - cosHalfTheta * cosHalfTheta;
+
+		if ( sqrSinHalfTheta <= Number.EPSILON ) {
+
+			const s = 1 - t;
+			this._w = s * w + t * this._w;
+			this._x = s * x + t * this._x;
+			this._y = s * y + t * this._y;
+			this._z = s * z + t * this._z;
+
+			this.normalize(); // normalize calls _onChangeCallback()
+
+			return this;
+
+		}
+
+		const sinHalfTheta = Math.sqrt( sqrSinHalfTheta );
+		const halfTheta = Math.atan2( sinHalfTheta, cosHalfTheta );
+		const ratioA = Math.sin( ( 1 - t ) * halfTheta ) / sinHalfTheta,
+			ratioB = Math.sin( t * halfTheta ) / sinHalfTheta;
+
+		this._w = ( w * ratioA + this._w * ratioB );
+		this._x = ( x * ratioA + this._x * ratioB );
+		this._y = ( y * ratioA + this._y * ratioB );
+		this._z = ( z * ratioA + this._z * ratioB );
+
+		this._onChangeCallback();
+
+		return this;
+
+	}
+
+	slerpQuaternions( qa, qb, t ) {
+
+		return this.copy( qa ).slerp( qb, t );
+
+	}
+
+	random() {
+
+		// sets this quaternion to a uniform random unit quaternnion
+
+		// Ken Shoemake
+		// Uniform random rotations
+		// D. Kirk, editor, Graphics Gems III, pages 124-132. Academic Press, New York, 1992.
+
+		const theta1 = 2 * Math.PI * Math.random();
+		const theta2 = 2 * Math.PI * Math.random();
+
+		const x0 = Math.random();
+		const r1 = Math.sqrt( 1 - x0 );
+		const r2 = Math.sqrt( x0 );
+
+		return this.set(
+			r1 * Math.sin( theta1 ),
+			r1 * Math.cos( theta1 ),
+			r2 * Math.sin( theta2 ),
+			r2 * Math.cos( theta2 ),
+		);
+
+	}
+
+	equals( quaternion ) {
+
+		return ( quaternion._x === this._x ) && ( quaternion._y === this._y ) && ( quaternion._z === this._z ) && ( quaternion._w === this._w );
+
+	}
+
+	fromArray( array, offset = 0 ) {
+
+		this._x = array[ offset ];
+		this._y = array[ offset + 1 ];
+		this._z = array[ offset + 2 ];
+		this._w = array[ offset + 3 ];
+
+		this._onChangeCallback();
+
+		return this;
+
+	}
+
+	toArray( array = [], offset = 0 ) {
+
+		array[ offset ] = this._x;
+		array[ offset + 1 ] = this._y;
+		array[ offset + 2 ] = this._z;
+		array[ offset + 3 ] = this._w;
+
+		return array;
+
+	}
+
+	fromBufferAttribute( attribute, index ) {
+
+		this._x = attribute.getX( index );
+		this._y = attribute.getY( index );
+		this._z = attribute.getZ( index );
+		this._w = attribute.getW( index );
+
+		this._onChangeCallback();
+
+		return this;
+
+	}
+
+	toJSON() {
+
+		return this.toArray();
+
+	}
+
+	_onChange( callback ) {
+
+		this._onChangeCallback = callback;
+
+		return this;
+
+	}
+
+	_onChangeCallback() {}
+
+	*[ Symbol.iterator ]() {
+
+		yield this._x;
+		yield this._y;
+		yield this._z;
+		yield this._w;
+
+	}
+
+}
 
 
-/**intended as a mutable base for Rot. But this was poorly considered. */
-export class MRotation {
-    static IDENTITY = new MRotation(1.0, 0.0, 0.0, 0.0, false);
+export class Rot extends QuaternionD {
+    static IDENTITY = null; //defined at bottom
+    constructor(x, y, z, w, needsNormalization = false) {
+        super(x, y, z, w);
+        if (needsNormalization) this.normalize();
+        this.workingInput = new Vec3();
+        this.workingOutput = new Vec3();
+    };
 
-    constructor(q0=1.0, q1=0.0, q2=0.0, q3=0.0, needsNormalization = false) {
-        if(!(Number.isFinite(q0))) {
-            throw new Error("constructor only supports quaternion component inputs");
-        }
-        this.q0 = q0;
-        this.q1 = q1;
-        this.q2 = q2;
-        this.q3 = q3;
+    static fromRot(r) {
+        return new Rot(
+			r._x, 
+			r._y, 
+			r._z, 
+			r._w);
+    }
 
-        if (needsNormalization) {
-            this.setToNormalized();
-        }
+    static fromAxisAngle(axis, angle) {
+        const resultmrot = new Rot(0, 0, 0, 1).setFromAxisAngle(axis.normalize(), angle);
+        return resultmrot; //.rotation.fromAxisAngle(axis, angle);
     }
 
     static fromVecs(u, v) {
-        let result = new MRotation(); 
-        result.setFromVecs(u, v);
-        return result;
-    }
-
-    setFromComponents(w, x, y, z, normalize = false) {
-        this.q0=w, this.q1=x; this.q2 = y; this.q3=z;
-        if(normalize) this.setToNormalized();
-        return this;
-    }
-
-    setFromArray([w,x,y,z], normalize = false) {
-        return this.setFromComponents(w,x,y,z,normalize);
+        return new Rot(0, 0, 0, 1).setFromVecs(u, v);
     }
 
     setFromVecs(u, v) {
-        let normProduct = u.mag() * v.mag();
-        
-		if (normProduct == 0) {
-			this.q0 = 1;
-			this.q1 = 0;
-			this.q2 = 0;
-			this.q3 = 0;
-			return;
-		}
-
-		let dot = u.dot(v);
-
-		if (dot < ((2.0e-15 - 1.0) * normProduct)) {
-			// special case u = -v: we select a PI angle rotation around
-			// an arbitrary vector orthogonal to u
-			let w = u.getOrthogonal();
-			this.q0 = 0.0;
-			this.q1 = -w.x;
-			this.q2 = -w.y;
-			this.q3 = -w.z;
-		} else {
-			// general case: (u, v) defines a plane, we select
-			// the shortest possible rotation: axis orthogonal to this plane
-			this.q0 = Math.sqrt(0.5 * (1.0 + dot / normProduct));
-			let coeff = 1.0 / (2.0 * this.q0 * normProduct);
-			let q = v.crossCopy(u);
-			this.q1 = coeff * q.x;
-			this.q2 = coeff * q.y;
-			this.q3 = coeff * q.z;
-		}
+        if (u.magSq() < Number.EPSILON || v.magSq() < Number.EPSILON) {
+            return this.set(0, 0, 0, 1);
+        }
+        this.setFromUnitVectors(any_Vec3fv(u).normalize(), any_Vec3fv(v).normalize())
         return this;
     }
 
-    copy() {
-        return new MRotation(this.q0, this.q1, this.q2, this.q3);
+
+    clone() {
+        return new Rot(this._x, this._y, this._z, this._w, false);
     }
 
-    setToNormalized() {
-        const norm = Math.sqrt(this.q0 * this.q0 + this.q1 * this.q1 + this.q2 * this.q2 + this.q3 * this.q3);
-        this.q0 /= norm;
-        this.q1 /= norm;
-        this.q2 /= norm;
-        this.q3 /= norm;
+    setComponents(x, y, z, w, normalize) {
+        this._w = w;
+        this._x = x;
+        this._y = y;
+        this._z = z;
+		if(normalize) this.normalize();
+
+        return;
     }
 
-    static _maybeUnflattenMatrix(arr) {
-        if(arr.length == 9) {
-            return [
-                [arr[0], arr[3], arr[6]],
-                [arr[1], arr[4], arr[7]],
-                [arr[2], arr[5], arr[8]]
-            ];
-        }
-        return arr;
-    }
-
-    static fromMatrix(m, threshold) { 
-        const mat = this._maybeUnflattenMatrix(m);        
-        const ort = this.orthogonalizeMatrix(mat, threshold);
-        const det = ort[0][0] * (ort[1][1] * ort[2][2] - ort[2][1] * ort[1][2]) -
-                    ort[1][0] * (ort[0][1] * ort[2][2] - ort[2][1] * ort[0][2]) +
-                    ort[2][0] * (ort[0][1] * ort[1][2] - ort[1][1] * ort[0][2]);
-        if (det < 0.0) {
-            throw new Error("The closest orthogonal matrix has a negative determinant.");
-        }
-
-        const quat = this.mat2quat(ort);
-        return new MRotation(quat[0], quat[1], quat[2], quat[3], false);
-
-    }
-
-
-    static fromAxisAngle(axis, angle) {
-        let result = new MRotation(); 
-        result.setFromAxisAngle(axis, angle);
-        return result;
-    }
-
-    setFromAxisAngle(axis, angle) {
-        const norm = Math.sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
-        if (norm === 0) throw new Error("Zero Norm for Rotation defining vector");
-
-        const halfAngle = -0.5 * angle;
-        const coeff = Math.sin(halfAngle) / norm;
-
-        this.q0 = Math.cos(halfAngle);
-        this.q1 = coeff * axis.x; 
-        this.q2 = coeff * axis.y; 
-        this.q3 = coeff * axis.z;
+    set(x, y, z, w) {
+        this._w = w;
+        this._x = x;
+        this._y = y;
+        this._z = z;
         return this;
     }
 
-    applyToVector(inVec, outVec = any_Vec3()) {
-        const x = inVec.x, y = inVec.y, z = inVec.z;
-        const q0 = this.q0, q1 = this.q1, q2= this.q2, q3 = this.q3;
-        const s = q1 * x + q2 * y + q3 * z;
-        
-        outVec.x = 2 * (q0 * (x * q0 - (q2 * z - q3 * y)) + s * q1) - x;
-        outVec.y = 2 * (q0 * (y * q0 - (q3 * x - q1 * z)) + s * q2) - y,
-        outVec.z = 2 * (q0 * (z * q0 - (q1 * y - q2 * x)) + s * q3) - z
-        return outVec;
+    setFromRot(inR) {
+        this._w = inR._w;
+        this._x = inR._x;
+        this._y = inR._y;
+        this._z = inR._z;
+        return this;
     }
 
-    applyInverseToVector(u, output = any_Vec3()) {
-        const x = u.x, y = u.y, z = u.z;
-        const m0 = -this.q0, q1 = this.q1, q2= this.q2, q3 = this.q3;
-        const s = q1 * x + q2 * y + q3 * z;
 
-        output.setComponents(
-            2 * (m0 * (x * m0 - (q2 * z - q3 * y)) + s * q1) - x,
-            2 * (m0 * (y * m0 - (q3 * x - q1 * z)) + s * q2) - y,
-            2 * (m0 * (z * m0 - (q1 * y - q2 * x)) + s * q3) - z);
+    /**
+     * stores the result of applying the rotation to the input vector in the provided output vector.
+     * if none is given, one will be created or taken from the environment's ephemeral vector pool.
+     * @param v
+     * @return the rotated vector.
+     */
+
+    applyToVec(v, output = any_Vec3()) {
+        this.applyToVector(v, output);
         return output;
-    }
-
-
-    getAngle() {
-        const q0 = this.q0, q1 = this.q1, q2= this.q2, q3 = this.q3;
-        if ((q0 < -0.1) || (q0 > 0.1)) {			
-			return 2 * Math.asin(Math.sqrt(q1 * q1 + q2 * q2 + q3 * q3));
-		} else if (q0 < 0) {
-			return 2 * Math.acos(-q0);
-		}		
-		return 2 * Math.acos(q0);
-    }
-
-    getAxis(into = any_Vec3()) {
-        const squaredSine = this.q1 * this.q1 + this.q2 * this.q2 + this.q3 * this.q3;
-        if (squaredSine === 0) 
-            return into.setComponents(1,0,0);
-       
-        const inverse = 1 / Math.sqrt(squaredSine);
-        into.setComponents(this.q1*inverse, this.q2*inverse, this.q3*inverse);
-        return into;
-    }
-
-    multiply(rotation) {
-        return MRotation.multiply(this, rotation);
-    }
-
-    clampToAngle(angle) {
-		let cosHalfAngle = Math.cos(0.5*angle);
-		this.clampToQuadranceAngle(cosHalfAngle);
-	}
-
-    clampToQuadranceAngle(cosHalfAngle) {
-		let newCoeff = 1-(cosHalfAngle*Math.abs(cosHalfAngle));
-		let currentCoeff = this.q1 * this.q1 + this.q2 * this.q2 + this.q3 * this.q3;
-		if(newCoeff >= currentCoeff) 
-			return;
-		else {
-			this.q0 = this.q0 < 0 ? -cosHalfAngle : cosHalfAngle;
-			let compositeCoeff = Math.sqrt(newCoeff / currentCoeff); 
-			this.q1*= compositeCoeff;
-			this.q2*= compositeCoeff;
-			this.q3*= compositeCoeff;
-		}
-	}
-
-    static multiply(a, b) {
-        return new MRotation(
-            a.q0 * b.q0 - a.q1 * b.q1 - a.q2 * b.q2 - a.q3 * b.q3,
-            a.q0 * b.q1 + a.q1 * b.q0 + a.q2 * b.q3 - a.q3 * b.q2,
-            a.q0 * b.q2 - a.q1 * b.q3 + a.q2 * b.q0 + a.q3 * b.q1,
-            a.q0 * b.q3 + a.q1 * b.q2 - a.q2 * b.q1 + a.q3 * b.q0
-        );
-    }
-
-    normalize() {
-        const norm = Math.sqrt(this.q0 * this.q0 + this.q1 * this.q1 + this.q2 * this.q2 + this.q3 * this.q3);
-        if (norm < 1e-15) throw new Error("Zero Norm");
-        this.q0 /= norm; 
-        this.q1 /= norm; 
-        this.q2 /= norm;
-        this.q3 /= norm;
-    }
-
-    normalizedCopy() {
-        const norm = Math.sqrt(this.q0 * this.q0 + this.q1 * this.q1 + this.q2 * this.q2 + this.q3 * this.q3);
-        if (norm < 1e-15) throw new Error("Zero Norm");
-        return new MRotation(this.q0 / norm, this.q1 / norm, this.q2 / norm, this.q3 / norm);
-    }
-    invert() {
-        return new MRotation(-this.q0, this.q1, this.q2, this.q3, false);
-    }
-
-    /** 
-	 * sets the values of the given rotation equal to the inverse of this rotation
-	 * @param storeIN
-	 */
-    revertInto(storeIn) {
-        storeIn.q0 = -this.q0;
-        storeIn.q1 = this.q1;
-        storeIn.q2 = this.q2;
-        storeIn.q3 = this.q3;
-    }
-
-    
-    applyToRotation(r) {
-        const q0 = this.q0, q1 = this.q1, q2=this.q2, q3 = this.q3;
-        return new MRotation(
-            r.q0 * q0 - (r.q1 * q1 + r.q2 * q2 + r.q3 * q3),
-            r.q1 * q0 + r.q0 * q1 + (r.q2 * q3 - r.q3 * q2),
-            r.q2 * q0 + r.q0 * q2 + (r.q3 * q1 - r.q1 * q3),
-            r.q3 * q0 + r.q0 * q3 + (r.q1 * q2 - r.q2 * q1), 
-            false);
-    }
-
-    applyInverseToRotation(r) {
-        const q0 = this.q0, q1 = this.q1, q2=this.q2, q3 = this.q3;
-        return new MRotation(
-            -r.q0 * q0 - (r.q1 * q1 + r.q2 * q2 + r.q3 * q3),
-            -r.q1 * q0 + r.q0 * q1 + (r.q2 * q3 - r.q3 * q2),
-            -r.q2 * q0 + r.q0 * q2 + (r.q3 * q1 - r.q1 * q3),
-            -r.q3 * q0 + r.q0 * q3 + (r.q1 * q2 - r.q2 * q1),
-            false
-        );
-    }
-
-    static distance(r1, r2) {
-        return r1.applyInverseToRotation(r2).getAngle();
-    }
-
-    equals(m) {
-        // Using a small epsilon to account for floating-point arithmetic errors
-        const epsilon = 1e-10;
-        return Math.abs(this.q0 - m.q0) < epsilon &&
-               Math.abs(this.q1 - m.q1) < epsilon &&
-               Math.abs(this.q2 - m.q2) < epsilon &&
-               Math.abs(this.q3 - m.q3) < epsilon;
-    }
-
-    toString() {
-        const axis = this.getAxis();
-        const angleDegrees = Math.toDegrees(this.getAngle());
-        return `Axis: (${axis.toString()}), AngleDeg: ${angleDegrees.toFixed(2)}}`;
-    }
-
-    setFromMatrix3Val(storeIn) {
-        const {q0, q1, q2, q3} = this;
-
-        const q0q0 = q0 * q0;
-        const q0q1 = q0 * q1;
-        const q0q2 = q0 * q2;
-        const q0q3 = q0 * q3;
-        const q1q1 = q1 * q1;
-        const q1q2 = q1 * q2;
-        const q1q3 = q1 * q3;
-        const q2q2 = q2 * q2;
-        const q2q3 = q2 * q3;
-        const q3q3 = q3 * q3;
-
-        storeIn[0] = 2.0 * (q0q0 + q1q1) - 1.0;
-        storeIn[1] = 2.0 * (q1q2 - q0q3);
-        storeIn[2] = 2.0 * (q1q3 + q0q2);
-
-        storeIn[3] = 2.0 * (q1q2 + q0q3);
-        storeIn[4] = 2.0 * (q0q0 + q2q2) - 1.0;
-        storeIn[5] = 2.0 * (q2q3 - q0q1);
-
-        storeIn[6] = 2.0 * (q1q3 - q0q2);
-        storeIn[7] = 2.0 * (q2q3 + q0q1);
-        storeIn[8] = 2.0 * (q0q0 + q3q3) - 1.0;
     }
 
     /**
-	 *  Get an array representing the 4X4 matrix corresponding to this rotation instance. 
-	 * Indices are in column major order. In other words 
-	 *<br/> 
-	 * 0,  4,  8,  12 <br/>  
-	 * 1,  5,  9,  13 <br/> 
-	 * 2,  6, 10, 14 <br/>
- 	 * 3,  7, 11, 15 <br/>
-	 * */
-	toMatrix4Val() {
-		result = new Array(16); 
-		return toMatrix4Val(result, false); 
-	}
+     * applies the rotation to an explicit clone of the input vector
+     * @param v
+     * @return
+     */
 
-    toMatrix4Val(storeIn, zeroOut = true) {
-        let q0q0 = this.q0 * this.q0;
-        let q0q1 = this.q0 * this.q1;
-        let q0q2 = this.q0 * this.q2;
-        let q0q3 = this.q0 * this.q3;
-        let q1q1 = this.q1 * this.q1;
-        let q1q2 = this.q1 * this.q2;
-        let q1q3 = this.q1 * this.q3;
-        let q2q2 = this.q2 * this.q2;
-        let q2q3 = this.q2 * this.q3;
-        let q3q3 = this.q3 * this.q3;
-    
-        storeIn[0] = 2.0 * (q0q0 + q1q1) - 1.0;
-        storeIn[1] = 2.0 * (q1q2 - q0q3);
-        storeIn[2] = 2.0 * (q1q3 + q0q2);
-        storeIn[4] = 2.0 * (q1q2 + q0q3);
-        storeIn[5] = 2.0 * (q0q0 + q2q2) - 1.0;
-        storeIn[6] = 2.0 * (q2q3 - q0q1);
-        storeIn[8] = 2.0 * (q1q3 - q0q2);
-        storeIn[9] = 2.0 * (q2q3 + q0q1);
-        storeIn[10] = 2.0 * (q0q0 + q3q3) - 1.0;
-        storeIn[15] = 1.0;
-    
-        if (zeroOut) {
-            storeIn[3] = 0.0;
-            storeIn[7] = 0.0;
-            storeIn[11] = 0.0;
-            storeIn[12] = 0.0;
-            storeIn[13] = 0.0;
-            storeIn[14] = 0.0;
+    applyToVecClone(v) {
+        this.applyToVector(any_Vec3(v.x, v.y, v.z), this.workingOutput);
+        return this.workingOutput.clone();
+    }
+
+    applyToVector(v, vout) {
+        const vx = v.x, vy = v.y, vz = v.z;
+        const qx = this.x, qy = this.y, qz = this.z, qw = this.w;
+
+        const tx = (2 * (qy * vz - qz * vy));
+        const ty = (2 * (qz * vx - qx * vz));
+        const tz = (2 * (qx * vy - qy * vx));
+
+        vout.x = vx + qw * tx + qy * tz - qz * ty;
+        vout.y = vy + qw * ty + qz * tx - qx * tz;
+        vout.z = vz + qw * tz + qx * ty - qy * tx;
+        return v;
+    }
+
+    applyInverseToVecClone(v) {
+        this.applyInverseToVec(any_Vec3(v.x, v.y, v.z), this.workingOutput);
+        return this.workingOutput.clone();
+    }
+
+
+    applyToRay(rIn, rOut = rIn.clone()) {
+        this.workingInput.x = rIn.p2.x - rIn.p1.x;
+        this.workingInput.y = rIn.p2.y - rIn.p1.y;
+        this.workingInput.z = rIn.p2.z - rIn.p1.z;
+
+        this.applyToVector(this.workingInput, this.workingOutput);
+        rOut.setP1(rIn.p1);
+        rOut.setHeading(this.workingOutput);
+        return rOut;
+    }
+
+    applyInverseToRay(rIn, rOut = rIn.clone()) {
+        this.workingInput.x = rIn.p2.x - rIn.p1.x;
+        this.workingInput.y = rIn.p2.y - rIn.p1.y;
+        this.workingInput.z = rIn.p2.z - rIn.p1.z;
+
+        this.applyInverseToVector(this.workingInput, this.workingOutput);
+        rOut.setP1(rIn.p1);
+        rOut.setHeading(this.workingOutput);
+        return rOut;
+    }
+
+    set q0(w) {
+        this.w = w;
+    }
+
+    set q1(x) {
+        this.x = x;
+    }
+
+    set q2(y) {
+        this.y = y;
+    }
+
+    set q3(z) {
+        this.z = z;
+    }
+
+    get q0() {
+        return this.w;
+    }
+    get q1() {
+        return this.x;
+    }
+    get q2() {
+        return this.y;
+    }
+    get q3() {
+        return this.z;
+    }
+
+
+    clampToAngle(angle) {
+        let cosHalfAngle = Math.cos(0.5 * angle);
+        this.clampToCosHalfAngle(cosHalfAngle);
+    }
+
+    clampToCosHalfAngle(cosHalfAngle) {
+        let newCoeff = 1 - (cosHalfAngle * Math.abs(cosHalfAngle));
+        let currentCoeff = this.q1 * this.q1 + this.q2 * this.q2 + this.q3 * this.q3;
+        if (newCoeff >= currentCoeff)
+            return;
+        else {
+            this.q0 = this.q0 < 0 ? -cosHalfAngle : cosHalfAngle;
+            let compositeCoeff = Math.sqrt(newCoeff / currentCoeff);
+            this.q1 *= compositeCoeff;
+            this.q2 *= compositeCoeff;
+            this.q3 *= compositeCoeff;
         }
-    
+    }
+    applyToRot(rot, storeIn = Rot.IDENTITY.clone()) {
+        return storeIn.multiplyQuaternions(this, rot);
+    }
+
+    applyInverseToRot(rot, storeIn = Rot.IDENTITY.clone()) {
+        this._x *= -1, this._y *= -1, this._z *= -1;
+        storeIn.multiplyQuaternions(this, rot);
+        this._x *= -1, this._y *= -1, this._z *= -1;
         return storeIn;
     }
 
+    /**
+     * returns the rotation which, if applied to this orientation, would bring this orientation to the target
+     * orientation by the shortest path.
+     * 
+     * in other words this.rotationTo(target).applyToRot(this) == target
+    */
+    getRotationTo(target, storeIn = Rot.IDENTITY.clone()) {
+        const qax = target._x, qay = target._y, qaz = target._z, qaw = target._w;
+		const qbx = -this._x, qby = -this._y, qbz = -this._z, qbw = this._w; // conjugate of this quaternion
 
-    mat2quat(ort) {
-        let quat = [0, 0, 0, 0];
-        let s = ort[0][0] + ort[1][1] + ort[2][2];
-        if (s > -0.19) {
-            quat[0] = 0.5 * Math.sqrt(s + 1.0);
-            let inv = 0.25 / quat[0];
-            quat[1] = inv * (ort[1][2] - ort[2][1]);
-            quat[2] = inv * (ort[2][0] - ort[0][2]);
-            quat[3] = inv * (ort[0][1] - ort[1][0]);
+		storeIn._x = qax * qbw + qaw * qbx + qay * qbz - qaz * qby;
+		storeIn._y = qay * qbw + qaw * qby + qaz * qbx - qax * qbz;
+		storeIn._z = qaz * qbw + qaw * qbz + qax * qby - qay * qbx;
+		storeIn._w = qaw * qbw - qax * qbx - qay * qby - qaz * qbz;
+
+        //inlined the math to avoid the object instantiation required by target.multiply(this.conjugate())
+        return storeIn;
+    }
+
+    /**return the other rotation, from the other way.*/
+    getFlipped() {
+        return new Rot(-this._x, -this._y, -this._z, -this._w);
+    }
+
+    getAngle() {
+        return Rot.IDENTITY.angleTo(this);
+    }
+
+    /**@return {Vec3} */
+    getAxis() {
+        let x, y, z;
+        const s = Math.sqrt(1 - this.w * this.w); // assuming quaternion normalised then w is less than 1, so term always positive.
+        if (s < 0.001) { // test to avoid divide by zero, s is always positive due to sqrt
+            // if s close to zero then direction of axis not important
+            x = this.x; // if it is important that axis is normalised then replace with x=1; y=z=0;
+            y = this.y;
+            z = this.z;
         } else {
-            s = ort[0][0] - ort[1][1] - ort[2][2];
-            if (s > -0.19) {
-                quat[1] = 0.5 * Math.sqrt(s + 1.0);
-                let inv = 0.25 / quat[1];
-                quat[0] = inv * (ort[1][2] - ort[2][1]);
-                quat[2] = inv * (ort[0][1] + ort[1][0]);
-                quat[3] = inv * (ort[0][2] + ort[2][0]);
-            } else {
-                s = ort[1][1] - ort[0][0] - ort[2][2];
-                if (s > -0.19) {
-                    quat[2] = 0.5 * Math.sqrt(s + 1.0);
-                    let inv = 0.25 / quat[2];
-                    quat[0] = inv * (ort[2][0] - ort[0][2]);
-                    quat[1] = inv * (ort[0][1] + ort[1][0]);
-                    quat[3] = inv * (ort[2][1] + ort[1][2]);
-                } else {
-                    s = ort[2][2] - ort[0][0] - ort[1][1];
-                    quat[3] = 0.5 * Math.sqrt(s + 1.0);
-                    let inv = 0.25 / quat[3];
-                    quat[0] = inv * (ort[0][1] - ort[1][0]);
-                    quat[1] = inv * (ort[0][2] + ort[2][0]);
-                    quat[2] = inv * (ort[2][1] + ort[1][2]);
-                }
-            }
+            x = this.x / s; // normalise axis
+            y = this.y / s;
+            z = this.z / s;
         }
-        return quat;
+        return any_Vec3(x, y, z);
     }
 
-    static orthogonalizeMatrix(m, threshold) {
-		let m0 = m[0];
-		let m1 = m[1];
-		let m2 = m[2];
-		let x00 = m0[0];
-		let x01 = m0[1];
-		let x02 = m0[2];
-		let x10 = m1[0];
-		let x11 = m1[1];
-		let x12 = m1[2];
-		let x20 = m2[0];
-		let x21 = m2[1];
-		let x22 = m2[2];
-		let fn = 0;
-		let fn1;
-
-		let o = [[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]];
-		let o0 = o[0];
-		let o1 = o[1];
-		let o2 = o[2];
-
-		// iterative correction: Xn+1 = Xn - 0.5 * (Xn.Mt.Xn - M)
-		let i = 0;
-        let mx00;
-        let mx10;
-        let mx20;
-        let mx01;
-        let mx11;
-        let mx21;
-        let mx02;
-        let mx12;
-        let mx22;
-        let corr00;
-        let corr01;
-        let corr02;
-        let corr10;
-        let corr11;
-        let corr12;
-        let corr20;
-        let corr21;
-        let corr22;
-		while (++i < 11) {
-
-			// Mt.Xn
-			mx00 = m0[0] * x00 + m1[0] * x10 + m2[0] * x20;
-			mx10 = m0[1] * x00 + m1[1] * x10 + m2[1] * x20;
-			mx20 = m0[2] * x00 + m1[2] * x10 + m2[2] * x20;
-			mx01 = m0[0] * x01 + m1[0] * x11 + m2[0] * x21;
-			mx11 = m0[1] * x01 + m1[1] * x11 + m2[1] * x21;
-			mx21 = m0[2] * x01 + m1[2] * x11 + m2[2] * x21;
-			mx02 = m0[0] * x02 + m1[0] * x12 + m2[0] * x22;
-			mx12 = m0[1] * x02 + m1[1] * x12 + m2[1] * x22;
-			mx22 = m0[2] * x02 + m1[2] * x12 + m2[2] * x22;
-
-			// Xn+1
-			o0[0] = x00 - 0.5 * (x00 * mx00 + x01 * mx10 + x02 * mx20 - m0[0]);
-			o0[1] = x01 - 0.5 * (x00 * mx01 + x01 * mx11 + x02 * mx21 - m0[1]);
-			o0[2] = x02 - 0.5 * (x00 * mx02 + x01 * mx12 + x02 * mx22 - m0[2]);
-			o1[0] = x10 - 0.5 * (x10 * mx00 + x11 * mx10 + x12 * mx20 - m1[0]);
-			o1[1] = x11 - 0.5 * (x10 * mx01 + x11 * mx11 + x12 * mx21 - m1[1]);
-			o1[2] = x12 - 0.5 * (x10 * mx02 + x11 * mx12 + x12 * mx22 - m1[2]);
-			o2[0] = x20 - 0.5 * (x20 * mx00 + x21 * mx10 + x22 * mx20 - m2[0]);
-			o2[1] = x21 - 0.5 * (x20 * mx01 + x21 * mx11 + x22 * mx21 - m2[1]);
-			o2[2] = x22 - 0.5 * (x20 * mx02 + x21 * mx12 + x22 * mx22 - m2[2]);
-
-			// correction on each elements
-			corr00 = o0[0] - m0[0];
-			corr01 = o0[1] - m0[1];
-			corr02 = o0[2] - m0[2];
-			corr10 = o1[0] - m1[0];
-			corr11 = o1[1] - m1[1];
-			corr12 = o1[2] - m1[2];
-			corr20 = o2[0] - m2[0];
-			corr21 = o2[1] - m2[1];
-			corr22 = o2[2] - m2[2];
-
-			// Frobenius norm of the correction
-			fn1 = corr00 * corr00 + corr01 * corr01 + corr02 * corr02 +
-					corr10 * corr10 + corr11 * corr11 + corr12 * corr12 +
-					corr20 * corr20 + corr21 * corr21 + corr22 * corr22;
-
-			// convergence test
-			if (Math.abs(fn1 - fn) <= threshold) {
-				return o;
-			}
-
-			// prepare next iteration
-			x00 = o0[0];
-			x01 = o0[1];
-			x02 = o0[2];
-			x10 = o1[0];
-			x11 = o1[1];
-			x12 = o1[2];
-			x20 = o2[0];
-			x21 = o2[1];
-			x22 = o2[2];
-			fn  = fn1;
-		}
-		
-		throw new Exception("Failed to converge on orthogonal matrix after 10 iterations");
-	}
-
-    static slerp(amount, value1, value2)
-	{
-		
-		if(isNaN(amount)) {
-			return new MRotation(value1.q0, value1.q1, value1.q2, value1.q3);
-		}
-		if (amount < 0.0)
-			return value1;
-		else if (amount > 1.0)
-			return value2;
-
-		let dot = value1.dotProduct(value2);
-		
-		let x2 = value2.q1;
-		let y2 = value2.q2;
-		let z2 = value2.q3;
-		let w2 = value2.q0;
-
-		let t1, t2;
-
-		let EPSILON = 0.0001;
-		if ((1.0 - dot) > EPSILON) // standard case (slerp)
-		{
-			let angle = Math.acos(dot);
-			let sinAngle = Math.sin(angle);
-			t1 = Math.sin((1.0 - amount) * angle) / sinAngle;
-			t2 = Math.sin(amount * angle) / sinAngle;
-		}
-		else // just lerp
-		{
-			t1 = 1.0 - amount;
-			t2 = amount;
-		}
-
-		return new MRotation(
-				(value1.q0 * t1) + (w2 * t2),
-				(value1.q1 * t1) + (x2 * t2),
-				(value1.q2 * t1) + (y2 * t2),
-				(value1.q3 * t1) + (z2 * t2));
-	}
-
-    toArray() {
-        return [this.q0,this.q1,this.q2,this.q3];
+    /**
+     * sets the values of the given Rot to the inverse of this rot
+     * @param {Rot} storeIn the Rot to store the inverse in
+     * @return the provides Rot, with the values set to the inverse of this Rot.
+     */
+    invertInto(storeIn = Rot.IDENTITY.clone()) {
+        storeIn.w = this._w;
+        storeIn.x = -this._x;
+        storeIn.y = -this._y;
+        storeIn.z = -this._z;
+        return storeIn;
+    }
+    /**
+     * Returns the inverse of this Rot.
+     * @return returns a new Rot which is the inverse of this Rot. 
+     */
+    inverted() {
+        new Rot(-this._x, -this._y, -this._z, this._w);
     }
 
-    intoArray(into = [1,0,0,0]) {
-        into[0] = this.q0;
-        into[1] = this.q1;
-        into[2] = this.q2;
-        into[3] = this.q3;
-        return into;
+    /**
+     * A negative inverse is the one which will yield the negative identity upon composition with this Rot
+     * @return returns a new Rot which is the negative-inverse of this Rot. 
+     */
+    reverted() {
+        let result = Rot.IDENTITY.clone();
+        return this.revertInto(result);
     }
-    
+
+    /** Get the swing rotation and twist rotation for the specified axis. The twist rotation represents the rotation around the
+     * specified axis. The swing rotation represents the rotation of the specified axis itself, which is the rotation around an
+     * axis perpendicular to the specified axis. The swing and twist rotation can be used to reconstruct the original
+     * quaternion: this = swing * twist
+     * 
+     * @param axisX the X component of the normalized axis for which to get the swing and twist rotation
+     * @param axisY the Y component of the normalized axis for which to get the swing and twist rotation
+     * @param axisZ the Z component of the normalized axis for which to get the swing and twist rotation
+     * @return an Array of Rot objects. With the first element representing the swing, and the second representing the twist
+     * @see <a href="http://www.euclideanspace.com/maths/geometry/rotations/for/decomposition">calculation</a> */
+    getSwingTwist(axis) {
+        let twistRot = this.clone();
+        let resultRots = new Array(2);
+        this.workingInput.setComponents(twistRot.q1, twistRot.q2, twistRot.q3);
+        let d = this.workingInput.dot(axis);
+        twistRot.set(twistRot.q0, axis.x * d, axis.y * d, axis.z * d, true);
+        if (d < 0) twistRot.getFlipped();
+
+        let swing = twistRot.inverted();
+        swing = swing.multiply(this);
+
+        resultRots[0] = new Rot(swing);
+        resultRots[1] = new Rot(twistRot);
+        return resultRots;
+    }
+
+
+    static nlerp(r1, r2, t) {
+        return new Rot(
+            ((r1.q0 - r2.q0) * t) + r2.q0,
+            ((r1.q1 - r2.q1) * t) + r2.q1,
+            ((r1.q2 - r2.q2) * t) + r2.q2,
+            ((r1.q3 - r2.q3) * t) + r2.q3,
+            true
+        )
+    }
+
+    toString(asQ = Rot.showQ, showAxAng = Rot.showAxAng) {
+        const axis = this.getAxis();
+        const angleDegrees = Math.toDegrees(this.getAngle());
+        let strAA = `Axis: (${axis.toString()}), AngleDeg: ${angleDegrees.toFixed(2)}`;
+        let stQQ = `xyz # w : { ${this.x.toFixed(3)}, ${this.y.toFixed(3)}, ${this.z.toFixed(3)} # ${this.w.toFixed(3)}`;
+        let combined = showAxAng ? (strAA + (asQ ? `
+        ${stQQ}` : '')) : stQQ;
+        return combined;
+    }
+
+    toStr(asQ = Rot.showQ, showAxAng = Rot.showAxAng) {
+        return this.toString(asQ, showAxAng);//"\n axis: "+ this.getAxis().toVec3f() +", \n angle: "+((float)Math.toDegrees(this.getAngle()));
+    }
+
+    getAngleGlyph() {
+        let angle = Math.toDegrees(this.getAngle());
+        if (angle < 0) angle += 360;
+
+        const glyphs = [
+            { threshold: 22.5, symbol: '↑' }, // 0 degrees
+            { threshold: 67.5, symbol: '↗' }, // 45 degrees
+            { threshold: 112.5, symbol: '→' }, // 90 degrees
+            { threshold: 157.5, symbol: '↘' }, // 135 degrees
+            { threshold: 202.5, symbol: '↓' }, // 180 degrees
+            { threshold: 247.5, symbol: '↙' }, // 225 degrees
+            { threshold: 292.5, symbol: '←' }, // 270 degrees
+            { threshold: 337.5, symbol: '↖' }, // 315 degrees
+            { threshold: 360, symbol: '↑' }  // Back to 0 degrees
+        ];
+        let gf = glyphs.find(g => angle <= g.threshold);
+        return gf.symbol;
+    }
+
+    toConsole(asQ = Rot.showQ, showAxAng = Rot.showAxAng) {
+        if (asQ)
+            console.log(this.toString(true, false));
+        if (showAxAng) {
+            const glyph = this.getAngleGlyph();
+            let angle = this.getAngle();
+
+            console.log(`%c● %c ${glyph} %c${this.toString(false, true)}`, `${this.getAxis().asConsoleString(1).style}; font-size: 2em`, `font-size: 2em; margin-left: -14px;`, `font-size: 1em;`);
+        }
+    }
+
+    toCons(asQ = Rot.showQ, showAxAng = Rot.showAxAng) {
+        console.log(this.toString(asQ, showAxAng));
+    }
+
+    equalTo(m) {
+        return this.getRotationTo(m).getAngle() < Number.EPSILON;
+    }
+    static showColors = true;
+    static showQ = false;
+    static showAxAng = true;
 }
 
-// Helper function to convert radians to degrees, as JavaScript's Math object works in radians
-Math.toDegrees = function(radians) {
+class RotIdentity extends Rot {
+    final = false;
+    constructor() {super(0,0,0,1); this.final=true;}
+    
+    clone() {return new Rot(0,0,0,1);}
+    get x() {return 0;}
+    get y() {return 0;}
+    get z() {return 0;}
+    get w() { return 1;}
+    get _x() {return 0;}
+    get _y() {return 0;}
+    get _z() {return 0;}
+    get _w() { return 1;}
+    /**
+     * @param {number} val
+     */
+    set x(val) {throw new Error("Don't touch me.");};
+    /**
+     * @param {number} val
+     */
+    set y(val) {throw new Error("Don't touch me.");};
+    /**
+     * @param {number} val
+     */
+    set z(val) {throw new Error("Don't touch me.");};
+    /**
+     * @param {number} val
+     */
+    set w(val) {throw new Error("Don't touch me.");};
+    /**
+     * @param {number} val
+     */
+    set _x(val) {if(this.final)throw new Error("I said don't fn touch me!");};
+    /**
+     * @param {number} val
+     */
+    set _y(val) {if(this.final)throw new Error("I said don't fn touch me!");};
+    /**
+     * @param {number} val
+     */
+    set _z(val) {if(this.final)throw new Error("I said don't fn touch me!");};
+    /**
+     * @param {number} val
+     */
+    set _w(val) {if(this.final)throw new Error("I said don't fn touch me!");};
+}
+Rot.IDENTITY = new RotIdentity(0, 0, 0, 1);
+Rot.IDENTITY.final = true;
+
+Math.toDegrees = function (radians) {
     return radians * (180 / Math.PI);
 };
-
-
-export class Rot {	
-    rotation = new MRotation(1,0,0,0);
-	constructor(w, x, y, z, needsNormalization = false){
-        if(x instanceof Rot) {
-            throw Error("Use the static slerp method instead");
-        }
-        if (w == null) { 
-		    this.rotation = new MRotation(
-				MRotation.IDENTITY.q0, 
-				MRotation.IDENTITY.q1, 
-				MRotation.IDENTITY.q2, 
-				MRotation.IDENTITY.q3, false);
-        } else if(Number.isFinite(w)) {
-            this.rotation = new MRotation(w, x, y, z, needsNormalization);
-        } else if(w instanceof MRotation) {
-            this.rotation.setFromComponents(w.q0, w.q1, w.q2, w.q3);
-        } else if(w instanceof Vec3) {
-            if(Number.isFinite(x)) {
-                this.rotation = MRotation.fromAxisAngle(w, x);
-            } else {
-                this.rotation = MRotation.fromVecs(w, x);
-            }
-        } else if(w instanceof Rot) {
-            this.rotation = new MRotation(w.q0, w.q1, w.q2, w.q3, false);
-        } else{
-            throw new Error("Unrecognized cunstructor args");
-        }
-        this.workingInput = new Vec3();
-	    this.workingOutput = new Vec3();
-	};
-
-
-    static fromAxisAngle(axis, angle) {
-        const resultmrot = MRotation.fromAxisAngle(axis, angle);
-        return new Rot(resultmrot); //.rotation.fromAxisAngle(axis, angle);
-    }
-	
-	/**
-	 * @return this rotation as an array of 4 numbers corresponding to the W (aka scalar), X, Y, and Z values in that order.
-	 */
-	 toArray() {
-		return this.rotation.toArray();
-	}
-
-    intoArray(into) {
-        return this.rotation.intoArray(into);
-    }
-	
-	/**
-	 * @param updates container to have values representing this rotation as an array of 4 numbers corresponding to the W (aka scalar), X, Y, and Z values in that order.
-	 */
-	setFromArray(container) {
-		this.rotation.setFromArray(container);
-	}
-
-	copy() {
-		return new Rot(new MRotation(rotation.q0, rotation.q1, rotation.q2, rotation.q3, false));
-	}
-
-    setComponents(w,x,y,z) {
-        this.rotation.q0 = w;
-        this.rotation.q1 = x;
-        this.rotation.q2 = y;
-        this.rotation.q3 = z;
-    }
-	
-	set(w, x, y, z) {
-		if(Number.isFinite(w)) {
-            this.rotation.q0 = w;
-            this.rotation.q1 = x;
-            this.rotation.q2 = y;
-            this.rotation.q3 = z;
-        } else if(w instanceof MRotation || w instanceof Rot) {
-            this.rotation.q0 = w.q0;
-            this.rotation.q1 = x.q1;
-            this.rotation.q2 = y.q2;
-            this.rotation.q3 = z.q3;
-        } else if(w instanceof Vec3) {
-            if(Number.isFinite(x)) {
-                this.rotation.setFromAxisAngle(w, x);
-            } else {
-                this.rotation.setFromVecs(w, x);
-            }
-        } else{
-            throw new Error("Unrecognized cunstructor args");
-        }
-	}
-
-    setFromRot(inR) {
-        this.rotation.q0 = inR.q0;
-        this.rotation.q1 = inR.q1;
-        this.rotation.q2 = inR.q2; 
-        this.rotation.q3 = inR.q3;
-        return this;
-    }
-
-
-    applyTo(v, output) {
-        console.warn("Deprecated overloadable function. Use applyToVec, applyToRay, applyToRot instead")
-        if(output == null) {
-            output = copy;
-        }
-        if(v instanceof Vec3) {
-            return this.applyToVec(v, output);
-        } else if(v instanceof Ray) {
-            return this.applytoRay()
-        }
-        return output;
-    }
-	
-	applyToVec(v, output = any_Vec3()) {        
-		this.workingInput.x = v.x; this.workingInput.y = v.y; this.workingInput.z=v.z; 
-		this.rotation.applyToVector(this.workingInput, output);
-		return output;
-	}
-
-    
-
-	applyInverseToVec(v, output = any_Vec3()) {
-		this.workingInput.x = v.x; this.workingInput.y = v.y; this.workingInput.z=v.z; 
-		this.rotation.applyInverseToVector(this.workingInput, output);
-        return output;
-	}
-
-
-	/**
-	 * applies the rotation to a copy of the input vector
-	 * @param v
-	 * @return
-	 */
-	
-	applyToVecCopy(v) {
-		this.workingInput.x = v.x; this.workingInput.y = v.y; this.workingInput.z=v.z; 
-		this.rotation.applyToVector(this.workingInput, this.workingOutput);		
-		return this.workingOutput.copy();
-	}
-
-
-	applyInverseToVecCopy(v) {
-		this.workingInput.x = v.x; this.workingInput.y = v.y; this.workingInput.z=v.z;  
-		this.rotation.applyInverseToVector(this.workingInput, this.workingOutput);	
-		return this.workingOutput.copy();
-	}
-
-
-
-	static getNormalized(r) {
-		return new Rot(new MRotation(r.q0, r.q1, r.q2, r.q3, true));
-	}
-
-	applyToRay(rIn, rOut = rIn.copy()) {
-		this.workingInput.x = rIn.p2.x - rIn.p1.x;
-		this.workingInput.y = rIn.p2.y - rIn.p1.y; 
-		this.workingInput.z = rIn.p2.z - rIn.p1.z;
-		
-		this.rotation.applyToVector(this.workingInput, this.workingOutput);
-        rOut.setP1(rIn.p1);
-		rOut.setHeading(this.workingOutput);
-		return rOut;
-	}
-
-	applyInverseToRay(rIn, rOut = rIn.copy()) {
-		this.workingInput.x = rIn.p2.x - rIn.p1.x;
-		this.workingInput.y = rIn.p2.y - rIn.p1.y; 
-		this.workingInput.z = rIn.p2.z - rIn.p1.z;		
-
-		this.rotation.applyInverseToVector(this.workingInput, this.workingOutput);
-		rOut.setP1(rIn.p1);
-		rOut.setHeading(this.workingOutput);
-		return rOut;
-	}
-
-    get q0() {
-        return this.rotation.q0;
-    }
-    get q1() {
-        return this.rotation.q1;
-    }
-    get q2() {
-        return this.rotation.q2;
-    }
-    get q3() {
-        return this.rotation.q3;
-    }
-	applyToRot(rot, storeIn=new Rot()) {                                                                            
-		let rq0 = rot.q0, rq1 = rot.q1, rq2=rot.q2, rq3 = rot.q3;
-        let trq0 = this.q0, trq1 = this.q1, trq2=this.q2, trq3 = this.q3;                                                                                              
-		storeIn.rotation.q0 =  rq0 * trq0 -(rq1 * trq1 +  rq2 * trq2 + rq3 * trq3);   
-		storeIn.rotation.q1 =  rq1 * trq0 + rq0 * trq1 + (rq2 * trq3 - rq3 * trq2);   
-		storeIn.rotation.q2 =  rq2 * trq0 + rq0 * trq2 + (rq3 * trq1 - rq1 * trq3);   
-		storeIn.rotation.q3 =  rq3 * trq0 + rq0 * trq3 + (rq1 * trq2 - rq2 * trq1);
-        storeIn.rotation.normalize();
-        return storeIn;                                                                                                                                                                                       
-	}                                                             
-
-	applyInverseTo(rot, storeIn = new Rot()) {                                                                                           
-		let rq0 = rot.q0, rq1 = rot.q1, rq2=rot.q2, rq3 = rot.q3;
-        let trq0 = this.q0, trq1 = this.q1, trq2=this.q2, trq3 = this.q3;                                                                    
-		                                                                                       
-		storeIn.rotation.q0 = -rq0 * trq0 -(rq1 * trq1 +  rq2 * trq2 + rq3 * trq3);    
-		storeIn.rotation.q1 = -rq1 * trq0 + rq0 * trq1 + (rq2 * trq3 - rq3 * trq2);    
-		storeIn.rotation.q2 = -rq2 * trq0 + rq0 * trq2 + (rq3 * trq1 - rq1 * trq3);    
-		storeIn.rotation.q3 = -rq3 * trq0 + rq0 * trq3 + (rq1 * trq2 - rq2 * trq1);    
-		storeIn.rotation.normalize(); 
-        return storeIn;                                                                                                          
-	}      
-
-	
-	getAngle() {
-		return this.rotation.getAngle();  
-	}
-
-	getAxis() {
-        let result = this.workingOutput.copy();
-		this.getAxis(result);
-		return result;
-	}
-	
-	getAxis(output) {
-		return this.rotation.getAxis(output);
-	}
-
-
-	revert() {
-		let result = new Rot();
-        return this.setToReversion(result);
-	}
-	/** 
-	 * sets the values of the given rotation equal to the inverse of this rotation
-	 * @param r the rotation object the reversion will be stored into
-     * @return r
-	 */
-	setToReversion(r) {
-		this.rotation.revertInto(r.rotation);
-        return r;
-	}
-
-	/*
-	 * interpolate between two rotations (SLERP)
-	 * 
-	 */
-	static slerp(amount, r1, r2) {
-		let rotation = MRotation.slerp(amount, v1.rotation, v2.rotation);
-        return new Rot(rotation)
-	}
-
-	/** Get the swing rotation and twist rotation for the specified axis. The twist rotation represents the rotation around the
-	 * specified axis. The swing rotation represents the rotation of the specified axis itself, which is the rotation around an
-	 * axis perpendicular to the specified axis. The swing and twist rotation can be used to reconstruct the original
-	 * quaternion: this = swing * twist
-	 * 
-	 * @param axisX the X component of the normalized axis for which to get the swing and twist rotation
-	 * @param axisY the Y component of the normalized axis for which to get the swing and twist rotation
-	 * @param axisZ the Z component of the normalized axis for which to get the swing and twist rotation
-	 * @return an Array of Rot objects. With the first element representing the swing, and the second representing the twist
-	 * @see <a href="http://www.euclideanspace.com/maths/geometry/rotations/for/decomposition">calculation</a> */
-	getSwingTwist (axis) {
-        let twistRot = this.rotation.copy();
-		let resultRots = new Array(2);
-        this.workingInput.setComponents(twistRot.q1, twistRot.q2, twistRot.q3);
-		let d = this.workingInput.dot(axis);
-		twistRot.set(twistRot.q0, axis.x * d, axis.y * d, axis.z * d, true);
-		if (d < 0) twistRot.rotation.multiply(-1.0);
-		
-		let swing = new MRotation(twistRot);
-		swing.setToConjugate();
-		swing = MRotation.multiply(swing.rotation, this.rotation);
-		
-		resultRots[0] = new Rot(swing);
-		resultRots[1] = new Rot(twistRot);
-		return resultRots;
-	}
-	
-	
-	
-
-	toString() {
-		return this.rotation.toString();//"\n axis: "+ this.getAxis().toVec3f() +", \n angle: "+((float)Math.toDegrees(this.getAngle()));
-	}
-	
-    toConsole() {
-        console.log(this.toString());
-    }
-
-	equalTo(m) {
-		return MRotation.distance(this.rotation, m.rotation) < Number.EPSILON;
-	}
-	
-}
