@@ -129,7 +129,7 @@ export class ConstraintStack extends LimitingReturnful {
         this.lastPrefState = new IKNode(null, null, undefined, this.pool);
         this.lastBoneOrientation = new IKNode(null, null, undefined, this.pool);
         this.lastBoneOrientation.setParent(this.lastPrefState); 
-        this.lastBoneOrientation.adoptValues(this.forBone?.getIKBoneOrientation());
+        this.lastBoneOrientation.adoptLocalValuesFromObject3D(this.forBone?.getIKBoneOrientation());
         this.lastLimitState = new IKNode(null, null, undefined, this.pool);
     }
 

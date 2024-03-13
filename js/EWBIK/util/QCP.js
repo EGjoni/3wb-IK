@@ -369,12 +369,7 @@ export class QCP {
 				}
 			}
 
-			let min = q1;
-			min = q2 < min ? q2 : min; 
-			min = q3 < min ? q3: min;
-			min = q4 < min ? q4 : min;
-
-			return new Rot(-q2, -q3, -q4, q1, true);
+			return new Rot(q1, q2, q3, q4, true);
 		}
 	}
     /**

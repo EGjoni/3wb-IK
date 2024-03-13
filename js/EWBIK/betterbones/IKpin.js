@@ -11,6 +11,7 @@ export class IKPin {
     effectorTransform = new IKTransform();
     target = null;
     enabled = true;
+    /**@type {IKNode} */
     targetNode = null;
     pinWeight = 1;
     modeCode = 3;
@@ -344,7 +345,7 @@ export class IKPin {
         const object = this.targetNode.toTrack;
         let prevPar = object.parent;
         object.position.set(0, 0, 0);
-        object.quaternion.set(0, 0, 0, 1);
+        object.quaternion.set(0, 0, 0, 1); //obj is in jpl
         object.scale.set(1, 1, 1);
         object.updateMatrix();
         this.forBone.getIKBoneOrientation().add(object); 

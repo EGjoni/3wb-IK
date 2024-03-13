@@ -675,13 +675,16 @@ export class TrackingNode extends IKNode {
                 globalMBasis = newGlobal.globalMBasis;
             }
             worldMatrixA = new THREE.Matrix4();
+            const gmbrot = globalMBasis.rotation;
+            
             worldMatrixA.compose(globalMBasis.translate,
+                //new Quaternion(gmbrot.x, gmbrot.y, gmbrot.z, gmbrot.w); //jpl
                 new Quaternion(
-                    globalMBasis.rotation.x,
-                    globalMBasis.rotation.y,
-                    globalMBasis.rotation.z,
-                    globalMBasis.rotation.w
-                ),
+                    -gmbrot.x,
+                    -gmbrot.y,
+                    -gmbrot.z,
+                    gmbrot.w
+                ), // hamilton to jpl
                 globalMBasis.scale);
         }
         else if (A instanceof THREE.Object3D) {
@@ -716,10 +719,15 @@ export class TrackingNode extends IKNode {
         obj3d.scale.y = localMBasis.scale.y;
         obj3d.scale.z = localMBasis.scale.z;
 
-        obj3d.quaternion.x = localMBasis.rotation.x;
+        /*obj3d.quaternion.x = localMBasis.rotation.x;
         obj3d.quaternion.y = localMBasis.rotation.y;
         obj3d.quaternion.z = localMBasis.rotation.z;
-        obj3d.quaternion.w = localMBasis.rotation.w;
+        obj3d.quaternion.w = localMBasis.rotation.w;*/ //jpl
+
+        obj3d.quaternion.x = -localMBasis.rotation.x;
+        obj3d.quaternion.y = -localMBasis.rotation.y;
+        obj3d.quaternion.z = -localMBasis.rotation.z;
+        obj3d.quaternion.w = localMBasis.rotation.w; //hamilton to jpl
 
         obj3d.updateWorldMatrix()
     }

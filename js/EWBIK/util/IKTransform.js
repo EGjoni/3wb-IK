@@ -81,14 +81,14 @@ export class IKTransform {
         this.rotation = this.createPrioritzedRotation(this._xRay.heading(), this._yRay.heading(), this._zRay.heading());
     }
 
-    createPrioritzedRotation(xHeading, yHeading, zHeading) {		
+    /*createPrioritzedRotation(xHeading, yHeading, zHeading) {		
         let tempV = zHeading.clone(); 
         tempV.setComponents(0,0,0);
         let toYZ = new Rot(yBase, zBase, yHeading, zHeading); 
         toYZ.applyToRot(yBase, tempV);
         let toY = Rot.fromVecs(tempV, yHeading);
         return toY.applyToRot(toYZ);
-    }
+    }*/
 
     initializeBasisWithDirections(origin, x, y, z) {
         this.translate = origin.clone();
@@ -112,10 +112,10 @@ export class IKTransform {
 
     adoptValues(input) {
         this.translate.setComponents(input.translate.x, input.translate.y, input.translate.z);
-        this.rotation.x = input.rotation.x;
-        this.rotation.y = input.rotation.y;
-        this.rotation.z = input.rotation.z;
-        this.rotation.w = input.rotation.w;
+        this.rotation.rotation.q0 = input.rotation[0];
+        this.rotation.rotation.q1 = input.rotation[1];
+        this.rotation.rotation.q2 = input.rotation[2];
+        this.rotation.rotation.q3 = input.rotation[3];
         this.xBase.set(input.xBase);
         this.yBase.set(input.yBase);
         this.zBase.set(input.zBase);
@@ -143,7 +143,8 @@ export class IKTransform {
     }
 
     setToIdentity(){
-        return this.setFromArrays([0,0,0], [0,0,0,1], [1,1,1], false);
+        //return this.setFromArrays([0,0,0], [1,0,0,0], [1,1,1], false); // jpl
+        return this.setFromArrays([0,0,0], [1,0,0,0], [1,1,1], false); // hamilton
     }
 
     setFromArrays(translation, rotation, scale, normalize = true) {
@@ -165,14 +166,16 @@ export class IKTransform {
         const quat = object3d.getWorldQuaternion(temp_identitythreequat);
         const scale = object3d.getWorldScale(temp_unitscale); 
         this.translate.setComponents(pos.x, pos.y, pos.z);
-        this.rotation.setComponents(quat.x, quat.y, quat.z, quat.w);
+        //this.rotation.setComponents(quat.x, quat.y, quat.z, quat.w); // raw jpl input
+        this.rotation.setComponents(quat.w, -quat.x, -quat.y, -quat.z); //convert to hamilton from jpl
         this.scale.setComponents(scale.x, scale.y, scale.z);
         this.refreshPrecomputed();
     }
 
     setFromObj3d(object3d) {
         this.translate.setComponents(object3d.position.x, object3d.position.y, object3d.position.z);
-        this.rotation.setComponents(object3d.quaternion.x, object3d.quaternion.y, object3d.quaternion.z, object3d.quaternion.w);
+        //this.rotation.setComponents(object3d.quaternion.x, object3d.quaternion.y, object3d.quaternion.z, object3d.quaternion.w); //jpl
+        this.rotation.setComponents(object3d.quaternion.w, -object3d.quaternion.x, -object3d.quaternion.y, -object3d.quaternion.z); //hamilton
         this.scale.setComponents(object3d.scale.x, object3d.scale.y, object3d.scale.z);
         this.refreshPrecomputed();
     }
@@ -185,8 +188,8 @@ export class IKTransform {
      */
     setTransformToLocalOf(globalinput, localoutput) {
         this.setVecToLocalOf(globalinput.translate, localoutput.translate);
-        //this.rotation.getRotationTo(globalinput.rotation, localoutput.rotation);
-        globalinput.rotation.applyToRot(this.inverseRotation, localoutput.rotation);
+        //globalinput.rotation.applyToRot(this.inverseRotation, localoutput.rotation); //jpl
+        this.inverseRotation.applyToRot(globalinput.rotation, localoutput.rotation); //hamilton
         localoutput.refreshPrecomputed();
         return localoutput;
     }
@@ -229,7 +232,8 @@ export class IKTransform {
     }
 
     getLocalOfRotation(inRot) {		
-        let resultNew =  inRot.applyToRot(this.inverseRotation).applyToRot(this.rotation);//this.inverseRotation.applyToRot(inRot).applyToRot(this.rotation);						
+        //let resultNew =  this.inverseRotation.applyToRot(inRot).applyToRot(this.rotation); // jpl
+        let resultNew =  inRot.applyToRot(this.inverseRotation).applyToRot(this.rotation); //hamilton
         return resultNew;			
     }
 
