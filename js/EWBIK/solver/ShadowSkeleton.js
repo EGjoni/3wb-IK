@@ -64,6 +64,7 @@ export class ShadowSkeleton {
         for (let i = 0; i < iterations; i++) {
             this.solveToTargets(stabilizationPasses, endOnIndex, onComplete, callbacks, i);
         }
+        this.updateBoneStates(onComplete, callbacks);
     }
 
     pullBackAll(iterations, solveFrom, onComplete, callbacks = null, currentIteration) {
@@ -122,7 +123,7 @@ export class ShadowSkeleton {
         }
         this.lastPainTotal = this.accumulatingPain;
 
-        this.updateBoneStates(onComplete, callbacks);
+        //this.updateBoneStates(onComplete, callbacks);
         this.pool.releaseAll();
     }
 
@@ -195,7 +196,8 @@ export class ShadowSkeleton {
             wb.simLocalAxes.localMBasis.translate.toArray(ts.translation);
             wb.simLocalAxes.localMBasis.rotation.toArray(ts.rotation);
             callbacks?.afterSolve(bs.directRef, ts, wb);
-            onComplete(bs, ts, wb);
+            if(onComplete)
+                onComplete(bs, ts, wb);
         }
         /*} else {
             for (let i = 0; i < this.traversalArray.length; i++) {
