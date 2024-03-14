@@ -123,7 +123,7 @@ export class ShadowSkeleton {
         }
         this.lastPainTotal = this.accumulatingPain;
 
-        this.updateBoneStates(onComplete, callbacks);
+        //this.updateBoneStates(onComplete, callbacks);
         this.pool.releaseAll();
     }
 
