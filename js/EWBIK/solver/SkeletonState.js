@@ -565,7 +565,7 @@ export class TargetState {
         const yDir = priorities[1] > 0;
         const zDir = priorities[2] > 0;
         let totalPriority = 0;
-        let priorityCount = 0;
+        let priorityCount = 1;
         let normedPriority = 0;
         let maxPriority = 0;
 
@@ -590,8 +590,10 @@ export class TargetState {
         }
         this.priorities = priorities;
         
-        //if (priorityCount > 0)
-        this.priorities = priorities.map(priority => priority/3)// * maxPriority);
+       
+        normedPriority = totalPriority / priorityCount;
+
+        this.priorities = priorities.map(priority => priority * normedPriority * maxPriority);
     }
 
     setWeight(weight) {
