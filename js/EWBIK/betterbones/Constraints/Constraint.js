@@ -265,11 +265,11 @@ export class ConstraintResult {
     }
 
     set fullRotation(rot) {
-        this._fullRotation.setComponents(rot.x, rot.y, rot.z, rot.w);
+        this._fullRotation.setComponents(rot.w, rot.x, rot.y, rot.z);
     }
 
     set clampedRotation(rot) {
-        this._clampedRotation.setComponents(rot.x, rot.y, rot.z, rot.w);
+        this._clampedRotation.setComponents(rot.w, rot.x, rot.y, rot.z);
     }
 
     get fullRotation() {

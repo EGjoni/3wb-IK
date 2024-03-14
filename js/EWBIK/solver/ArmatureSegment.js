@@ -365,9 +365,9 @@ class WorkingBone {
     
         const translateBy = this.chain.qcpConverger.getTranslation();
         const boneDamp = this.cosHalfDampen; 
-       // if (!translate) {
+        if (!translate) {
             qcpRot.clampToCosHalfAngle(boneDamp);
-        //}
+        }
         if (this.constraint != null && !skipConstraints && !(this.constraint instanceof Returnful)) {
             this.desiredState.rotateBy(qcpRot);
             this.desiredState.updateGlobal();

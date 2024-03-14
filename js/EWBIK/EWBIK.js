@@ -453,10 +453,10 @@ export class EWBIK {
         const bsi = bs.getIndex();
         const currBoneAx = this.skelStateBoneRefs[bsi];
         currBoneAx.position.set(...ts.translation);//, ts.rotation, ts.scale);
-        currBoneAx.quaternion.x = ts.rotation[0];
-        currBoneAx.quaternion.y = ts.rotation[1];
-        currBoneAx.quaternion.z = ts.rotation[2];
-        currBoneAx.quaternion.w = ts.rotation[3];
+        currBoneAx.quaternion.x = -ts.rotation[1];
+        currBoneAx.quaternion.y = -ts.rotation[2];
+        currBoneAx.quaternion.z = -ts.rotation[3];
+        currBoneAx.quaternion.w = ts.rotation[0];
         this.updateBoneColors(bs);
         currBoneAx.IKUpdateNotification();
     }
@@ -550,7 +550,7 @@ export class EWBIK {
                 }
             );
             
-            orientation.quaternion.set(rotTo.x, rotTo.y, rotTo.z, rotTo.w);
+            orientation.quaternion.set(-rotTo.x, -rotTo.y, -rotTo.z, rotTo.w);
 
             fromBone.setIKBoneOrientation(orientation);
             for (let cb of fromBone.childBones()) {
@@ -877,10 +877,10 @@ export class EWBIK {
 
     updateSkelStateAxes(a, ts, setRelativeTo = null, quiet = false) {
         let basis = this.getReparentedBasis(a, setRelativeTo, quiet);
-        ts.rotation[0] = basis.rotation.x;
-        ts.rotation[1] = basis.rotation.y;
-        ts.rotation[2] = basis.rotation.z;
-        ts.rotation[3] = basis.rotation.w;
+        ts.rotation[0] = basis.rotation.w;
+        ts.rotation[1] = basis.rotation.x;
+        ts.rotation[2] = basis.rotation.y;
+        ts.rotation[3] = basis.rotation.z;
         ts.translation[0] = basis.translate.x;
         ts.translation[1] = basis.translate.y;
         ts.translation[2] = basis.translate.z;

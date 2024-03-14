@@ -15,7 +15,7 @@ import { Constraint, Returnful } from '../Constraint.js';
 export class Rest extends Returnful {
     static totalRestConstraints = 0;
     /**@type {Bone} */
-    painfulness = 0.8; 
+    painfulness = 0.5; 
     
     
 

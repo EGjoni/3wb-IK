@@ -112,10 +112,10 @@ export class IKTransform {
 
     adoptValues(input) {
         this.translate.setComponents(input.translate.x, input.translate.y, input.translate.z);
-        this.rotation.rotation.q0 = input.rotation[0];
-        this.rotation.rotation.q1 = input.rotation[1];
-        this.rotation.rotation.q2 = input.rotation[2];
-        this.rotation.rotation.q3 = input.rotation[3];
+        this.rotation.w = input.rotation.w;
+        this.rotation.x = input.rotation.x;
+        this.rotation.y = input.rotation.y;
+        this.rotation.z = input.rotation.z;
         this.xBase.set(input.xBase);
         this.yBase.set(input.yBase);
         this.zBase.set(input.zBase);
