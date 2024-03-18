@@ -3,8 +3,8 @@ import { Bone , Object3D} from 'three';
 import { Rot } from "../../../util/Rot.js";
 import { NoPool, Vec3, any_Vec3} from "../../../util/vecs.js";
 import { Ray } from "../../../util/Ray.js";
-import { IKNode, TrackingNode } from "../../../util/IKNodes.js";
-import { IKTransform } from '../../../util/IKTransform.js';
+import { IKNode, TrackingNode } from "../../../util/nodes/IKNodes.js";
+import { IKTransform } from '../../../util/nodes/IKTransform.js';
 import { Constraint, Returnful } from '../Constraint.js';
 /** 
  * Very simple constraint defining a rest pose a bone should prefer to be in. 
@@ -75,10 +75,10 @@ export class Rest extends Returnful {
         }*/
         //currRotFrame.toConsole();
         //targframe.toConsole();
-        let nA_B = inv_currRotFrame.applyToRot(targframe);  // C = (-A)*B
-        let nB_A = inv_targFrame.applyToRot(currRotFrame);
-        let B_nA = targframe.applyToRot(inv_currRotFrame);
-        let A_nB = currRotFrame.applyToRot(inv_targFrame)
+        let nA_B = inv_currRotFrame.applyAfter(targframe);  // C = (-A)*B
+        let nB_A = inv_targFrame.applyAfter(currRotFrame);
+        let B_nA = targframe.applyAfter(inv_currRotFrame);
+        let A_nB = currRotFrame.applyAfter(inv_targFrame)
         let truepath = currRotFrame.getRotationTo(targframe);
         let rotBy = truepath;
 
@@ -145,10 +145,10 @@ export class Rest extends Returnful {
         
         let currentOrientIn_FrameSpace = Rest.tempNode3.reset().adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation()).getLocalMBasis().rotation
         let currentOrientIn_ParSpace = Rot.IDENTITY.clone();
-        localFrameSpace.applyToRot(currentOrientIn_FrameSpace, currentOrientIn_ParSpace);
+        localFrameSpace.applyAfter(currentOrientIn_FrameSpace, currentOrientIn_ParSpace);
 
         let currentToIdeal = currentOrientIn_ParSpace.getRotationTo(idealOrient);
-        currentToIdeal.applyToRot(localFrameSpace, this.boneFrameRest.getLocalMBasis().rotation);
+        currentToIdeal.applyAfter(localFrameSpace, this.boneFrameRest.getLocalMBasis().rotation);
         this.boneFrameRest.markDirty();
         return this;
     }*/

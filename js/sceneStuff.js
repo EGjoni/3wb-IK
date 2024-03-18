@@ -194,6 +194,7 @@ function makePinsList(pinSize, into = scene, armature) {
         }
         i++;
     }
+    updateGlobalPinLists();
 }
 
 
@@ -526,12 +527,16 @@ function printBoneNames(startNode, depth = 0) {
     }
 }
 
-function initIK(armature) {
-    makePinsList(1, armature.armatureObj3d, armature);
-    armature.regenerateShadowSkeleton(true);
-    //vrm.scene.scale.set(5,5,5);
+function initPrettyBones(armature, mode, override, depth=999) {
+    armature._maybeInferOrientation(armature.rootBone, mode, override, depth - 1);
     armature.showBones(0.1, true);
+}
 
+function initIK(armature) {
+    
+    //armature.regenerateShadowSkeleton(true);
+    
+    armature.regenerateShadowSkeleton(false);
     armature.ikReady = true;
 }
 

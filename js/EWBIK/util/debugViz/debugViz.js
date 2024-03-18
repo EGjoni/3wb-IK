@@ -25,7 +25,7 @@ export class MovementLine extends Line {
         geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
         geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
 
-        const material = new LineBasicMaterial({ vertexColors: true });
+        const material = new LineBasicMaterial({color: newColor, vertexColors: true });
 
         super(geometry, material);
         this.headColor = newColor;
@@ -45,7 +45,7 @@ export class MovementLine extends Line {
         positions[5] = newPosition.z;
         positionAttribute.needsUpdate = true;
 
-        const colorAttribute = this.geometry.getAttribute('color');
+        /*const colorAttribute = this.geometry.getAttribute('color');
         const colors = colorAttribute.array;
         colors[0] = oldColor.r;
         colors[1] = oldColor.g;
@@ -53,7 +53,7 @@ export class MovementLine extends Line {
         colors[3] = this.headColor.r;
         colors[4] = this.headColor.g;
         colors[5] = this.headColor.b;
-        colorAttribute.needsUpdate = true;
+        colorAttribute.needsUpdate = true;*/
 
         this.currentPosition = newPosition;
     }
@@ -101,13 +101,13 @@ export class RayDrawer {
             i++;
         }
         i = 0;
-        console.log('----');
+        //console.log('----');
         for (let rg of this.raysgeo) {
             rg.visible = true;
             let newpoints = this.updatefunc(rg, this);
             let newStartPoint = newpoints[0];
             let newEndPoint = newpoints[1];
-            console.log(`drawingY[${i}]: ${newStartPoint.y.toFixed(3)} -> ${newEndPoint.y.toFixed(3)}`);
+            //console.log(`drawingY[${i}]: ${newStartPoint.y.toFixed(3)} -> ${newEndPoint.y.toFixed(3)}`);
             const positions = rg.geometry.attributes.position;
             positions.array[0] = newStartPoint.x;
             positions.array[1] = newStartPoint.y;
@@ -194,30 +194,60 @@ export class BoneRots extends Object3D {
         let i = 0;
         while (hdx < vecs.length) {
             const sb = this.chain.pinnedBones[i];
-            this.rotLines.push(new MovementLine(any_Vec3(), any_Vec3(), BoneRots.OrigCol));
+            if(hdx >= hdx_) {      
+                let nl = new MovementLine(any_Vec3(), any_Vec3(), BoneRots.OrigCol);
+                nl.name = this.wb.forBone.ikd +'- rotation line origin';
+                nl.layers.enableAll();
+                this.rotLines.push(nl);
+            }
             const modeCode = sb.targetState.getModeCode();
             hdx++;
             if ((modeCode & TargetState.XDir) != 0) {
                 if(hdx > hdx_) {
-                    this.rotLines.push(new MovementLine(any_Vec3(), any_Vec3(), BoneRots.XPlusCol));
-                    this.rotLines.push(new MovementLine(any_Vec3(), any_Vec3(), BoneRots.XNegCol));
+                    let nl = new MovementLine(any_Vec3(), any_Vec3(), BoneRots.XPlusCol);
+                    this.add(nl);
+                    nl.layers.enableAll();
+                    nl.name = this.wb.forBone.ikd +'- rotation line xPos';
+                    this.rotLines.push(nl);
+                    nl = new MovementLine(any_Vec3(), any_Vec3(), BoneRots.XNegCol);
+                    this.add(nl);
+                    nl.layers.enableAll();
+                    nl.name = this.wb.forBone.ikd +'- rotation line xNeg';
+                    this.rotLines.push(nl);
                 }
                 hdx += 2;
             }
             if ((modeCode & TargetState.YDir) != 0) {
                 if(hdx > hdx_) {
-                    this.rotLines.push(new MovementLine(any_Vec3(), any_Vec3(), BoneRots.YPlusCol));
-                    this.rotLines.push(new MovementLine(any_Vec3(), any_Vec3(), BoneRots.YNegCol));
+                    let nl = new MovementLine(any_Vec3(), any_Vec3(), BoneRots.YPlusCol);
+                    this.add(nl);
+                    nl.layers.enableAll();
+                    nl.name = this.wb.forBone.ikd +'- rotation line yPos';
+                    this.rotLines.push(nl);
+                    nl = new MovementLine(any_Vec3(), any_Vec3(), BoneRots.YNegCol);
+                    this.add(nl);
+                    nl.layers.enableAll();
+                    nl.name = this.wb.forBone.ikd +'- rotation line yNeg';
+                    this.rotLines.push(nl);
                 }
                 hdx += 2;
             }
             if ((modeCode & TargetState.ZDir) != 0) {
                 if(hdx > hdx_) {
-                    this.rotLines.push(new MovementLine(any_Vec3(), any_Vec3(), BoneRots.ZPlusCol));
-                    this.rotLines.push(new MovementLine(any_Vec3(), any_Vec3(), BoneRots.ZNegCol));
+                    let nl = new MovementLine(any_Vec3(), any_Vec3(), BoneRots.ZPlusCol);
+                    this.add(nl);
+                    nl.layers.enableAll();
+                    nl.name = this.wb.forBone.ikd +'- rotation line zPos';
+                    this.rotLines.push(nl);
+                    nl = new MovementLine(any_Vec3(), any_Vec3(), BoneRots.ZNegCol);
+                    this.add(nl);
+                    nl.layers.enableAll();
+                    nl.name = this.wb.forBone.ikd +'- rotation line zNeg';
+                    this.rotLines.push(nl);
                 }
                 hdx += 2;
             }
+            
             i++;
         }
     }
@@ -231,10 +261,17 @@ export class BoneRots extends Object3D {
         this.visible = true;
     }
 
+    get visible() {
+        return this._visible;
+    }
+
     set visible(val) {
+        this._visible = val;
         if(this.rotLines) {
             for(let rl of this?.rotLines) {
                 rl.visible = val;
+                if(rl.parent != this)
+                    this.add(rl);
             }
         }
     }

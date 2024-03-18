@@ -1,20 +1,61 @@
 import {Vec3, any_Vec3} from "./vecs.js";
 import {Rot} from "./Rot.js";
 
+/**
+ * Much of this code was taken from Douglas L. Theobald (2005). 
+ * You can read the paper in which he was introduced QCP here: 
+ * "Rapid calculation of RMSD using a quaternion-based characteristic
+polynomial."
+ * Acta Crystallographica A 61(4):478-480.
+ *
+ * Pu Liu, Dmitris K. Agrafiotis, and Douglas L. Theobald (2009)
+ * "Fast determination of the optimal rotational matrix for macromolecular
+ *  superpositions."
+ *  Journal of Computational Chemistry 31(7):1561-1563.
+ *
+ */ 
+
+/**
+ * Note from Eron: I have butchered the original code substantially when porting to Java,
+ * then once more to optimize for javascript quirks. 
+ * 
+ * What have we learned from this brutality?
+ * Well, apparently the RMSD loop is kinda optional? Like, it'll help keep your quaternions normal
+ * and definitely increases accuracy but, if you can tolerate (or even desire) some innacuracy
+ * this sort of just magically works?
+ * Either your quaternion's scalar component will have huge magnitudes when it's close to identity 
+ * (in which case, who cares, normalizing will fix it), or your quaternion components will vanish
+ * for reasons that don't require iteration, and the code just gives you identity when that happens.
+ * 
+ * Anyway, I set the max iterations to 5 because I don't really believe me either.
+ */
+
 export class QCP {	
+	Sxx = 0;
+	Sxy = 0;
+	Sxz = 0;
+	Syx = 0;
+	Syy = 0;
+	Syz = 0;
+	Szx = 0;
+	Szy = 0;
+	Szz = 0;
 	
 	/**
 	 * Constructor with option to set the precision values.
 	 *
-	 * @param centered
-	 *            true if the point arrays are centered at the origin (faster),
-	 *            false otherwise
+	 *
 	 * @param evec_prec
 	 *            required eigenvector precision
 	 * @param eval_prec
 	 *            required eigenvalue precision
+	 *  @param centered
+	 *            true if the point arrays are centered at the origin (faster),
+	 *            false otherwise
+	 * @param type
+	 *            WIP: 64 vs 32 bit buffers.
 	 */
-	constructor(evec_prec, eval_prec, type) {
+	constructor(evec_prec, eval_prec, centered, type) {
 		this.evec_prec = evec_prec;
 		this.eval_prec = eval_prec;
         this.max_iterations = 5;
@@ -57,11 +98,11 @@ export class QCP {
 		this.targetCenter.setComponents(0,0,0);
 		this.wsum = 0;
 
-		if (translate) {
+		if (translate) { //Note; for use in EWBIK, we should only trigger this block on the root bone!
 			this.updateDirToWeightedCenter(this.moved, this.weight, this.movedCenter);
 			this.wsum = 0; // set wsum to 0 so we don't double up.
 			this.updateDirToWeightedCenter(this.target, this.weight, this.targetCenter);
-			this.translate(this.movedCenter.mult(-1), this.moved);
+			this.translate(this.movedCenter.mult(-1), this.moved);			
 			this.translate(this.targetCenter.mult(-1), this.target);
 			this.movedCenter.mult(-1);
 			this.targetCenter.mult(-1);
@@ -72,8 +113,7 @@ export class QCP {
 				this.wsum = moved.length;
 			}
 		}
-		//calcRmsd(moved, target);
-
+		//this.calcRmsd(moved, target);
 	}
 
 	/**
@@ -157,47 +197,36 @@ export class QCP {
 		
 		let g1 = 0, g2 = 0;
 
-		this.Sxx = 0;
-		this.Sxy = 0;
-		this.Sxz = 0;
-		this.Syx = 0;
-		this.Syy = 0;
-		this.Syz = 0;
-		this.Szx = 0;
-		this.Szy = 0;
-		this.Szz = 0;
+		let Sxx=0,Sxy=0, Sxz=0, Syx=0, Syy=0, Syz=0, Szx=0, Szy=0, Szz=0;
 
 		if (this.weight != null) {
 			// wsum = 0;
+			let x1, y1, z1;
 			for (let i = 0; i < coords1.length; i++) {
-				const cix = coords1[i].x, ciy = coords1[i].y, ciz = coords1[i].z;
-				let x1, x2, y1, y2, z1, z2;
+				const ci1x = coords1[i].x, ci1y = coords1[i].y, ci1z = coords1[i].z;
+				const ci2x = coords2[i].x, ci2y = coords2[i].y, ci2z = coords2[i].z;
+
+				//we have to compute the S__ values that get used later, so we can't simplify g1 like we do g2 unfortunately :(
+				const w = this.weight[i];
+				x1 = w*ci1x;
+				y1 = w*ci1y;
+				z1 = w*ci1z;
 
 				// wsum += weight[i];
+				g1 += (x1*ci1x + y1*ci1y + z1*ci1z);
+				g2 += w * (ci2x*ci2x + ci2y*ci2y + ci2z*ci2z);
 
-				x1 = this.weight[i] * cix;
-				y1 = this.weight[i] * ciy;
-				z1 = this.weight[i] * ciz;
+				Sxx += (x1 * ci2x);
+				Sxy += (x1 * ci2y);
+				Sxz += (x1 * ci2z);
 
-				g1 += x1 * cix+ y1 * ciy + z1 * ciz;
+				Syx += (y1 * ci2x);
+				Syy += (y1 * ci2y);
+				Syz += (y1 * ci2z);
 
-				x2 = coords2[i].x;
-				y2 = coords2[i].y;
-				z2 = coords2[i].z;
-
-				g2 += this.weight[i] * (x2 * x2 + y2 * y2 + z2 * z2);
-
-				this.Sxx += (x1 * x2);
-				this.Sxy += (x1 * y2);
-				this.Sxz += (x1 * z2);
-
-				this.Syx += (y1 * x2);
-				this.Syy += (y1 * y2);
-				this.Syz += (y1 * z2);
-
-				this.Szx += (z1 * x2);
-				this.Szy += (z1 * y2);
-				this.Szz += (z1 * z2);
+				Szx += (z1 * ci2x);
+				Szy += (z1 * ci2y);
+				Szz += (z1 * ci2z);
 			}
 		} else {
 			for (let i = 0; i < coords1.length; i++) {
@@ -207,32 +236,42 @@ export class QCP {
 				g1 += ci1x * ci1x + ci1y * ci1y + ci1z * ci1z;
 				g2 += ci2x * ci2x + ci2y * ci2y + ci2z * ci2z;
 
-				this.Sxx += ci1x * ci2x;
-				this.Sxy += ci1x * ci2y;
-				this.Sxz += ci1x * ci2z;
+				Sxx += ci1x * ci2x;
+				Sxy += ci1x * ci2y;
+				Sxz += ci1x * ci2z;
 
-				this.Syx += ci1y * ci2x;
-				this.Syy += ci1y * ci2y;
-				this.Syz += ci1y * ci2z;
+				Syx += ci1y * ci2x;
+				Syy += ci1y * ci2y;
+				Syz += ci1y * ci2z;
 
-				this.Szx += ci1z * ci2x;
-				this.Szy += ci1z * ci2y;
-				this.Szz += ci1z * ci2z;
+				Szx += ci1z * ci2x;
+				Szy += ci1z * ci2y;
+				Szz += ci1z * ci2z;
 			}
 			// wsum = coords1.length;
 		}
 		
 		this.e0 = (g1 + g2) * 0.5;
 		
-		this.SxzpSzx = this.Sxz + this.Szx;
-		this.SyzpSzy = this.Syz + this.Szy;
-		this.SxypSyx = this.Sxy + this.Syx;
-		this.SyzmSzy = this.Syz - this.Szy;
-		this.SxzmSzx = this.Sxz - this.Szx;
-		this.SxymSyx = this.Sxy - this.Syx;
-		this.SxxpSyy = this.Sxx + this.Syy;
-		this.SxxmSyy = this.Sxx - this.Syy;
+		this.SxzpSzx = Sxz + Szx;
+		this.SyzpSzy = Syz + Szy;
+		this.SxypSyx = Sxy + Syx;
+		this.SyzmSzy = Syz - Szy;
+		this.SxzmSzx = Sxz - Szx;
+		this.SxymSyx = Sxy - Syx;
+		this.SxxpSyy = Sxx + Syy;
+		this.SxxmSyy = Sxx - Syy;
 		this.mxEigenV = this.e0;
+
+		this.Sxx = Sxx
+		this.Sxy = Sxy
+		this.Sxz = Sxz
+		this.Syx = Syx
+		this.Syy = Syy
+		this.Syz = Syz
+		this.Szx = Szx
+		this.Szy = Szy
+		this.Szz = Szz
 
 		this.innerProductCalculated = true;
 	}
@@ -266,14 +305,10 @@ export class QCP {
 
 			let c0 = Sxy2Sxz2Syx2Szx2 * Sxy2Sxz2Syx2Szx2
 					+ (Sxx2Syy2Szz2Syz2Szy2 + SyzSzymSyySzz2) * (Sxx2Syy2Szz2Syz2Szy2 - SyzSzymSyySzz2)
-					+ (-(SxzpSzx) * (SyzmSzy) + (SxymSyx) * (SxxmSyy - Szz))
-							* (-(SxzmSzx) * (SyzpSzy) + (SxymSyx) * (SxxmSyy + Szz))
-					+ (-(SxzpSzx) * (SyzpSzy) - (SxypSyx) * (SxxpSyy - Szz))
-							* (-(SxzmSzx) * (SyzmSzy) - (SxypSyx) * (SxxpSyy + Szz))
-					+ (+(SxypSyx) * (SyzpSzy) + (SxzpSzx) * (SxxmSyy + Szz))
-							* (-(SxymSyx) * (SyzmSzy) + (SxzpSzx) * (SxxpSyy + Szz))
-					+ (+(SxypSyx) * (SyzmSzy) + (SxzmSzx) * (SxxmSyy - Szz))
-							* (-(SxymSyx) * (SyzpSzy) + (SxzmSzx) * (SxxpSyy - Szz));
+					+ (-(SxzpSzx)*(SyzmSzy)+(SxymSyx)*(SxxmSyy-Szz)) * (-(SxzmSzx)*(SyzpSzy)+(SxymSyx)*(SxxmSyy+Szz))
+					+ (-(SxzpSzx)*(SyzpSzy)-(SxypSyx)*(SxxpSyy-Szz)) * (-(SxzmSzx)*(SyzmSzy)-(SxypSyx)*(SxxpSyy+Szz))
+					+ (+(SxypSyx)*(SyzpSzy)+(SxzpSzx)*(SxxmSyy+Szz)) * (-(SxymSyx)*(SyzmSzy)+(SxzpSzx)*(SxxpSyy+Szz))
+					+ (+(SxypSyx)*(SyzmSzy)+(SxzmSzx)*(SxxmSyy-Szz)) * (-(SxymSyx)*(SyzpSzy)+(SxzmSzx)*(SxxpSyy-Szz));
 
 			
 			for (let i = 1; i < (max_iterations + 1); ++i) {
@@ -301,65 +336,78 @@ export class QCP {
 			return new Rot(this.moved[0], this.target[0]);
 		} else {
 			const {
-				SxxpSyy, Syy, Sxx, Szz, mxEigenV, SyzmSzy, SxzmSzx, SxymSyx, 
-				SxxmSyy, SxypSyx, SxzpSzx, SyzpSzy, evec_prec
+				mxEigenV,
+				Syy, 
+				Sxx, 
+				Szz,
+				SxxpSyy, SxypSyx, SxzpSzx, SyzpSzy,
+				SyzmSzy, SxzmSzx, SxymSyx, SxxmSyy,  
+				evec_prec
 			} = this;
 
-			let a11 = SxxpSyy + Szz - mxEigenV;
-			let a12 = SyzmSzy;
-			let a13 = -SxzmSzx;
-			let a14 = SxymSyx;
-			let a21 = SyzmSzy;
-			let a22 = SxxmSyy - Szz - mxEigenV;
-			let a23 = SxypSyx;
-			let a24 = SxzpSzx;
-			let a31 = a13;
-			let a32 = a23;
-			let a33 = Syy - Sxx - Szz - mxEigenV;
-			let a34 = SyzpSzy;
-			let a41 = a14;
-			let a42 = a24;
-			let a43 = a34;
-			let a44 = Szz - SxxpSyy - mxEigenV;
-			let a3344_4334 = a33 * a44 - a43 * a34;
-			let a3244_4234 = a32 * a44 - a42 * a34;
-			let a3243_4233 = a32 * a43 - a42 * a33;
-			let a3143_4133 = a31 * a43 - a41 * a33;
-			let a3144_4134 = a31 * a44 - a41 * a34;
-			let a3142_4132 = a31 * a42 - a41 * a32;
-			let q1 = a22 * a3344_4334 - a23 * a3244_4234 + a24 * a3243_4233;
-			let q2 = -a21 * a3344_4334 + a23 * a3144_4134 - a24 * a3143_4133;
-			let q3 = a21 * a3244_4234 - a22 * a3144_4134 + a24 * a3142_4132;
-			let q4 = -a21 * a3243_4233 + a22 * a3143_4133 - a23 * a3142_4132;
-
-			let qsqr = q1 * q1 + q2 * q2 + q3 * q3 + q4 * q4;
 			
-			if (qsqr < this.evec_prec) {
-				q1 = a12 * a3344_4334 - a13 * a3244_4234 + a14 * a3243_4233;
-				q2 = -a11 * a3344_4334 + a13 * a3144_4134 - a14 * a3143_4133;
-				q3 = a11 * a3244_4234 - a12 * a3144_4134 + a14 * a3142_4132;
-				q4 = -a11 * a3243_4233 + a12 * a3143_4133 - a13 * a3142_4132;
-				qsqr = q1 * q1 + q2 * q2 + q3 * q3 + q4 * q4;
+			const a11 = SxxpSyy + Szz-mxEigenV; 
+			const a12 = SyzmSzy; 
+			const a13 = -SxzmSzx; 
+			const a14 = SxymSyx;
+			const a21 = SyzmSzy; 
+			const a22 = SxxmSyy - Szz-mxEigenV; 
+			const a23 = SxypSyx; 
+			const a24 = SxzpSzx;
+			const a31 = a13; 
+			const a32 = a23; 
+			const a33 = Syy-Sxx-Szz - mxEigenV; 
+			const a34 = SyzpSzy;
+			const a41 = a14; 
+			const a42 = a24; 
+			const a43 = a34; 
+			const a44 = Szz - SxxpSyy - mxEigenV;
+			const a3344_4334 = a33 * a44 - a43 * a34; 
+			const a3244_4234 = a32 * a44-a42*a34;
+			const a3243_4233 = a32 * a43 - a42 * a33; 
+			const a3143_4133 = a31 * a43-a41*a33;
+			const a3144_4134 = a31 * a44 - a41 * a34;
+			const a3142_4132 = a31 * a42-a41*a32;
+			let q1 =  a22*a3344_4334-a23*a3244_4234+a24*a3243_4233;
+			let q2 = -a21*a3344_4334+a23*a3144_4134-a24*a3143_4133;
+			let q3 =  a21*a3244_4234-a22*a3144_4134+a24*a3142_4132;
+			let q4 = -a21*a3243_4233+a22*a3143_4133-a23*a3142_4132;
+		
 
-				if (qsqr < this.evec_prec) {
-					let a1324_1423 = a13 * a24 - a14 * a23, a1224_1422 = a12 * a24 - a14 * a22;
-					let a1223_1322 = a12 * a23 - a13 * a22, a1124_1421 = a11 * a24 - a14 * a21;
-					let a1123_1321 = a11 * a23 - a13 * a21, a1122_1221 = a11 * a22 - a12 * a21;
+			let qsqr = q1*q1 + q2*q2 + q3*q3 + q4*q4;
 
-					q1 = a42 * a1324_1423 - a43 * a1224_1422 + a44 * a1223_1322;
-					q2 = -a41 * a1324_1423 + a43 * a1124_1421 - a44 * a1123_1321;
-					q3 = a41 * a1224_1422 - a42 * a1124_1421 + a44 * a1122_1221;
-					q4 = -a41 * a1223_1322 + a42 * a1123_1321 - a43 * a1122_1221;
-					qsqr = q1 * q1 + q2 * q2 + q3 * q3 + q4 * q4;
+			/* The following code tries to calculate another column in the adjoint matrix when the norm of the
+			current column is too small.
+			Usually this block will never be activated.  To be absolutely safe this should be
+			uncommented, but it is most likely unnecessary.
+			*/
+			
+			if (qsqr < evec_prec) {
+				q1 =  a12*a3344_4334 - a13*a3244_4234 + a14*a3243_4233;
+				q2 = -a11*a3344_4334 + a13*a3144_4134 - a14*a3143_4133;
+				q3 =  a11*a3244_4234 - a12*a3144_4134 + a14*a3142_4132;
+				q4 = -a11*a3243_4233 + a12*a3143_4133 - a13*a3142_4132;
+				qsqr = q1*q1 + q2*q2 + q3*q3+q4*q4;
 
-					if (qsqr < this.evec_prec) {
-						q1 = a32 * a1324_1423 - a33 * a1224_1422 + a34 * a1223_1322;
-						q2 = -a31 * a1324_1423 + a33 * a1124_1421 - a34 * a1123_1321;
-						q3 = a31 * a1224_1422 - a32 * a1124_1421 + a34 * a1122_1221;
-						q4 = -a31 * a1223_1322 + a32 * a1123_1321 - a33 * a1122_1221;
-						qsqr = q1 * q1 + q2 * q2 + q3 * q3 + q4 * q4;
+				if (qsqr < evec_prec) {
+					const a1324_1423 = a13*a24 - a14*a23, a1224_1422 = a12*a24 - a14*a22;
+					const a1223_1322 = a12*a23 - a13*a22, a1124_1421 = a11*a24 - a14*a21;
+					const a1123_1321 = a11*a23 - a13*a21, a1122_1221 = a11*a22 - a12*a21;
 
-						if (qsqr < this.evec_prec) {
+					q1 =  a42*a1324_1423 - a43*a1224_1422 + a44*a1223_1322;
+					q2 = -a41*a1324_1423 + a43*a1124_1421 - a44*a1123_1321;
+					q3 =  a41*a1224_1422 - a42*a1124_1421 + a44*a1122_1221;
+					q4 = -a41*a1223_1322 + a42*a1123_1321 - a43*a1122_1221;
+					qsqr = q1*q1 + q2*q2 + q3*q3 + q4*q4;
+
+					if (qsqr < evec_prec) {
+						q1 =  a32*a1324_1423 - a33*a1224_1422 + a34*a1223_1322;
+						q2 = -a31*a1324_1423 + a33*a1124_1421 - a34*a1123_1321;
+						q3 =  a31*a1224_1422 - a32*a1124_1421 + a34*a1122_1221;
+						q4 = -a31*a1223_1322 + a32*a1123_1321 - a33*a1122_1221;
+						qsqr = q1*q1 + q2 *q2 + q3*q3 + q4*q4;
+
+						if (qsqr < evec_prec) {
 							/*
 							 * if qsqr is still too small, return the identity rotation
 							 */
@@ -368,7 +416,7 @@ export class QCP {
 					}
 				}
 			}
-
+			/**the normalization is important because QCP does not calculate a unit magnitude quaternion. */
 			return new Rot(q1, q2, q3, q4, true);
 		}
 	}
@@ -389,12 +437,12 @@ export class QCP {
      * @param {Vec3} vector to move
      */
 	updateDirToWeightedCenter(toCenter, weight, center) {
-
-		if (weight != null) {
+		
+		/*if (weight != null) {
 			for(let i = 0; i < toCenter.length; i++) {
 				this.wsum += weight[i];
 			}
-		}
+		}*/
 		if(weight != null && this.wsum != 0) {
 			for (let i = 0; i < toCenter.length; i++) {
 				center.mulAdd(toCenter[i], weight[i]);

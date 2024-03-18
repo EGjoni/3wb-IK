@@ -1,4 +1,4 @@
-import { IKNode } from "../util/IKNodes.js";
+import { IKNode } from "../util/nodes/IKNodes.js";
 import { Vec3Pool } from "../util/vecs.js";
 import { ArmatureSegment } from "./ArmatureSegment.js";
 
@@ -64,7 +64,7 @@ export class ShadowSkeleton {
         for (let i = 0; i < iterations; i++) {
             this.solveToTargets(stabilizationPasses, endOnIndex, null, callbacks, i);
         }
-        this.updateBoneStates(onComplete, callbacks);
+        this.updateBoneStates(onComplete, callbacks);        
     }
 
     pullBackAll(iterations, solveFrom, onComplete, callbacks = null, currentIteration) {
@@ -176,7 +176,10 @@ export class ShadowSkeleton {
         for (let i = 0; i < transforms.length; i++) {
             const ts = this.simTransforms[i];
             if (ts.parent != shadowSpace) {
-                this.simTransforms[i].getLocalMBasis().setFromArrays(transforms[i].translation, transforms[i].rotation, transforms[i].scale);
+                this.simTransforms[i].getLocalMBasis().setFromArrays(
+                    transforms[i].translation, 
+                    transforms[i].rotation, 
+                    transforms[i].scale);
                 this.simTransforms[i]._exclusiveMarkDirty(); //we're marking the entire hierarchy dirty anyway, so avoid the recursion
             }
 
@@ -194,6 +197,7 @@ export class ShadowSkeleton {
             const ts = bs.getFrameTransform();
             bs._setCurrentPain(wb.getOwnPain());
             wb.simLocalAxes.localMBasis.translate.toArray(ts.translation);
+            wb.simLocalAxes.localMBasis.rotation.normalize();
             wb.simLocalAxes.localMBasis.rotation.toArray(ts.rotation);
             callbacks?.afterSolve(bs.directRef, ts, wb);
             if(onComplete)
@@ -343,7 +347,7 @@ export class ShadowSkeleton {
       */
 
     debug_solve(iterations, stabilizationPasses, solveFrom, onComplete, callbacks = null, ds = this.debugState) {
-        ds.completedSolve = false;
+        ds.completedSolve = false; ds.completedIteration=false;
         if (ds.currentStep == 0) {
             this.alignSimAxesToBoneStates();
         }

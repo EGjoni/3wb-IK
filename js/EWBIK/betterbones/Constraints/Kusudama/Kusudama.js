@@ -4,7 +4,7 @@ import { Bone } from 'three';
 import { Rot } from "../../../util/Rot.js";
 import { Vec3, any_Vec3 } from "../../../util/vecs.js";
 import { Ray } from "../../../util/Ray.js";
-import { IKNode } from "../../../util/IKNodes.js";
+import { IKNode } from "../../../util/nodes/IKNodes.js";
 import { generateUUID } from "../../../util/uuid.js";
 import { Constraint, LimitingReturnful } from "../Constraint.js";
 
@@ -93,7 +93,7 @@ export class Kusudama extends LimitingReturnful {
 
         let oldYtoNewY = Rot.fromVecs(this.swingOrientationAxes().yRay().heading(), this.swingOrientationAxes().getGlobalOf(newYRay).heading());
         this.twistAxes.alignOrientationTo(this.swingOrientationAxes());
-        this.twistAxes.rotateBy(oldYtoNewY);
+        this.twistAxes.rotateByGlobal(oldYtoNewY);
         this.updateTangentRadii();
     }
 
@@ -125,7 +125,7 @@ export class Kusudama extends LimitingReturnful {
             this.constrainedRay.p1.set(this.boneRay.p1);
             this.constrainedRay.p2.set(limitingAxes.getGlobalOf(inLimits));
             let rectifiedRot = Rot.fromVecs(this.boneRay.heading(), this.constrainedRay.heading());
-            toSet.rotateBy(rectifiedRot);
+            toSet.rotateByGlobal(rectifiedRot);
             toSet.updateGlobal();
         }
     }
@@ -153,7 +153,7 @@ export class Kusudama extends LimitingReturnful {
                 pathPoint.sub(origin);
                 let toClamp = Rot.fromVecs(inPoint, pathPoint);
                 toClamp.clampToCosHalfAngle(cosHalfReturnfullness);
-                toSet.rotateBy(toClamp);
+                toSet.rotateByGlobal(toClamp);
             }
             if (this.axiallyConstrained) {
                 let angleToTwistMid = this.angleToTwistCenter(toSet, twistAxes);
@@ -188,11 +188,11 @@ export class Kusudama extends LimitingReturnful {
         let alignRot = globTwistCent.applyInverseToRot(toSet.getGlobalMBasis().rotation);
         let decomposition = alignRot.getSwingTwist(this.pool.new_Vec3(0, 1, 0));
         let goal = Rot.fromAxisAngle(this.twistHalfRangeRot.getAxis(), 2 * this.twistHalfRangeRot.getAngle() * ratio);
-        let toGoal = goal.applyToRot(alignRot.getInverse());
-        let achieved = toGoal.applyToRot(alignRot);
+        let toGoal = goal.applyAfter(alignRot.getInverse());
+        let achieved = toGoal.applyAfter(alignRot);
         decomposition[1] = achieved;
-        let recomposition = decomposition[0].applyToRot(decomposition[1]);
-        toSet.getParentAxes().getGlobalMBasis().inverseRotation.applyToRot(globTwistCent.applyToRot(recomposition), toSet.localMBasis.rotation);
+        let recomposition = decomposition[0].applyAfter(decomposition[1]);
+        toSet.getParentAxes().getGlobalMBasis().inverseRotation.applyAfter(globTwistCent.applyAfter(recomposition), toSet.localMBasis.rotation);
         toSet.localMBasis.refreshPrecomputed();
         toSet.markDirty();
     }

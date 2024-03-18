@@ -1,6 +1,6 @@
 const THREE = await import('three')
 import { Bone, Object3D } from 'three';
-import { IKNode } from '../../util/IKNodes.js';
+import { IKNode } from '../../util/nodes/IKNodes.js';
 import { Rot } from '../../util/Rot.js';
 Math.TAU = Math.PI*2;
 
@@ -210,7 +210,7 @@ export class ConstraintStack extends LimitingReturnful {
             if(c.lastCalled > c.giveup) continue;
             let rotBy = c.getPreferenceRotation(desiredState, desiredBoneOrientation, this.lastPrefState, this.lastBoneOrientation, constraintBasis, iteration, cosHalfReturnfullness, angleReturnfullness);
             this.lastPrefState.rotateBy(rotBy);
-            rotBy.applyToRot(accumulatedRot, accumulatedRot);
+            rotBy.applyAfter(accumulatedRot, accumulatedRot);
         }
         this.lastCalled = iteration;
         return accumulatedRot;
@@ -242,8 +242,8 @@ export class ConstraintResult {
     }
     reset(iteration) {
         this.iteration = iteration;
-        this._fullRotation.setComponents(0,0,0, 1);
-        this._clampedRotation.setComponents(0,0,0, 1);
+        this._fullRotation.setComponents(1,0,0,0);
+        this._clampedRotation.setComponents(1,0,0,0);
         this.__preCallDiscomfort = null;
         this.__postCallDiscomfort = null;
         this.__raw_preCallDiscomfort = null;

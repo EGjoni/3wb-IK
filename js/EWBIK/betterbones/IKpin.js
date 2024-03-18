@@ -1,5 +1,5 @@
-import { IKTransform } from "../util/IKTransform.js";
-import { IKNode, TrackingNode} from "../util/IKNodes.js";
+import { IKTransform } from "../util/nodes/IKTransform.js";
+import { IKNode, TrackingNode} from "../util/nodes/IKNodes.js";
 import { generateUUID } from "../util/uuid.js";
 const THREE = await import('three');
 import { Object3D } from "three";

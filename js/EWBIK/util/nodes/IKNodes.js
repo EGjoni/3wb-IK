@@ -1,10 +1,8 @@
-import { Vec3 } from "./vecs.js";
-import { Rot } from "./Rot.js";
+import { Vec3 } from "./../vecs.js";
+import { Rot } from "./../Rot.js";
 import { IKTransform } from "./IKTransform.js";
-import { generateUUID } from "./uuid.js";
 const THREE = await import('three');
 import { Quaternion, Vector3, Object3D, Matrix4 } from "three";
-import { TargetState } from "../solver/SkeletonState.js";
 
 
 
@@ -221,7 +219,7 @@ export class IKNode {
         return this;
     }
 
-    rotateBy(apply) {
+    rotateByLocal(apply) {
         this.getLocalMBasis().rotateBy(apply);
         this.markDirty();
         return this;
@@ -231,8 +229,19 @@ export class IKNode {
     rotateByGlobal(apply) {
         this.updateGlobal();
         if (this.getParentAxes() != null) {
-            let newRot = this.getParentAxes().getGlobalMBasis().getLocalOfRotation(apply);
+
+            //let newRot = this.localMBasis.this.localMBasis.inverseRotation.applyAfter(apply).applyAfter(this.localMBasis.rotation)
+            
+            let newRot = this.getParentAxes().getGlobalMBasis().getLocalOfRotation(apply); 
             this.getLocalMBasis().rotateBy(newRot);
+            /*let thisGlobRot = this.getGlobalMBasis().rotation.normalize();
+            let rotApplied = apply.applyAfter(thisGlobRot, thisGlobRot).normalize();
+            let newLocRot = this.getParentAxes().getGlobalMBasis().rotation.normalize().getRotationTo(rotApplied, this.getLocalMBasis().rotation);
+            newLocRot.normalize();
+            this.getLocalMBasis().refreshPrecomputed();
+            this.markDirty(); */
+            //let newRot = this.getGlobalMBasis().rotation.applyToConjugateOfRot(this.getParentAxes().getGlobalMBasis().rotation);//getLocalOfRotation(apply);
+            //this.getLocalMBasis().rotateBy(newRot);
         } else {
             this.getLocalMBasis().rotateBy(apply);
         }
@@ -569,8 +578,8 @@ export class TrackingNode extends IKNode {
      * 
      * @param {Object3D} toTrack 
      */
-    constructor(toTrack, ikd = 'TrackingNode-' + (TrackingNode.totalNodes + 1), forceOrthoNormality = true) {
-        super();
+    constructor(toTrack, ikd = 'TrackingNode-' + (TrackingNode.totalNodes + 1), forceOrthoNormality = true, pool = noPool) {
+        super(undefined, undefined, ikd, pool);
         this.ikd = ikd;
         TrackingNode.totalNodes += 1;
         this.toTrack = toTrack;

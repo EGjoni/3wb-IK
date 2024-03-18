@@ -13,7 +13,8 @@
             "gltf" : "https://unpkg.com/three/examples/jsm/loaders/GLTFLoader.js",
             "vrm" : "https://unpkg.com/@pixiv/three-vrm@2.1.0/lib/three-vrm.module.js",
             "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
-            "pca" : "https://cdn.jsdelivr.net/npm/pca-js@1.0.0/pca.min.js"
+            "pca" : "https://cdn.jsdelivr.net/npm/pca-js@1.0.0/pca.min.js",
+            "enviro" : "./js/environment.js"
           }
         }
     </script>
@@ -32,9 +33,11 @@
         import { GLTFLoader } from 'gltf';
         import { VRMLoaderPlugin } from 'vrm';
         import { EWBIK } from "./js/EWBIK/EWBIK.js";
-        import { IKNode, TrackingNode } from "./js/EWBIK/util/IKNodes.js";
+        import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
         import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
         import { Rest } from "./js/EWBIK/betterbones/Constraints/Rest/Rest.js";
+        import {getMeshDescendants, initEnvironment} from "enviro";
+        //import { Rest } from "./js/EWBIK/betterbones/Constraints/Rest/Rest.js"
         addDebugFuncs(THREE);
         window.Rest = Rest;
         window.OrbitControls = OrbitControls;
@@ -43,18 +46,18 @@
         window.TrackingNode = TrackingNode;
         window.IKPin = IKPin;
         window.autoSolve = true;
-        //import { Rest } from "./js/EWBIK/betterbones/Constraints/Rest/Rest.js"
+        
         window.meshLayer = 0;
         window.boneLayer = 1;
 
         let camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(-0.61, 1.2, -1);    
         window.renderer = new THREE.WebGLRenderer({ antialias: true });
-        window.renderer.setClearColor(new THREE.Color("red"));
+        renderer.setClearColor(0x000000, 0);
         renderer.setSize(window.innerWidth, window.innerHeight);
         window.camera = camera;
         window.renderer = renderer;
-        window.rendlrs = new LayeredRender(renderer, window.innerWidth, window.innerHeight, 
+        /*window.rendlrs = new LayeredRender(renderer, window.innerWidth, window.innerHeight, 
             (renderer, target) => { //renders mesh stuff
                 camera.layers.set(meshLayer);
                 renderer.render(scene, camera);
@@ -63,12 +66,12 @@
                 camera.layers.set(boneLayer);
                 renderer.render(scene, camera);
             }
-        );
+        );*/
         
-        const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.5);
-        const ambientLight = new THREE.AmbientLight(0x404040);
-        hemisphereLight.layers.enable(boneLayer);
-        ambientLight.layers.enable(boneLayer);
+        //const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.5);
+        //const ambientLight = new THREE.AmbientLight(0x404040);
+        //hemisphereLight.layers.enable(boneLayer);
+        //ambientLight.layers.enable(boneLayer);
 
         let orbitControls, boneCtrls, pinOrientCtrls, pinTranslateCtrls;
         var scene = null;        
@@ -78,25 +81,53 @@
         let armature = null;
         let frameCount = 0;
         window.instances = [];
+        window.debugLog = []
+        window.log = function (elem, identifier = null) {
+            if(elem.clone !== null) {
+                    let state = elem.clone();
+                    state.__of = identifier; 
+                    debugLog.push(state);
+            } else {
+              debugLog.push(elem);
+            }
+        }
+
         const loader = new GLTFLoader();
 
         async function init() {
             scene = new THREE.Scene();
-            scene.add(hemisphereLight);
+            //scene.add(hemisphereLight);
             window.scene = scene;
             document.body.appendChild(renderer.domElement);
-            scene.add(ambientLight);
+            //scene.add(ambientLight);
 
             loader.register((parser) => {
                 return new VRMLoaderPlugin(parser);
             });
 
-            let inst1 = loadModel({x: 0, y:0, z:0}, 0, ikify);
-            //let inst2 = loadModel({x: 0.5, y:0, z:0}, 1, ikify);
             window.addEventListener('resize', onWindowResize, false);
+            autoSolve = false;
+            interactionSolve = false;
             initControls(THREE, renderer);
 
+            let inst1 = await loadModel({x: 0, y:0, z:0}, 0, ikify);
+            window.nek1= inst1; 
+            armature = inst1; 
+            //let inst2 = loadModel({x: 0.5, y:0, z:0}, 1, ikify);
+            
+            armature.r_arm_upp.parent.rotateX(2*Math.PI/3);
+            armature.setDefaultIterations(1);
+            armature.dampening = 0.08;
+            armature.dirtyRate = true;
+            initEnvironment(scene, renderer, //scene,
+                [...getMeshDescendants(nek1.armatureObj3d.children[1]),
+                ...getMeshDescendants(nek1.armatureObj3d.children[2])],
+                [0, 1]
+            );
+            
+
             //instances = await Promise.all([inst1, inst2]);
+            //armature.solve();
             render();
         }
 
@@ -106,14 +137,15 @@
             let armature = new EWBIK(inst.scene.children[0], false);
             armature.armatureNode.forceOrthonormality = false;
             window.armatures.push(armature);    
-            window.updateParseStream("Inferring Bone directions...", loadId);
-            armature.inferOrientations(armature.rootBone);
-            window.updateParseStream("Addings constraints...", loadId);
-            initHumanoidRestConstraints(armature);
+            
+            window.updateParseStream("Inferring Bone directions and appearance...", loadId);
+                initPrettyBones(armature);            
+            window.updateParseStream("Addings constraints...", loadId);            
+                initHumanoidRestConstraints(armature);
+                makePinsList(1, armature.armatureObj3d, armature);
             window.updateParseStream("UI stuff...", loadId);
-            initIK(armature);
-            updateGlobalPinLists();
-            updateGlobalBoneLists();
+                updateGlobalBoneLists();
+                initIK(armature);
             window.updateParseStream(null, loadId);
             return armature;
             /*let armature2 = new EWBIK(instances[1].scene.children[0], false);
@@ -133,8 +165,7 @@
             let rootBone1 = vrm.scene.children[0];
             rootBone1.position.set(position.x, position.y, position.z);
             window.updateParseStream("Scene instaniated...", loadId);
-            window.neko1 = ikify(vrm, loadId);
-            return vrm;
+            return ikify(vrm, loadId);
             /*let armature1 = new EWBIK(rootBone1, false);
             armature1.armatureNode.forceOrthonormality = false;
             addSceneArmature(armature1);*/
@@ -155,11 +186,23 @@
         window.render = function(incrFrame = false) {
             if(incrFrame) frameCount++;
             doSolve();
-            window.rendlrs.render();
+            
+            camera.layers.set(0);
+            window.renderer.render(scene, camera);
+            window.renderer.clearDepth();
+            const currentBackground = scene.background;
+            const currentFog = scene.fog;
+            scene.background = null;
+            scene.fog = null;
+            camera.layers.set(1);
+            window.renderer.render(scene, camera);
+            scene.background = currentBackground;
+            scene.fog = currentFog;
+
         }
 
         function initHumanoidRestConstraints (armature) {
-
+            
             armature.l_arm_upp = armature.bonetags["J_Bip_L_UpperArm"];
             armature.r_arm_upp = armature.bonetags["J_Bip_R_UpperArm"];
             armature.l_arm_lower = armature.bonetags["J_Bip_L_LowerArm"];
@@ -170,9 +213,10 @@
             armature.r_leg_lower = armature.bonetags["J_Bip_R_LowerLeg"];
             armature.c_head = armature.bonetags["J_Bip_C_Head"];
             armature.c_chest = armature.bonetags["J_Bip_C_Chest"];
+            armature.upper_chest = armature.bonetags["J_Bip_C_UpperChest"];
         
             //l_arm_lower.rotate
-            armature.l_arm_upp.rotateZ(0.5);
+            /*armature.l_arm_upp.rotateZ(0.5);
             armature.r_arm_upp.rotateZ(-0.5);
         
             armature.l_arm_lower.rotateX(0.5);
@@ -193,10 +237,10 @@
             for(let b of armature.bones) {
                 if(b.parent instanceof THREE.Bone) {
                     //let restconst = new Rest(b);
-                    /*if(b == armature.bonetags["J_Bip_C_Head"]) {
+                    if(b == armature.bonetags["J_Bip_C_Head"]) {
                         restconst.setPainfulness(0.95);
                         restconst.setStockholmRate(0.8);
-                    }*/
+                    }
                 }
             }
         
@@ -216,11 +260,12 @@
             armature.r_arm_lower.rotateX(-0.5);
         
             armature.l_arm_upp.rotateZ(-0.5);
-            armature.r_arm_upp.rotateZ(0.5);
+            armature.r_arm_upp.rotateZ(0.5);*/
 
             //armature.root = new IKPin(armature.bonetags["Root"]);
+            armature.hips = new IKPin(armature.bonetags["J_Bip_C_Hips"]);
             //armature.head_pin = new IKPin(armature.c_head);
-            //armature.chest_pin = new IKPin(armature.c_chest);
+            //armature.c_uuperchest_pin = new IKPin(armature.upper_chest);
             //armature.r_hand_pin = new IKPin(armature.bonetags["J_Bip_R_Hand"]);
             //armature.l_hand_pin = new IKPin(armature.bonetags["J_Bip_L_Hand"]);
             //armature.r_foot_pin = new IKPin(armature.bonetags["J_Bip_R_Foot"]);            

@@ -1,10 +1,10 @@
 import { BoneState, SkeletonState } from "./solver/SkeletonState.js"
 import { ShadowSkeleton } from "./solver/ShadowSkeleton.js"
-import { IKTransform } from "./util/IKTransform.js";
+import { IKTransform } from "./util/nodes/IKTransform.js";
 import { Vec3, any_Vec3, Vec3Pool, NoPool }  from "./util/vecs.js";
 import { CallbacksSequence } from "./CallbacksSequence.js";
 import { Rot } from "./util/Rot.js";
-import { IKNode, TrackingNode } from "./util/IKNodes.js";
+import { IKNode, TrackingNode } from "./util/nodes/IKNodes.js";
 import { convexBlob, pcaOrientation } from "./util/mathdump/mathdump.js";
 import { IKPin } from "./betterbones/IKpin.js";
 import { Kusudama } from "./betterbones/Constraints/Kusudama/Kusudama.js";
@@ -152,7 +152,7 @@ export class EWBIK {
         if (!rootBone.isIKType) {
             Needles.injectInto(rootBone);
         }
-        this.armatureNode = new TrackingNode(this.armatureObj3d, this.armatureObj3d.ikd, false);
+        this.armatureNode = new TrackingNode(this.armatureObj3d, this.armatureObj3d.ikd, false, this.pool);
         if (this.armatureObj3d != null) {
             this.armatureNode.adoptTrackedGlobal();
         }
@@ -176,7 +176,6 @@ export class EWBIK {
     }
 
     makeBoneGeo(boneRef, height, radius, mat, hullpoints) {
-        if (boneRef?.boneGeo != null) boneRef.boneGeo.parent.remove(boneGeo);
         const cone = new THREE.ConeGeometry(radius * height, height, 5);
         cone.translate(0, height/2, 0);
         const hull = convexBlob(cone, ...hullpoints);
@@ -185,9 +184,10 @@ export class EWBIK {
         //boneplate.position.y = height / 2;
         boneplate.isBoneMesh = true;
         boneplate.forBone = boneRef;
-        boneplate.boneGeo = boneplate;
+        boneplate.bonegeo = boneplate;
         boneplate.name = 'bonegeo';
-        boneplate.layers.set();
+        boneplate.layers.set(window.boneLayer);
+        boneplate.visible = true;
         return boneplate;
     }
 
@@ -206,17 +206,17 @@ export class EWBIK {
     /**
      * creates and adds to the scene physical manifestations of each bone on this armature,
      * @param radius width of bones
-     * @param solvedOnly if true, will render all bones, not just the solver relevant ones.
+     * @param solvedOnly if false, will render all bones, not just the solver relevant ones.
      */
     showBones(radius = 0.5, solvedOnly = false) {
         const minSize = 0.001;
         this.meshList.slice(0, 0);
-        if (this.dirtySkelState) this._regenerateShadowSkeleton();
+        if (this.dirtySkelState) this.regenerateShadowSkeleton();
         for (const bone of this.bones) {
             let orientation = bone.getIKBoneOrientation();
             if (orientation.children.length == 0) {
                 let matObj = null;
-                if (this.skelState.getBoneStateById(bone.ikd) == null || bone.parent == null) {
+                if (this.skelState?.getBoneStateById(bone.ikd) == null || bone.parent == null) {
                     matObj = {color: new THREE.Color(0.2, 0.2, 0.8), transparent: true, opacity: 0.6 };
                 } else {
                     matObj = {color: bone.color, transparent: true, opacity: 1.0 };
@@ -227,10 +227,10 @@ export class EWBIK {
                 }
                 let thisRadius = bone.parent instanceof THREE.Bone? radius : radius/2; //sick and tired of giant root bones. Friggen whole ass trunks.
                 let bonegeo = this.makeBoneGeo(bone, Math.max(bone.height ?? bone.parent?.height ?? minSize, minSize), thisRadius, matObj, hullPoints);
-                orientation.add(bonegeo);
                 orientation.bonegeo = bonegeo;
-                bone.bonegeo = bonegeo;
-                orientation.bonegeo.layers.set(ikBoneLayer);
+                bone.setBonegeo(bonegeo);
+                bone.bonegeo.layers.set(window.boneLayer);
+                bone.visible = true;
                 this.meshList.push(bonegeo);
             }
         }
@@ -430,7 +430,7 @@ export class EWBIK {
         const bsi = bs.getIndex();
         const currBoneAx = this.skelStateBoneRefs[bsi];
         let pain = bs.readBonePain();
-        let bonecol = currBoneAx.getIKBoneOrientation().bonegeo.material.color;
+        let bonecol = currBoneAx.bonegeo.material.color;
         bonecol.r = pain;
         bonecol.g = 1 - pain;
         bonecol.b = 0.2;
@@ -543,12 +543,12 @@ export class EWBIK {
                     fromBone.height = minChild;
             }
 
-            let rotTo = pcaOrientation(childPoints, fromBone, 
-                (vecs, refBasis) => {                    
+            //let rotTo = pcaOrientation(childPoints, fromBone, 
+              //  (vecs, refBasis) => {                    
                     let rotTo = Rot.fromVecs(EWBIK.YDIR, normeddir);
-                    return rotTo; 
-                }
-            );
+                //    return rotTo; 
+               // }
+            //);
             
             orientation.quaternion.set(-rotTo.x, -rotTo.y, -rotTo.z, rotTo.w);
 
@@ -571,7 +571,7 @@ export class EWBIK {
         this.skelState.addTransform(
             this.armatureNode.ikd,
             armatureTransform.translate.components,
-            [armatureTransform.rotation.x, armatureTransform.rotation.y, armatureTransform.rotation.z, armatureTransform.rotation.w],
+            [armatureTransform.rotation.w, armatureTransform.rotation.x, armatureTransform.rotation.y, armatureTransform.rotation.z],
             [this.armatureNode.getLocalMBasis().x, this.armatureNode.getLocalMBasis().scale.y, this.armatureNode.getLocalMBasis().scale.z],
             null, this.armatureNode);
 
@@ -805,7 +805,7 @@ export class EWBIK {
         this.skelState.addTransform(
             axes.ikd,
             [translate.x, translate.y, translate.z],
-            [rotation.x, rotation.y, rotation.z, rotation.w], //
+            [rotation.w, rotation.x, rotation.y, rotation.z], //
             [basis.scale.x, basis.scale.y, basis.scale.z],
             parent_id, axes);
     }
@@ -866,9 +866,9 @@ export class EWBIK {
 
     updateSkelStateBone(b, bs) {
         this.updateSkelStateAxes(b, bs.getFrameTransform(), b.parent, true);
-        /*if (b.getConstraint() != null) {
+        if (b.getConstraint() != null) {
             this.updateSkelStateConstraint(b.getConstraint(), bs.getConstraint());
-        }*/
+        }
         let ts = bs.getTarget();
         if (ts != null) {
             this.updateSkelStateTarget(b.getIKPin(), ts);
@@ -884,7 +884,10 @@ export class EWBIK {
         ts.translation[0] = basis.translate.x;
         ts.translation[1] = basis.translate.y;
         ts.translation[2] = basis.translate.z;
-        if (!a.forceOrthoNormality) {
+        /*ts.scale[0] = basis.scale.x;
+        ts.scale[1] = basis.scale.y;
+        ts.scale[2] = basis.scale.z;*/
+        /*if (!a.forceOrthoNormality) {
             ts.scale[0] = basis.getXHeading().mag() * (basis.isAxisFlipped(IKNode.X) ? -1 : 1);
             ts.scale[1] = basis.getYHeading().mag() * (basis.isAxisFlipped(IKNode.Y) ? -1 : 1);
             ts.scale[2] = basis.getZHeading().mag() * (basis.isAxisFlipped(IKNode.Z) ? -1 : 1);
@@ -892,7 +895,7 @@ export class EWBIK {
             ts.scale[0] = basis.isAxisFlipped(IKNode.X) ? -1 : 1;
             ts.scale[1] = basis.isAxisFlipped(IKNode.Y) ? -1 : 1;
             ts.scale[2] = basis.isAxisFlipped(IKNode.Z) ? -1 : 1;
-        }
+        }*/
     }
 
     updateSkelStateTarget(pin, ts) {
@@ -1076,14 +1079,14 @@ let betterbones = {
 
     /**
      * define the physical orientation of this bone relative to its object3d reference frame
-     * @param {Object3d} orientation 
+     * @param {Object3d} newOrientation 
      */
-    setIKBoneOrientation(orientation) {
+    setIKBoneOrientation(newOrientation) {
         /** @type {IKTransform} */
         if (this.orientation == null)
-            this.orientation = orientation
-        else {
-            orientation.copy(orientation);
+            this.orientation = newOrientation
+        else if(newOrientation != this.orientations) {
+            this.orientation.copy(newOrientation);
         }
         this.orientation.placeholder = false;
     },
@@ -1098,6 +1101,24 @@ let betterbones = {
 
         /** @type {IKTransform} */
         return this.orientation;
+    },
+
+    getBonegeo(){
+        this._bonegeo;
+    },
+
+    setBonegeo(newgeo) {
+        if(newgeo != null) {
+            if (this.bonegeo != newgeo) {
+                this.orientation.remove(this.bonegeo);
+                this.bonegeo?.material.dispose();
+                this.bonegeo?.geometry.dispose();            
+            }
+            if(this.orientation.children.indexOf(newgeo) == -1) 
+                this.orientation.add(newgeo);
+        }
+        this.orientation.bonegeo = newgeo;
+        this.bonegeo = newgeo;
     },
 
     /** */

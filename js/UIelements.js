@@ -279,6 +279,7 @@ window.makeUI = function () {
         }
         thisBar.qs(".progress").style.width = (100 * xhr.loaded / xhr.total).toFixed(3) + '%';
         thisBar.qs(".progress-text").innerText = (100 * xhr.loaded / xhr.total).toFixed(3) + "% loaded";
+        //console.log((100 * xhr.loaded / xhr.total).toFixed(3) + "% loaded");
         if (xhr.loaded == xhr.total) {
             thisBar.qs(".progress-text").innerText = "Instantiating Scene...";
             setDOMtoInternalState();
@@ -451,7 +452,7 @@ ${bone.toString()}
                 );
                 wb.rotDraw.visible = false;
                 wb.rotDraw.update((v, wb)=> {return wb.simLocalAxes.origin().clone().add(v)}); 
-                console.log("before: ");
+                //console.log("before: ");
                 wb.rotDraw.visible = false;
                 //let solveString = getdbgstring(bone, ts, wb);
                 //console.log("pre");
@@ -819,7 +820,7 @@ window.updateInfoPanel = function (item) {
         D.byid("no-armature-opts-hint").classList.remove("hidden");
         armDomName.innerText = window.contextArmature.ikd;
         D.byid("default-dampening").value = Math.log(window.contextArmature.getDampening() + 1).toFixed(4);
-        D.byid("un-exp-output").value = Math.log(window.contextArmature.getDampening() + 1).toFixed(4);
+        D.byid("un-exp-output").value = window.contextArmature.getDampening().toFixed(4);
         D.byid("iterations").value = window.contextArmature.getDefaultIterations();
     }
 

@@ -65,19 +65,6 @@ export class MRotation {
 
     
 
-	
-
-
-    
-
-    toString() {
-        const axis = this.getAxis();
-        const angleDegrees = Math.toDegrees(this.getAngle());
-        return `Axis: (${axis.toString()}), AngleDeg: ${angleDegrees.toFixed(2)}}`;
-    }
-
-    
-
     /**
 	 *  Get an array representing the 4X4 matrix corresponding to this rotation instance. 
 	 * Indices are in column major order. In other words 
@@ -165,25 +152,6 @@ export class MRotation {
         }
         return quat;
     }   
-
-    
-
-    toArray(into = [1,0,0,0]) {
-        into[0] = this.w;
-        into[1] = this.x;
-        into[2] = this.y;
-        into[3] = this.z;
-        return;
-    }
-
-    /**same as toArray. creates an array to return if not provided one to write into*/
-    intoArray(into = [1,0,0,0]) {
-        into[0] = this.w;
-        into[1] = this.x;
-        into[2] = this.y;
-        into[3] = this.z;
-        return into;
-    }
     
 }
 
@@ -257,15 +225,7 @@ export class Rot {
 	 * @param {Rot} b 
 	 * @returns 
 	 */
-	static multiply(a, b) {
-        return new Rot(
-            a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
-            a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
-            a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
-            a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w
-        );
-    }
-
+	
     static multiply(a, b) {
 		const aw = a.w, ax = a.x, ay = a.y, az = a.z; 
 		const bw = b.w, bx = b.x, by = b.y, bz = b.z; 
@@ -281,7 +241,12 @@ export class Rot {
         this.multiply(b, a);
     }
     
-    applyToRot(r, storeIn = new Rot(1, 0, 0, 0)) {
+
+    /**
+     * @return the rotation which, if applied to something, would give the same result
+     * as first applying the input rotation @param {Rot} r to that thing and then applying
+     * this rotation to that thing afterward.*/
+    applyAfter(r, storeIn = new Rot(1, 0, 0, 0)) {
         const aw = this.w, ax = this.x, ay=this.y, az = this.z;
 		const bw = r.w, bx = r.x, by = r.y, bz = r.z;
         return storeIn.setComponents( //equivalent to pre_multiply
@@ -292,8 +257,42 @@ export class Rot {
             false);
     }
 
+    /**
+     * @return the rotation which, if applied to something, would give the same result
+     * as first applying this rotation to that thing and then applying the input
+     * @param {Rot} r rotation to that thing afterward.*/
+    applyBefore(r, storeIn = new Rot(1, 0, 0, 0)) {
+        const aw = r.w, bx = r.x, by = r.y, bz = r.z;
+        const bw = this.w, ax = this.x, ay=this.y, az = this.z;
+        return storeIn.setComponents( //equivalent to pre_multiply
+            aw * bw - (bx * ax + by * ay + bz * az),
+            aw * bx + bw * ax + (by * az - bz * ay),
+            aw * by + bw * ay + (bz * ax - bx * az),
+            aw * bz + bw * az + (bx * ay - by * ax), 
+            false);
+    }
+
+
+    
     applyInverseToRot(r, storeIn = new Rot(1,0,0,0)) {
-        const tw = -this.w, tx = -this.x, ty= -this.y, tz = -this.z;
+        const {w,x,y,z} = this; 
+        let nmsr = -1/(w*w + x*x + y*y + z*z);
+        const tw = -w*nmsr, tx = x*nmsr, ty= y*nmsr, tz = z*nmsr;        
+		const rw = r.w, rx = r.x, ry = r.y, rz = r.z;
+
+        return storeIn.setComponents(
+            rw * tw - (rx * tx + ry * ty + rz * tz),
+            rx * tw + rw * tx + (ry * tz - rz * ty),
+            ry * tw + rw * ty + (rz * tx - rx * tz),
+            rz * tw + rw * tz + (rx * ty - ry * tx), 
+            false
+        );
+    }
+
+    /**applies the conjugate of this rotation to the input rotation.
+     * faster than applyInverseToRot, but presumes normalization */
+    applyConjugateToRot(r, storeIn = new Rot(1,0,0,0)) {
+        const tw = this.w, tx = -this.x, ty= -this.y, tz = -this.z;
 		const rw = r.w, rx = r.x, ry = r.y, rz = r.z;
         return storeIn.setComponents(
             rw * tw - (rx * tx + ry * ty + rz * tz),
@@ -303,63 +302,58 @@ export class Rot {
             false
         );
     }
-	/**
+
+    /**applies this rotation to the conjugate of the input rotation.
+     * presumes normalization */
+    applyToConjugateOfRot(r, storeIn = new Rot(1,0,0,0)) {
+        const tw = this.w, tx = this.x, ty= this.y, tz = this.z;
+		const rw = r.w, rx = -r.x, ry = -r.y, rz = -r.z;
+        return storeIn.setComponents(
+            rw * tw - (rx * tx + ry * ty + rz * tz),
+            rx * tw + rw * tx + (ry * tz - rz * ty),
+            ry * tw + rw * ty + (rz * tx - rx * tz),
+            rz * tw + rw * tz + (rx * ty - ry * tx), 
+            false
+        );
+    }
+
+    /**
      * returns the rotation which, if applied to this orientation, would bring this orientation to the target
      * orientation by the shortest path.
      * 
-     * in other words this.rotationTo(target).applyToRot(this) == target
+     * in other words this.rotationTo(target).applyAfter(this) == target
     */
     getRotationTo(target, storeIn = Rot.IDENTITY.clone()) {
-		const qax = -this.x, qay = -this.y, qaz = -this.z, qaw = this.w; 
-        const qbx = target.x, qby = target.y, qbz = target.z, qbw = target.w; // conjugate of the input quaternion
+        const qaw = this.w, qax = -this.x, qay = -this.y, qaz = -this.z // conjugate of this quaternion
+        const qbw = target.w, qbx = target.x, qby = target.y, qbz = target.z;
 		
 
+        storeIn.w = qaw * qbw - qax * qbx - qay * qby - qaz * qbz;
 		storeIn.x = qax * qbw + qaw * qbx + qay * qbz - qaz * qby;
 		storeIn.y = qay * qbw + qaw * qby + qaz * qbx - qax * qbz;
 		storeIn.z = qaz * qbw + qaw * qbz + qax * qby - qay * qbx;
-		storeIn.w = qaw * qbw - qax * qbx - qay * qby - qaz * qbz;
 
         //inlined the math to avoid the object instantiation required by target.multiply(this.conjugate())
         return storeIn;
     }
 
-
-	applyToRot(rot, storeIn=new Rot()) {                                                                            
-		let rq0 = rot.w, rq1 = rot.x, rq2=rot.y, rq3 = rot.z;
-        let trq0 = this.w, trq1 = this.x, trq2=this.y, trq3 = this.z;                                                                                              
-		storeIn.w =  rq0 * trq0 -(rq1 * trq1 +  rq2 * trq2 + rq3 * trq3);   
-		storeIn.x =  rq1 * trq0 + rq0 * trq1 + (rq2 * trq3 - rq3 * trq2);   
-		storeIn.y =  rq2 * trq0 + rq0 * trq2 + (rq3 * trq1 - rq1 * trq3);   
-		storeIn.z =  rq3 * trq0 + rq0 * trq3 + (rq1 * trq2 - rq2 * trq1);
-        storeIn.normalize();
-        return storeIn;                                                                                                                                                                                       
-	}                                                             
-
-	applyInverseToRot(rot, storeIn = new Rot()) {                                                                                           
-		let rq0 = rot.w, rq1 = rot.x, rq2=rot.y, rq3 = rot.z;
-        let trq0 = this.w, trq1 = -this.x, trq2= -this.y, trq3 = -this.z;                                                                    
-		                                                                                       
-		storeIn.w =  rq0 * trq0 -(rq1 * trq1 +  rq2 * trq2 + rq3 * trq3);   
-		storeIn.x =  rq1 * trq0 + rq0 * trq1 + (rq2 * trq3 - rq3 * trq2);   
-		storeIn.y =  rq2 * trq0 + rq0 * trq2 + (rq3 * trq1 - rq1 * trq3);   
-		storeIn.z =  rq3 * trq0 + rq0 * trq3 + (rq1 * trq2 - rq2 * trq1);   
-		storeIn.normalize(); 
-        return storeIn;                                                                                                          
-	}   
-
-	setFromAxisAngle(axis, angle) {
-        const norm = Math.sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
-        if (norm === 0) throw new Error("Zero Norm for Rotation defining vector");
-
-        const halfAngle = 0.5 * angle;
-        const coeff = Math.sin(halfAngle) / norm;
-
-        this.w = Math.cos(halfAngle);
-        this.x = coeff * axis.x; 
-        this.y = coeff * axis.y; 
-        this.z = coeff * axis.z;
-        return this;
+    /**
+     * worldToLocal for rotations. Put in a rotation in worldspace, get back the
+     * rotation in localspace of r.
+     * 
+     * 
+     * In other words, if you consider this rotation as being applied in world space,
+     * then this function returns the rotation which, if appliedAfter 
+     * r, would yield this rotation. 
+     *      
+     * @param {Rot} r parent rotation 
+     * @param {Rot} storeIn an optional Rot instance to store the result in
+     * @returns 
+     */
+    applyWithin(r, storeIn = new Rot(1,0,0,0)) {
+        return this.applyToConjugateOfRot(r, storeIn);
     }
+	
 
 	setFromVecs(u, v) {
         let normProduct = u.mag() * v.mag();
@@ -395,27 +389,6 @@ export class Rot {
         return this;
     }
 
-	/**returns a clone of the conjugate / inverse of this rotation */
-	conjugate() {
-		return this.setToInversion(new Rot(1,0,0,0));
-	}
-	
-	/**
-	 * @return this rotation as an array of 4 numbers corresponding to the W (aka scalar), X, Y, and Z values in that order.
-	 */
-	 toArray() {
-		return [this.w, this.x, this.y, this.z];
-	}
-    
-
-    intoArray(into) {
-        into[0] = this.w; 
-		into[1] = this.x;
-		into[2] = this.y;
-		into[3] = this.z;
-		return into;
-    }
-	
 	/**
 	 * @param updates container to have values representing this rotation as an array of 4 numbers corresponding to the W (aka scalar), X, Y, and Z values in that order.
 	 */
@@ -440,6 +413,7 @@ export class Rot {
         this.x = x;
         this.y = y;
         this.z = z;
+        return this;
     }
 
     setFromRot(inR) {
@@ -450,11 +424,21 @@ export class Rot {
         return this;
     }
 
-    clampToAngle(angle) {
-		let cosHalfAngle = Math.cos(0.5*angle);
-		this.clampToCosHalfAngle(cosHalfAngle);
-	}
 
+	setFromAxisAngle(axis, angle) {
+        const norm = Math.sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
+        if (norm === 0) throw new Error("Zero Norm for Rotation defining vector");
+
+        const halfAngle = 0.5 * angle;
+        const coeff = Math.sin(halfAngle) / norm;
+
+        this.w = Math.cos(halfAngle);
+        this.x = coeff * axis.x; 
+        this.y = coeff * axis.y; 
+        this.z = coeff * axis.z;
+        return this;
+    }
+    
     /**clamps as efficiently as I could come up with contingent on user 
      * having cached the cosine half value. 
      * 
@@ -463,19 +447,140 @@ export class Rot {
      * One does wonder how many other opportunities for optimization might be afforded by
      * representing quaternions primarily in terms of their most frequently used intermediate calculations.
      * One does wonder, but then one considers that the answer might require math, and one does not wonder so much.
+     * 
+     * @return {Rot} this rotation for chaining
     */
     clampToCosHalfAngle(cosHalfAngle) {
-        if(cosHalfAngle <= this.q0) {
-            return;
+        /*let newCoeff = 1-(cosHalfAngle*Math.abs(cosHalfAngle));
+		let currentCoeff = this.q1 * this.q1 + this.q2 * this.q2 + this.q3 * this.q3;
+		if(newCoeff >= currentCoeff) 
+			return;
+		else {
+			this.q0 = this.q0 < 0 ? -cosHalfAngle : cosHalfAngle;
+			let compositeCoeff = Math.sqrt(newCoeff / currentCoeff); 
+			this.q1*= compositeCoeff;
+			this.q2*= compositeCoeff;
+			this.q3*= compositeCoeff;
+		}*/
+        this.shorten();
+        let prevCoeff = (1-(this.q0*this.q0));
+        if(cosHalfAngle <= this.q0 || prevCoeff == 0) {
+            return this;
         }
         else {
-            let compositeCoeff = Math.sqrt((1-(cosHalfAngle * cosHalfAngle)) / (1-(this.q0*this.q0)))
+            let compositeCoeff = Math.sqrt((1-(cosHalfAngle * cosHalfAngle)) / prevCoeff)
             this.q0 = cosHalfAngle;
             this.q1*= compositeCoeff;
             this.q2*= compositeCoeff;
             this.q3*= compositeCoeff;
         }
+        return this;
 	}
+
+    clampToAngle(angle) {
+		let cosHalfAngle = Math.cos(0.5*angle);
+		this.clampToCosHalfAngle(cosHalfAngle);
+	}
+
+
+
+	/**returns a clone of the conjugate (as distinguished from inverse in that this presumes unitarity) of this rotation
+     * @param storein an optional Rot to hold the result
+     * @return a clone of this rotation representing its inverse / conjugate
+     */
+	conjugated(storein = new Rot(1,0,0,0)) {
+		storein.w = this.w;
+        storein.x = -this.x;
+        storein.y = -this.y; 
+        storein.z = -this.z;
+        return storein;
+	}
+
+    /**
+     * in-place conjugate (as distinguished from inverse in that this presumes unitarity) of this rotation. If you want a clone instead, use the past tense "conjugated".
+     * @return this rotation object for chaining
+     */
+    conjugate() {
+        this.x *= -1;
+        this.y *= -1;
+        this.z *= -1;
+		return this;
+	}
+
+    /**
+     * sets the values of the given Rot to the true inverse of this rot (as distinguished from the conjugate, which assumes unit quaternion)
+     * @param {Rot} storeIn the Rot to store the inverse in
+     * @return the provides Rot, with the values set to the inverse of this Rot.
+     */
+    invertInto(storeIn = new Rot(1,0,0,0)) {
+        const {w, x, y, z} = this;
+        let negMagSqrecip = -1/(w*w + x*x + y*y + z*z);
+        storeIn.w = w * -negMagSqrecip; //note, this is only negated to undeo the previous negation of the reciprocal, not to take advantage of double-cover
+        storeIn.x = x * negMagSqrecip;
+        storeIn.y = y * negMagSqrecip;
+        storeIn.z = z * negMagSqrecip;
+        return storeIn;
+    }
+    /**
+     * Returns a clone representing the inverse of this Rot.
+     * @return returns a new Rot which is the inverse of this Rot. 
+     */
+    inverted() {
+        return this.invertInto(new Rot(1,0,0,0));
+    }
+
+    /**
+     * in-place inverts (as distinguished from conjugates by being magnitude agnostic) this rotation, 
+     * @return this rotation for chaining.
+     */
+    invert() {
+        const {w, x, y, z} = this;
+        let negMagSqrecip = -1/(w*w + x*x + y*y + z*z);
+        this.w *= -negMagSqrecip; //note, this is only negated to undeo the previous negation of the reciprocal, not to take advantage of double-cover
+        this.x *= negMagSqrecip;
+        this.y *= negMagSqrecip;
+        this.z *= negMagSqrecip;
+        return this;
+    }
+
+    /**
+     * in place negates all components of this quaternion;
+     * @return this rotation for chaining;
+     */
+    flip() {
+        this.w *= -1;
+        this.x *= -1;
+        this.y *= -1;
+        this.z *= -1;
+        return this;
+    }
+
+    /**
+     * in-place modifies this rotation to ensure it is along the shortest of the two double-cover paths
+     * (Where shortest is defined as whicheve of this rotation or its conjugate have a positive dot product with the identity quaternion)
+     */
+    shorten() {
+        if(this.w < 0) {
+            return this.flip();
+        } else return this;
+    }
+
+
+    /**returns the dot product of this rotation's quaternion against the input rotation's quaternion */
+    dot(r) {
+        return this.w * r.w + this.x * r.x + this.y * r.y + this.z * r.z;
+    }
+
+	/** 
+	 * sets the values of the given rotation equal to the inverse of this rotation
+	 * @param r the rotation object the reversion will be stored into
+     * @return r
+	 */
+	setToInversion(r) {
+		this.invertInto(r);
+        return r;
+	}
+	
 
     /**return the squared magnitude for a quick normality check*/
     magSq() {
@@ -483,7 +588,7 @@ export class Rot {
     }
 
     applyTo(v, output) {
-        console.warn("Deprecated overloadable function. Use applyToVec, applyToRay, applyToRot instead")
+        console.warn("Deprecated overloadable function. Use applyToVec, applyToRay, applyAfter instead")
         if(output == null) {
             output = copy;
         }
@@ -575,6 +680,24 @@ export class Rot {
 		return rOut;
 	}
 
+    toArray(into = [1,0,0,0]) {
+        into[0] = this.w;
+        into[1] = this.x;
+        into[2] = this.y;
+        into[3] = this.z;
+        return into;
+    }
+
+    /**same as toArray. creates an array to return if not provided one to write into*/
+    intoArray(into = [1,0,0,0]) {
+        into[0] = this.w;
+        into[1] = this.x;
+        into[2] = this.y;
+        into[3] = this.z;
+        return into;
+    }
+    
+
     get q0() {
         return this.w;
     }
@@ -605,16 +728,16 @@ export class Rot {
 	}
 	
 	getAngle() {
-		return 2 * Math.acos(this.w);
+		return 2 * Math.acos(Math.max(Math.min(this.w, 1), -1));
     }
 
     getAxis(into = any_Vec3()) {
-        this.normalize(); 
-        const squaredSine = this.w * this.w;
-        if (squaredSine == 0) 
+        //this.normalize(); 
+        const squaredSine = 1-(this.w * this.w);
+        if (squaredSine == 0)
             return into.setComponents(1,0,0);
        
-        const recip = 1 / Math.sqrt(1-squaredSine);
+        const recip = 1 / Math.sqrt(squaredSine);
         into.setComponents(this.x*recip, this.y*recip, this.z*recip);
         return into;
     }
@@ -623,46 +746,20 @@ export class Rot {
         return new Rot(this.w, this.x, this.y, this.z, true);
     }
 
+    /**normalizes the quaternion representing this rotation and returns it.*/
     normalize() {
-        const norm = Math.sqrt(this.w * this.w + this.x * this.x + this.y * this.y + this.z * this.z);
+        const norm = 1/Math.sqrt(this.w * this.w + this.x * this.x + this.y * this.y + this.z * this.z);
         if (norm < 1e-15) {
             throw new Error("Zero Norm");
         }
-        this.w /= norm; 
-        this.x /= norm; 
-        this.y /= norm;
-        this.z /= norm;
+        this.w *= norm; 
+        this.x *= norm; 
+        this.y *= norm;
+        this.z *= norm;
+        return this; 
     }
 
-	/**
-     * sets the values of the given Rot to the inverse of this rot
-     * @param {Rot} storeIn the Rot to store the inverse in
-     * @return the provides Rot, with the values set to the inverse of this Rot.
-     */
-    invertInto(storeIn = new Rot(1,0,0,0)) {
-        storeIn.w = this.w;
-        storeIn.x = -this.x;
-        storeIn.y = -this.y;
-        storeIn.z = -this.z;
-        return storeIn;
-    }
-    /**
-     * Returns the inverse of this Rot.
-     * @return returns a new Rot which is the inverse of this Rot. 
-     */
-    inverted() {
-        new Rot(this.w, -this.x, -this.y, -this.z);
-    }
-
-	/** 
-	 * sets the values of the given rotation equal to the inverse of this rotation
-	 * @param r the rotation object the reversion will be stored into
-     * @return r
-	 */
-	setToInversion(r) {
-		this.invertInto(r);
-        return r;
-	}
+	
 
 	/*
 	 * interpolate between two rotations (SLERP)
@@ -728,7 +825,7 @@ export class Rot {
 		if (d < 0) twistRot.multiply(-1.0);
 		
 		let swing = twistRot.clone();
-		swing.setToConjugate();
+		swing.conjugate();
 		swing = Rot.multiply(swing, this);
 		
 		resultRots[0] = new Rot(swing);
@@ -823,7 +920,7 @@ export class Rot {
         const axis = this.getAxis();
         const angleDegrees = Math.toDegrees(this.getAngle());
         let strAA = `Axis: (${axis.toString()}), AngleDeg: ${angleDegrees.toFixed(2)}`;
-        let stQQ = `xyz # w : { ${this.x.toFixed(3)}, ${this.y.toFixed(3)}, ${this.z.toFixed(3)} # ${this.w.toFixed(3)}`;
+        let stQQ = `wxyz : {${this.w.toFixed(4)}, ${this.x.toFixed(4)}, ${this.y.toFixed(4)}, ${this.z.toFixed(4)}}`;
         let combined = showAxAng ? (strAA + (asQ ? `
         ${stQQ}` : '')) : stQQ;
         return combined;
@@ -868,11 +965,11 @@ export class Rot {
     }
 
     static distance(r1, r2) {
-        return r1.applyInverseToRotation(r2).getAngle();
+        return r1.applyInverseToRot(r2).getAngle();
     }
 
 	equalTo(m) {
-		return Rotation.distance(this, m);
+		return this.applyConjugateToRot(m).getAngle() < 1e-7;
 	}
 }
 
@@ -1198,3 +1295,65 @@ Examples
 
           we can use the code fragment
 **/
+
+
+
+/**
+ * Eron note: To help debug the clusterfuck of JPL vs Hamilton vs Whatever the fuck Apache Math Commons 3.6.1 was doing before giving up and introducing version
+ * 4, I have included the following to help determine the appropriate compositions and multiplication orders.
+ * 
+ * All tests begin with two vectors.
+ * 
+ * A = (-1, 2, 0);
+ * B = (1, 2, 0); 
+ * 
+ * These form
+ * A  B 
+ * \  /
+ *  \/
+ * Now you must play a few levels of a little game.  
+ * 
+ * Level 1: "Apply (part 1)"
+ * Find the Rot q1 which, when applied to both A and B, yields vector A_q1 and B_q1 such that
+ * 
+ * A_q1 = (-2, -1, 0);
+ * B_q1 = (-2, 1, 0); 
+ * 
+ * These form
+ *   B_q1＼
+ *         ＼
+ *         ／
+ *   A_q1／
+ *
+ * 
+ * Level 2: "Apply (part 2)"
+ * 
+ * Find the rot q2 which, when applied to both A_q1 and B_q1, yields vectors A_q2, B_q2 such that
+ * A_q2 = (-2, 0, 1);
+ * B_q2 = (-2, 0, -1)
+ * 
+ * 
+ * Level 3: "Apply after"
+ * Find the single rot q3 which, when applied to A and B yields A_q2, B_q2.  (which is to say, the rotation 
+ * that if applied to A and B, would yield the same result as first applying q1 to A and B to get A_q1, B_q1, and then
+ * applying q2 to A_q1 and B_q1 to get A_q2 and B_q2) 
+ *  
+ *
+ * Level 4: "Apply within" 
+ * Find the Rot q4, which, if applied after q1, yields q3.
+ * (Yes, obviously by definition the rotation that does this will be equal to q2, but you won't always have q2 to start from, dumb dumb.)
+ * 
+ * A_q3 = A_q2
+ * B_q3 = B_q2
+ * 
+ * 
+ * (apply the inverse of q1 to q3, then apply q1 to that )
+ * 
+ * Level 5 "Apply directly to the forehead":
+ * Let's say you have the sequence q3 = q2.applyAfter(q1). 
+ * You wish to apply some rotation q5 to q3 to get q6.
+ * Find the rotation q7 such that qt.applyAfter(q1) == q6.
+ * 
+ * 
+ * 
+ **/

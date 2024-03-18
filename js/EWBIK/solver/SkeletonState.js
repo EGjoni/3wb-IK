@@ -121,9 +121,13 @@ export class SkeletonState {
      */
     optimize() {
         this.bones = this.bonesList.filter(bone => bone != null);
+        this.bonesList = [...this.bones];
         this.transforms = this.transformsList.filter(transform => transform != null);
+        this.transformList = [...this.transforms]; 
         this.constraints = this.constraintsList.filter(constraint => constraint != null);
+        this.constraintsList = [...this.constraints];
         this.targets = this.targetsList.filter(target => target != null);
+        this.targetsList = [...this.targets];
     
         for (let i = 0; i < this.bones.length; i++) this.bones[i].clearChildList();
     
@@ -578,13 +582,13 @@ export class TargetState {
         }
         if (yDir) {
             this.modeCode += TargetState.YDir;
-            totalPriority = priorities[1];
+            totalPriority += priorities[1];
             maxPriority = Math.max(priorities[1], maxPriority);
             priorityCount++;
         }
         if (zDir) {
             this.modeCode += TargetState.ZDir;
-            totalPriority = priorities[2];
+            totalPriority += priorities[2];
             maxPriority = Math.max(priorities[2], maxPriority);
             priorityCount++;
         }

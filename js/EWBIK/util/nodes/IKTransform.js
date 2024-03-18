@@ -1,10 +1,9 @@
-import {  Vec3} from "./vecs.js";
-import { Ray, Rayd, Rayf } from "./Ray.js";
+import {  Vec3} from "./../vecs.js";
+import { Ray, Rayd, Rayf } from "./../Ray.js";
 import { IKNode } from "./IKNodes.js";
 const THREE = await import('three');
 import { Quaternion, Vector3, Object3D, Matrix4 } from "three";
-import { Rot } from "./Rot.js";
-import { generateUUID } from "./uuid.js";
+import { Rot } from "./../Rot.js";
 
 export class IKTransform {
     static totalTransforms = 0;
@@ -21,7 +20,7 @@ export class IKTransform {
     /**@type {Rot} */
     rotation = Rot.IDENTITY.clone();
     /**@type {Rot} */
-    _inverseRotation = Rot.IDENTITY.clone().conjugate();
+    _inverseRotation = Rot.IDENTITY.conjugated();
     inverseDirty = true;
     raysDirty = true; 
     
@@ -85,9 +84,9 @@ export class IKTransform {
         let tempV = zHeading.clone(); 
         tempV.setComponents(0,0,0);
         let toYZ = new Rot(yBase, zBase, yHeading, zHeading); 
-        toYZ.applyToRot(yBase, tempV);
+        toYZ.applyAfter(yBase, tempV);
         let toY = Rot.fromVecs(tempV, yHeading);
-        return toY.applyToRot(toYZ);
+        return toY.applyAfter(toYZ);
     }*/
 
     initializeBasisWithDirections(origin, x, y, z) {
@@ -188,8 +187,8 @@ export class IKTransform {
      */
     setTransformToLocalOf(globalinput, localoutput) {
         this.setVecToLocalOf(globalinput.translate, localoutput.translate);
-        //globalinput.rotation.applyToRot(this.inverseRotation, localoutput.rotation); //jpl
-        this.inverseRotation.applyToRot(globalinput.rotation, localoutput.rotation); //hamilton
+        //globalinput.rotation.applyAfter(this.inverseRotation, localoutput.rotation); //jpl
+        this.inverseRotation.applyAfter(globalinput.rotation, localoutput.rotation); //hamilton
         localoutput.refreshPrecomputed();
         return localoutput;
     }
@@ -202,7 +201,7 @@ export class IKTransform {
     }
 
     setTransformToGlobalOf(localInput, globalOutput) {
-		this.rotation.applyToRot(localInput.rotation, globalOutput.rotation);
+		this.rotation.applyAfter(localInput.rotation, globalOutput.rotation);
 		this.setVecToGlobalOf(localInput.translate, globalOutput.translate);		
 		globalOutput.refreshPrecomputed();
         return globalOutput;
@@ -221,7 +220,7 @@ export class IKTransform {
 	}
 
 	rotateBy(addRotation) {		
-		addRotation.applyToRot(this.rotation, this.rotation);
+		addRotation.applyAfter(this.rotation, this.rotation);
 		this.refreshPrecomputed();
 	}
 
@@ -232,8 +231,8 @@ export class IKTransform {
     }
 
     getLocalOfRotation(inRot) {		
-        //let resultNew =  this.inverseRotation.applyToRot(inRot).applyToRot(this.rotation); // jpl
-        let resultNew =  inRot.applyToRot(this.inverseRotation).applyToRot(this.rotation); //hamilton
+        let resultNew = this.inverseRotation.applyAfter(inRot).applyAfter(this.rotation);
+        //let resultNew =  inRot.applyWithin(this.rotation).applyAfter(this.rotation); //hamilton
         return resultNew;			
     }
 
