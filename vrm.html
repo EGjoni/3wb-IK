@@ -7,13 +7,12 @@
     <script type="importmap">
         {
           "imports": {
-            "three": "https://unpkg.com/three@latest/build/three.module.js",
-            "orbitControls": "https://unpkg.com/three/examples/jsm/controls/OrbitControls.js",
+            "three": "./js/three/three.module.js",
+            "orbitControls": "./js/three/jsm/OrbitControls.js",
             "transformControls": "./js/penziltransform.js",
-            "gltf" : "https://unpkg.com/three/examples/jsm/loaders/GLTFLoader.js",
-            "vrm" : "https://unpkg.com/@pixiv/three-vrm@2.1.0/lib/three-vrm.module.js",
+            "gltf" : "./js/three/jsm/GLTFLoader.js",
+            "vrm" : "./js/three/jsm/three-vrm.module.js",
             "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
-            "pca" : "https://cdn.jsdelivr.net/npm/pca-js@1.0.0/pca.min.js",
             "enviro" : "./js/environment.js"
           }
         }
@@ -45,7 +44,7 @@
         window.IKNode = IKNode;
         window.TrackingNode = TrackingNode;
         window.IKPin = IKPin;
-        window.autoSolve = true;
+        window.autoSolve = false;
         
         window.meshLayer = 0;
         window.boneLayer = 1;
@@ -79,7 +78,7 @@
         let selectedBone = null;
         let rootBone = null;
         let armature = null;
-        let frameCount = 0;
+        window.frameCount = 0;
         window.instances = [];
         window.debugLog = []
         window.log = function (elem, identifier = null) {
@@ -106,18 +105,18 @@
             });
 
             window.addEventListener('resize', onWindowResize, false);
-            autoSolve = false;
+            //autoSolve = false;
             interactionSolve = false;
             initControls(THREE, renderer);
 
             let inst1 = await loadModel({x: 0, y:0, z:0}, 0, ikify);
             window.nek1= inst1; 
             armature = inst1; 
-            //let inst2 = loadModel({x: 0.5, y:0, z:0}, 1, ikify);
+            //let inst2 = await loadModel({x: 0.5, y:0, z:0}, 1, ikify);
+            //window.nek2= inst2
             
-            armature.r_arm_upp.parent.rotateX(2*Math.PI/3);
-            armature.setDefaultIterations(1);
-            armature.dampening = 0.08;
+            
+            
             armature.dirtyRate = true;
             initEnvironment(scene, renderer, //scene,
                 [...getMeshDescendants(nek1.armatureObj3d.children[1]),
@@ -135,6 +134,8 @@
         function ikify(inst, loadId) {
             window.updateParseStream("Building IK Armature...", loadId);
             let armature = new EWBIK(inst.scene.children[0], false);
+            armature.setDefaultIterations(7);
+            armature.setDampening(1);
             armature.armatureNode.forceOrthonormality = false;
             window.armatures.push(armature);    
             
@@ -148,9 +149,6 @@
                 initIK(armature);
             window.updateParseStream(null, loadId);
             return armature;
-            /*let armature2 = new EWBIK(instances[1].scene.children[0], false);
-            armature2.armatureNode.forceOrthonormality = false;
-            addSceneArmature(armature2);*/
         }
 
         async function loadModel(position, loadId, onloaded) {
@@ -161,11 +159,10 @@
                 (error) => {window.notifyStreamError(error, loadId)}
             );
             scene.add(vrm.scene);
-            render();
             let rootBone1 = vrm.scene.children[0];
             rootBone1.position.set(position.x, position.y, position.z);
             window.updateParseStream("Scene instaniated...", loadId);
-            return ikify(vrm, loadId);
+            return onloaded(vrm, loadId);
             /*let armature1 = new EWBIK(rootBone1, false);
             armature1.armatureNode.forceOrthonormality = false;
             addSceneArmature(armature1);*/
@@ -179,13 +176,14 @@
         }
 
         async function animate() {
+            window.frameCount++;
             requestAnimationFrame(animate);
-            render(true);
+            doSolve();
+            render();
         }
 
-        window.render = function(incrFrame = false) {
-            if(incrFrame) frameCount++;
-            doSolve();
+        window.render = function() {
+            
             
             camera.layers.set(0);
             window.renderer.render(scene, camera);
@@ -216,7 +214,7 @@
             armature.upper_chest = armature.bonetags["J_Bip_C_UpperChest"];
         
             //l_arm_lower.rotate
-            /*armature.l_arm_upp.rotateZ(0.5);
+            armature.l_arm_upp.rotateZ(0.5);
             armature.r_arm_upp.rotateZ(-0.5);
         
             armature.l_arm_lower.rotateX(0.5);
@@ -234,15 +232,28 @@
             armature.r_leg_lower.rotateX(-1.75);
             armature.l_leg_lower.rotateX(-1.75);
         
-            for(let b of armature.bones) {
+            /*for(let b of armature.bones) {
                 if(b.parent instanceof THREE.Bone) {
-                    //let restconst = new Rest(b);
+                    let restconst = new Rest(b);
                     if(b == armature.bonetags["J_Bip_C_Head"]) {
-                        restconst.setPainfulness(0.95);
+                        restconst.setPainfulness(0.7);
+                        restconst.setStockholmRate(0.8);
+                    }
+                    if(b == armature.bonetags["J_Bip_C_Neck"]) {
+                        restconst.setPainfulness(0.5);
+                        restconst.setStockholmRate(0.8);
+                    }
+                    if(b == armature.bonetags['J_Bip_L_Shoulder']) {
+                        restconst.setPainfulness(0.8);
+                        restconst.setStockholmRate(0.8);
+                    }
+
+                    if(b == armature.bonetags['J_Bip_R_Shoulder']) {
+                        restconst.setPainfulness(0.8);
                         restconst.setStockholmRate(0.8);
                     }
                 }
-            }
+            }*/
         
             armature.r_leg_lower.rotateX(1.75);
             armature.l_leg_lower.rotateX(1.75);
@@ -260,18 +271,17 @@
             armature.r_arm_lower.rotateX(-0.5);
         
             armature.l_arm_upp.rotateZ(-0.5);
-            armature.r_arm_upp.rotateZ(0.5);*/
+            armature.r_arm_upp.rotateZ(0.5);
 
             //armature.root = new IKPin(armature.bonetags["Root"]);
-            armature.hips = new IKPin(armature.bonetags["J_Bip_C_Hips"]);
-            //armature.head_pin = new IKPin(armature.c_head);
+            //armature.hips = new IKPin(armature.bonetags["J_Bip_C_Hips"]);
+            armature.head_pin = new IKPin(armature.c_head);
             //armature.c_uuperchest_pin = new IKPin(armature.upper_chest);
-            //armature.r_hand_pin = new IKPin(armature.bonetags["J_Bip_R_Hand"]);
-            //armature.l_hand_pin = new IKPin(armature.bonetags["J_Bip_L_Hand"]);
-            //armature.r_foot_pin = new IKPin(armature.bonetags["J_Bip_R_Foot"]);            
-            //armature.l_foot_pin = new IKPin(armature.bonetags["J_Bip_L_Foot"]);
+            armature.r_hand_pin = new IKPin(armature.bonetags["J_Bip_R_Hand"]);
+            armature.l_hand_pin = new IKPin(armature.bonetags["J_Bip_L_Hand"]);
+            armature.r_foot_pin = new IKPin(armature.bonetags["J_Bip_R_Foot"]);            
+            armature.l_foot_pin = new IKPin(armature.bonetags["J_Bip_L_Foot"]);
             
-            //armature.head_pin.setPinWeight(2);
         }
 
         init();

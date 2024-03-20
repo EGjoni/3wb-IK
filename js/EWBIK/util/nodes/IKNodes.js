@@ -71,7 +71,7 @@ export class IKNode {
     static swap(node1, node2) {
         let temptransform = node1.localMBasis;
         node1.localMBasis = node2.localMBasis;
-        node2.localMBasis = node1.temptransform;
+        node2.localMBasis = temptransform;
         temptransform = node1.globalMBasis;
         node1.globalMBasis = node2.globalMBasis;
         node2.globalMBasis = temptransform;
@@ -226,28 +226,27 @@ export class IKNode {
     }
 
 
-    rotateByGlobal(apply) {
+    /**
+     * Updates the local orientation of this IKNode to what it would need to be in order to match the effect
+     * of applying the provided rotation in world space.
+     * 
+     * NOT SAFE FOR CHAINING!, this method does not return this IKNode, it returns a rotation.
+     * 
+     * @param {Rot} apply the rotation to apply
+     * @returns the local space version of the rotation that was applied. (such that the inverse of the returned rotation would set the transform back to its original global space orientation)
+     */
+    rotateByGlobal(apply, storeIn=new Rot(1,0,0,0)) {
         this.updateGlobal();
+        let result = apply;
         if (this.getParentAxes() != null) {
-
-            //let newRot = this.localMBasis.this.localMBasis.inverseRotation.applyAfter(apply).applyAfter(this.localMBasis.rotation)
-            
-            let newRot = this.getParentAxes().getGlobalMBasis().getLocalOfRotation(apply); 
-            this.getLocalMBasis().rotateBy(newRot);
-            /*let thisGlobRot = this.getGlobalMBasis().rotation.normalize();
-            let rotApplied = apply.applyAfter(thisGlobRot, thisGlobRot).normalize();
-            let newLocRot = this.getParentAxes().getGlobalMBasis().rotation.normalize().getRotationTo(rotApplied, this.getLocalMBasis().rotation);
-            newLocRot.normalize();
-            this.getLocalMBasis().refreshPrecomputed();
-            this.markDirty(); */
-            //let newRot = this.getGlobalMBasis().rotation.applyToConjugateOfRot(this.getParentAxes().getGlobalMBasis().rotation);//getLocalOfRotation(apply);
-            //this.getLocalMBasis().rotateBy(newRot);
+            result = this.getParentAxes().getGlobalMBasis().getLocalOfRotation(apply, storeIn); 
+            this.getLocalMBasis().rotateBy(result);
         } else {
-            this.getLocalMBasis().rotateBy(apply);
+            this.getLocalMBasis().rotateBy(apply);   
         }
 
         this.markDirty();
-        return this;
+        return result;
     }
 
 

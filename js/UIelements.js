@@ -11,6 +11,8 @@ import { Vec3, any_Vec3 } from "./EWBIK/util/vecs.js";
 import { Rot } from "./EWBIK/util/Rot.js";
 import { ConvexGeometry } from "convexGeo";
 import { ChainRots, BoneRots, RayDrawer } from "./EWBIK/util/debugViz/debugViz.js";
+import { Rest } from "./EWBIK/betterbones/Constraints/Rest/Rest.js";
+import { ConstraintStack} from "./EWBIK/betterbones/Constraints/Constraint.js";
 
 window.Vec3 = Vec3;
 window.Rot = Rot;
@@ -109,8 +111,11 @@ window.makeUI = function () {
             display: inline;
             margin-bottom: 5px;
         } 
+        #pin-options {
+            display: inline-block;
+        }
         .hidden {
-            display: none;
+            display: none !important;
         }
         .load-container {
             display: grid;
@@ -127,6 +132,31 @@ window.makeUI = function () {
             z-index: 3;
             align-self: center;
         }
+
+        .toggle-button {
+            display: inline-block;
+          }
+          
+          .toggle-button input[type="checkbox"] {
+            display: none;
+          }
+          
+          .toggle-button label {
+            color: black;
+            background-color: #ccc;
+            padding: 10px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: -27px;
+            position: absolute;
+            right: 45px;
+            display: inline-block;
+          }
+          
+          .toggle-button input[type="checkbox"]:checked + label {
+            background-color: blue;
+            color: white;
+          }
         
         .progress {
             background: black;
@@ -162,7 +192,7 @@ window.makeUI = function () {
                 <div class= "stretch-div">
                     <label for="default-dampening">Default Dampening:</label>            
                     <input type="range" id="default-dampening" name="default-dampening" min="0.00001" max="1.986" step="0.00001">
-                    <output id="un-exp-output">0.1</output>
+                    <output class="un-exp-output">0.1</output>
                 </div>
             </div>
             <div>
@@ -182,27 +212,34 @@ window.makeUI = function () {
         <legend>Bone Options:</legend>
         <div>Name: <span id="bone-name"></span> (<span id="internal-bone-name"></span>)</div>
         <label for="stiffness">Stiffness:</label>
-        <input type="range" id="stiffness" name="stiffness" min="0.001" max="6.289" step="0.001">
+        <input type="range" id="stiffness" name="stiffness" min="0.001" max="1.986" step="0.001">
+        <output class="un-exp-output">0.1</output>
         <fieldset>
             <legend>Pin options:</legend>
-            <label for="pin-enabled">Enabled</label>
-            <input type="checkbox" id="pin-enabled" name="pin-enabled">
+            <div class="toggle-button">
+                <input type="checkbox" id="pin-enabled" name="pin-enabled">
+                <label for="pin-enabled"><span>Pin Bone</span></label>
+            </div>
             <div id="pin-options" class="hidden">
                 <div>
                     <label for="weight">Weight:</label>
-                    <input type="range" id="weight" name="weight" min="0.001" max="1" step="0.001">
+                    <input type="range" id="weight" name="weight" min="0.001" max="0.69" step="0.001" value="0.405">
+                    <output class="un-exp-output">0.5</output>
                 </div>
                 <div>
                     <label for="x-priority">X alignment priority:</label>
-                    <input type="range" id="x-priority" name="x-priority" min="0" max="1" step="0.001">
+                    <input type="range" id="x-priority" name="x-priority" min="0" max="0.69" step="0.001" value=0.69>
+                    <output class="un-exp-output">1</output>
                 </div>
                 <div>
                     <label for="y-priority">Y alignment priority:</label>
-                    <input type="range" id="y-priority" name="y-priority" min="0" max="1" step="0.001">
+                    <input type="range" id="y-priority" name="y-priority" min="0" max="0.69" step="0.001" value = 0.69>
+                    <output class="un-exp-output">1</output>
                 </div>
                 <div>
                     <label for="z-priority">Z alignment priority:</label>
-                    <input type="range" id="z-priority" name="z-priority" min="0" max="1" step="0.001">
+                    <input type="range" id="z-priority" name="z-priority" min="0" max="0.69" step="0.001" value = 0.69>
+                    <output class="un-exp-output">1</output>
                 </div>
                 <div id="pin-parent-select">
                     <span id="pin-parent-mode-hint">Current parent"</span><span id="current-pin-parent"></span>
@@ -211,7 +248,7 @@ window.makeUI = function () {
             </div>
             <fieldset>
                 <legend>Constraints:</legend>
-                    <div id="constraints-div">
+                <div id="constraints-div">
                 </div>
             </fieldset>            
         </fieldset>        
@@ -558,6 +595,7 @@ ${bone.toString()}
     D.byid('pin-enabled').addEventListener("input", async (event) => {
         let state = event.target.checked;
         let diddisable = false;
+        
         if (state) {
             let newPin = null;
             if (window.contextPin != null) {
@@ -588,27 +626,39 @@ ${bone.toString()}
         }
     })
 
+    D.byid("weight").addEventListener("input", (event) => {
+        const unexp = event.target.parentNode.qs('.un-exp-output');
+        window.contextPin?.setPinWeight(Math.pow(Math.E, event.target.value) - 1);
+        unexp.value = window.contextPin.getPinWeight().toFixed(4);
+    })
+
     D.byid("x-priority").addEventListener("input", (event) => {
-        window.contextPin?.setXPriority(event.target.value);
+        const unexp = event.target.parentNode.qs('.un-exp-output');
+        window.contextPin?.setXPriority(Math.pow(Math.E, event.target.value) - 1);;
         window.contextArmature?.solve(window.contextBone);
+        unexp.value = window.contextPin.getXPriority().toFixed(4);
     });
     D.byid("y-priority").addEventListener("input", (event) => {
-        window.contextPin?.setYPriority(event.target.value);
+        const unexp = event.target.parentNode.qs('.un-exp-output');
+        window.contextPin?.setYPriority(Math.pow(Math.E, event.target.value) - 1);;
         window.contextArmature?.solve(window.contextBone);
+        unexp.value = window.contextPin.getYPriority().toFixed(4);
     });
     D.byid("z-priority").addEventListener("input", (event) => {
-        window.contextPin?.setZPriority(event.target.value);
+        const unexp = event.target.parentNode.parentNode.qs('.un-exp-output');
+        window.contextPin?.setZPriority(Math.pow(Math.E, event.target.value) - 1);;
         window.contextArmature?.solve(window.contextBone);
+        unexp.value = window.contextPin.getZPriority().toFixed(4);
     });
 
 
     const defaultDampeningInput = D.byid('default-dampening');
-    const unexp = D.byid('un-exp-output');
     const iterationsInput = D.byid('iterations');
     const solveBtn = D.byid('solve-btn');
     const pullbackBtn = D.byid('pullback-btn');
 
     defaultDampeningInput.addEventListener('input', (event) => {
+        const unexp = event.target.parentNode.qs('.un-exp-output');
         window.contextBone?.parentArmature?.setDampening((Math.pow(Math.E, event.target.value) - 1));
         unexp.value = (Math.pow(Math.E, event.target.value) - 1).toFixed(3);
     });
@@ -663,14 +713,15 @@ ${bone.toString()}
     })
 
     D.byid('show-mesh').addEventListener('change', function (e) {
-        window.rendlrs.layerState(window.meshLayer, e.target.checked);
+        if(rendlrs != null)
+            window.rendlrs?.layerState(window.meshLayer, e.target.checked);
     });
 
     D.byid('show-ik-bones').addEventListener('change', function (e) {
         for (let a of armatures) {
             if (a.ikReady) {
                 for (let b of a.bones) {
-                    if (b.bonegeo != null && a.skelState.getBoneStateById(b.ikd) != null) {
+                    if (b.bonegeo != null && a.skelState?.getBoneStateById(b.ikd) != null) {
                         if (e.target.checked) {
                             b.bonegeo.layers.enable(boneLayer);
                         } else {
@@ -681,9 +732,11 @@ ${bone.toString()}
             }
         }
         if (e.target.checked == false && D.byid('show-nonik-bones').checked == false) {
-            rendlrs.hide(boneLayer);
+            if(rendlrs != null)
+                rendlrs?.hide(boneLayer);
         } else {
-            rendlrs.show(boneLayer);
+            if(rendlrs != null)
+                rendlrs?.show(boneLayer);
         }
     });
 
@@ -691,7 +744,7 @@ ${bone.toString()}
         for (let a of armatures) {
             if (a.ikReady) {
                 for (let b of a.bones) {
-                    if (b.bonegeo != null && a.skelState.getBoneStateById(b.ikd) == null) {
+                    if (b.bonegeo != null && a.skelState?.getBoneStateById(b.ikd) == null) {
                         if (e.target.checked) {
                             b.bonegeo.layers.enable(boneLayer);
                         } else {
@@ -702,9 +755,11 @@ ${bone.toString()}
             }
         }
         if (e.target.checked == false && D.byid('show-ik-bones').checked == false) {
-            rendlrs.hide(boneLayer);
+            if(rendlrs != null)
+                rendlrs?.hide(boneLayer);
         } else {
-            rendlrs.show(boneLayer);
+            if(rendlrs != null)
+                rendlrs?.show(boneLayer);
         }
     });
 
@@ -713,7 +768,7 @@ ${bone.toString()}
     })
 
 
-    let emptyConstraintNode = document.createElement("div");
+    window.emptyConstraintNode = document.createElement("div");
     emptyConstraintNode.id = "default-stack";
     emptyConstraintNode.classList.add("constraint-stack");
     emptyConstraintNode.innerHTML = constraintStackHTML;
@@ -742,7 +797,7 @@ ${bone.toString()}
     genericConstraintRow.innerHTML = `
 <label for='constraint-enabled'>
 <input type='checkbox' name='constraint-enabled' class='constraint-enabled' checked>
-<span class="subconstraint-controls"> </span><button class='remove-constraint'></button>
+<span class="subconstraint-controls"> Delete constraint</span><button class='remove-constraint'></button>
 `
 
     window.restConstraintControls = document.createElement("div");
@@ -759,7 +814,7 @@ ${bone.toString()}
 }
 
 
-window.updateInfoPanel = function (item) {
+window.updateInfoPanel = async function (item) {
     let armature = null;
     let bone = null;
     let pin = null;
@@ -787,13 +842,15 @@ window.updateInfoPanel = function (item) {
         armature = bone.parentArmature;
     } else {
         D.byid("armature-name").innerText = "None Selected";
+        
+    }
 
-        if (constraintStack != null) {
-            let domConstraint = getMakeConstraint_DOMElem(constraintStack);
-            D.byid("constraints-div").appendChild(domConstraint);
-        } else {
-
-        }
+    if (constraintStack != null) {
+        let domConstraint = getMakeConstraint_DOMElem(constraintStack);
+        D.byid("constraints-div").childNodes.forEach(node => {node.remove()});
+        D.byid("constraints-div").appendChild(domConstraint);
+    } else {
+        D.byid("constraints-div").appendChild(emptyConstraintNode);
     }
 
     /**@type {EWBIK} */
@@ -813,14 +870,14 @@ window.updateInfoPanel = function (item) {
         D.byid("no-armature-opts-hint").classList.add("hidden");
         armDomName.innerText = "None Selected";
         D.byid("default-dampening").value = Math.pow(Math.E, 0.1);
-        D.byid("un-exp-output").value = 0.1;
+        D.byid("default-dampening").parentNode.qs(".un-exp-output").value = 0.1;
 
     } else {
         armDom.classList.remove("hidden");
         D.byid("no-armature-opts-hint").classList.remove("hidden");
         armDomName.innerText = window.contextArmature.ikd;
-        D.byid("default-dampening").value = Math.log(window.contextArmature.getDampening() + 1).toFixed(4);
-        D.byid("un-exp-output").value = window.contextArmature.getDampening().toFixed(4);
+        D.byid("default-dampening").value = Math.log(window.contextArmature.getDampening() + 1);
+        D.byid("default-dampening").parentNode.qs(".un-exp-output").value = window.contextArmature.getDampening().toFixed(4);
         D.byid("iterations").value = window.contextArmature.getDefaultIterations();
     }
 
@@ -839,17 +896,34 @@ window.updateInfoPanel = function (item) {
     }
 
     const pinDom = D.byid("pin-options")
-    if (window.contextPin == null || window.contextPin.isEnabled() == false) {
+    const pinToggle = pinDom.parentNode.qs("#pin-enabled")
+    const label =  pinToggle.nextElementSibling;
+    const labelSpan =  pinToggle.nextElementSibling.querySelector('span');
+    if (window.contextPin == null) {
         pinDom.classList.add("hidden");
-        pinDom.parentNode.qs("#pin-enabled").checked = false;
+        pinToggle.checked = false;
+        label.classList.add("pre-init");
+        labelSpan.innerText = "Pin Bone";
+    }
+    else if(window.contextPin.isEnabled() == false) {
+        pinDom.classList.add("hidden");
+        pinToggle.checked = false;
+        label.classList.remove("pre-init");
+        labelSpan.innerText = "Enable Pin";
     }
     else {
         pinDom.classList.remove("hidden");
-        pinDom.parentNode.qs("#pin-enabled").checked = true;
-        pinDom.qs("#weight").value = window.contextPin.getPinWeight();
-        pinDom.qs("#x-priority").value = window.contextPin.getXPriority();
-        pinDom.qs("#y-priority").value = window.contextPin.getYPriority();
-        pinDom.qs("#z-priority").value = window.contextPin.getZPriority();
+        label.classList.remove("pre-init");
+        labelSpan.innerText = "Pinned";
+        pinToggle.checked = true;
+        pinDom.qs("#weight").value = Math.log(window.contextPin.getPinWeight()+1);
+        pinDom.qs("#weight").parentNode.qs(".un-exp-output").value =  window.contextPin.getPinWeight().toFixed(4);
+        pinDom.qs("#x-priority").value = Math.log(window.contextPin.getXPriority()+1);
+        pinDom.qs("#x-priority").parentNode.qs(".un-exp-output").value =  window.contextPin.getXPriority().toFixed(4);
+        pinDom.qs("#y-priority").value = Math.log(window.contextPin.getYPriority()+1);
+        pinDom.qs("#y-priority").parentNode.qs(".un-exp-output").value =  window.contextPin.getYPriority().toFixed(4);
+        pinDom.qs("#z-priority").value = Math.log(window.contextPin.getZPriority()+1);
+        pinDom.qs("#z-priority").parentNode.qs(".un-exp-output").value =  window.contextPin.getZPriority().toFixed(4);
         if (window.contextPin?.targetNode?.toTrack?.parent) {
             pinDom.qs("#pin-parent-mode-hint").innerText = "Current parent: ";
             let obj3dParentobj3d = window.contextPin.targetNode.toTrack.parent;
@@ -875,18 +949,18 @@ window.getMakeConstraint_DOMElem = function (c) {
     if (c.domControls != null) {
         return c.domControls;
     }
-    let result = genericConstraintRow.clone(true);
+    let result = genericConstraintRow.cloneNode(true);
     if (c instanceof Rest) {
-        let newRest = restConstraintControls.clone(true);
-        result.qs(".subconstrainControls").appendChild(newRest);
+        let newRest = restConstraintControls.cloneNode(true);
+        result.qs(".subconstraint-controls").appendChild(newRest);
         newRest.qs(".set-current-pose-as-rest").addEventListener("click", (e) => {
             c.setCurrentAsRest();
         });
     }
     if (c instanceof ConstraintStack) {
-        let newStack = constraintStackControls.clone(true);
-        result.qs(".subconstrainControls").appendChild(newStack);
-        newRest.qs(".add-constraint").addEventListener("click", (e) => {
+        let newStack = constraintStackControls.cloneNode(true);
+        result.qs(".subconstraint-controls").appendChild(newStack);
+        newStack.qs(".add-constraint").addEventListener("click", (e) => {
             let val = newStack.parent.qs("constraint-select");
             if (val == "kusudama") subcst = initKusudama(c);
             if (val == "twist") subcst = initTwist(c);

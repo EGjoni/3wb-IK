@@ -964,8 +964,8 @@ export class Rot {
         console.log(this.toString(asQ, showAxAng));
     }
 
-    static distance(r1, r2) {
-        return r1.applyInverseToRot(r2).getAngle();
+    static distance(r1, r2, tempRot = new Rot(1,0,0,0)) {
+        return r1.applyInverseToRot(r2, tempRot).shorten().getAngle();
     }
 
 	equalTo(m) {
@@ -1295,65 +1295,3 @@ Examples
 
           we can use the code fragment
 **/
-
-
-
-/**
- * Eron note: To help debug the clusterfuck of JPL vs Hamilton vs Whatever the fuck Apache Math Commons 3.6.1 was doing before giving up and introducing version
- * 4, I have included the following to help determine the appropriate compositions and multiplication orders.
- * 
- * All tests begin with two vectors.
- * 
- * A = (-1, 2, 0);
- * B = (1, 2, 0); 
- * 
- * These form
- * A  B 
- * \  /
- *  \/
- * Now you must play a few levels of a little game.  
- * 
- * Level 1: "Apply (part 1)"
- * Find the Rot q1 which, when applied to both A and B, yields vector A_q1 and B_q1 such that
- * 
- * A_q1 = (-2, -1, 0);
- * B_q1 = (-2, 1, 0); 
- * 
- * These form
- *   B_q1＼
- *         ＼
- *         ／
- *   A_q1／
- *
- * 
- * Level 2: "Apply (part 2)"
- * 
- * Find the rot q2 which, when applied to both A_q1 and B_q1, yields vectors A_q2, B_q2 such that
- * A_q2 = (-2, 0, 1);
- * B_q2 = (-2, 0, -1)
- * 
- * 
- * Level 3: "Apply after"
- * Find the single rot q3 which, when applied to A and B yields A_q2, B_q2.  (which is to say, the rotation 
- * that if applied to A and B, would yield the same result as first applying q1 to A and B to get A_q1, B_q1, and then
- * applying q2 to A_q1 and B_q1 to get A_q2 and B_q2) 
- *  
- *
- * Level 4: "Apply within" 
- * Find the Rot q4, which, if applied after q1, yields q3.
- * (Yes, obviously by definition the rotation that does this will be equal to q2, but you won't always have q2 to start from, dumb dumb.)
- * 
- * A_q3 = A_q2
- * B_q3 = B_q2
- * 
- * 
- * (apply the inverse of q1 to q3, then apply q1 to that )
- * 
- * Level 5 "Apply directly to the forehead":
- * Let's say you have the sequence q3 = q2.applyAfter(q1). 
- * You wish to apply some rotation q5 to q3 to get q6.
- * Find the rotation q7 such that qt.applyAfter(q1) == q6.
- * 
- * 
- * 
- **/

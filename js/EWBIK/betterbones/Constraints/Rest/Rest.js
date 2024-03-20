@@ -15,7 +15,7 @@ import { Constraint, Returnful } from '../Constraint.js';
 export class Rest extends Returnful {
     static totalRestConstraints = 0;
     /**@type {Bone} */
-    painfulness = 0.5; 
+    painfulness = 0.5;
     
     
 
@@ -47,62 +47,31 @@ export class Rest extends Returnful {
     */
     setCurrentAsRest() {
         this.boneFrameRest.adoptLocalValuesFromObject3D(this.forBone);
-        //let oldBoneFrameRest = this.boneFrameRest.freeclone();
-        //this.boneFrameRest.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());//.setAsIfParent(IKNode.fromObj3dGlobal(this.forBone.parent));
-        //let globalParent = this.tempNode1.reset().adoptGlobalValuesFromObject3D(this.forBone.parent);
-        //this.boneFrameRest.setAsIfParent(globalParent);
-        //this.setRestPose(newRest);
         return this;
     }
     
-
-    getPreferenceRotation(currentState, currentBoneOrientation, previousState, previousBoneOrientation, iteration, calledBy, storeDiscomfort = false) {
-        if(this.forBone.name == 'CC_Base_R_Upperarm') {
-            console.log("----Sim : " + currentState.ikd+',  ---Rest: ' + this.boneFrameRest.ikd);
-            currentState.getLocalMBasis().rotation.toConsole();
-            this.boneFrameRest.getLocalMBasis().rotation.toConsole();
+    updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy) {
+        this.constraintResult.reset(iteration);
+        
+        if(iteration >= this.giveup) {            
+            return this.constraintResult;
         }
+        this.lastCalled = iteration;
         /**@type {Rot} */
         let targframe = this.boneFrameRest.getLocalMBasis().rotation;
-        let inv_targFrame = this.boneFrameRest.getLocalMBasis().inverseRotation;
-
-        /**@type {Rot} */
         let currRotFrame = currentState.getLocalMBasis().rotation;
-        /**@type {Rot} */
-        let inv_currRotFrame = currentState.getLocalMBasis().inverseRotation; //A
-        /*if(this.qdot(locRotFrame, this.boneFrameRest.getLocalMBasis().rotation) < 0) {
-            locRotFrame = locRotFrame.getFlipped();//.rotation.multiply(-1);
-        }*/
-        //currRotFrame.toConsole();
-        //targframe.toConsole();
-        let nA_B = inv_currRotFrame.applyAfter(targframe);  // C = (-A)*B
-        let nB_A = inv_targFrame.applyAfter(currRotFrame);
-        let B_nA = targframe.applyAfter(inv_currRotFrame);
-        let A_nB = currRotFrame.applyAfter(inv_targFrame)
         let truepath = currRotFrame.getRotationTo(targframe);
         let rotBy = truepath;
 
-
         this.constraintResult.reset(iteration);
-        this.constraintResult.fullRotation = rotBy;
-        if(iteration < this.leewayCache.length) {
-            rotBy.clampToCosHalfAngle(this.leewayCache[iteration]);
-            this.constraintResult.clampedRotation = rotBy;
-        } else {
-            this.constraintResult.clampedRotation = Rot.IDENTITY;
-        } 
-        /*if(this.forBone.name == 'CC_Base_R_Upperarm') {
-            console.log('setPainfulness: ' +this.getPainfulness());
-            console.log('clamp: '+ this.leewayCache[iteration]);
-            console.log("full   : "+this.constraintResult.fullRotation.toString());
-            console.log("clamped: "+this.constraintResult.clampedRotation.toString())
-        }*/
-
-
-        
-        //toSet.rotateBy(rotBy);
+        this.constraintResult.fullRotation = rotBy.shorten();      
+        this.constraintResult.markSet(true);
         return this.constraintResult;
     }
+    discomfortScale(val) {
+        return val*val;
+    }
+
 
      /**
      * computes the raw unscaled discomfort associated with this historical value presuming pre-alleviation
@@ -110,7 +79,8 @@ export class Rest extends Returnful {
      * @returns a number from 0 - 1, implying amount of pain
      * */
      _computePast_Pre_RawDiscomfortFor(previousResult) {
-        return this.remainingPain(previousResult.fullRotation, Rot.IDENTITY);
+        /**doing acos() instead of 2*acos() because division by PI*2 instead of TAU means the multiplication by 2 cancels out */
+        return Math.acos(Math.abs(previousResult.fullRotation.w)) * Constraint.HALF_PI_RECIP;
      }
  
      /**
@@ -119,18 +89,11 @@ export class Rest extends Returnful {
       * @returns a number from 0 - 1, implying amount of pain
       * */
      _computePast_Post_RawDiscomfortFor(previousResult) {
-        return this.remainingPain(previousResult.fullRotation, previousResult.clampedRotation);
+        /*just the ratio of the angle of the full rotation to the preferred orientation minus the angle to the clamped rotation, 
+        doing acos() instead of 2*acos() because division by PI instead of TAU means the multiplication by 2 cancels out */
+        return previousResult.raw_preCallDiscomfort - ((Math.acos(Math.abs(previousResult.clampedRotation.w))) * Constraint.HALF_PI_RECIP);
      }
     
-    remainingPain(A, B) {
-        const painA = A.getAngle();
-        const painB = B.getAngle();
-        const remainingPain = Math.abs(painA - painB)/Math.PI;
-        return remainingPain;
-    }
-
-
-
     
     /**
      * @param {(Object3D|IKNode)} idealOrientIn_ParSpace 

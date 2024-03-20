@@ -333,7 +333,7 @@ export class QCP {
 		// QCP doesn't handle single targets, so if we only have one point and one
 		// target, we just rotate by the angular distance between them
 		if (this.moved.length == 1) {
-			return new Rot(this.moved[0], this.target[0]);
+			return Rot.fromVecs(this.moved[0], this.target[0]);
 		} else {
 			const {
 				mxEigenV,

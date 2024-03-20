@@ -1,4 +1,4 @@
-import { IKTransform } from "../../../util/IKTransform.js";
+import { IKTransform } from "../../../util/nodes/IKTransform.js";
 const THREE = await import('three')
 import { Bone } from 'three';
 import { Rot } from "../../../util/Rot.js";

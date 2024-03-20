@@ -9,9 +9,9 @@ export function initEnvironment(scene, renderer, meshesList, layers) {
 
     // LIGHTS
 
-    const hemiLight = new THREE.HemisphereLight( 0x3333ff, 0x333300, 1 );
-    //hemiLight.color.setHSL( 0.6, 1, 0.6 );
-    //hemiLight.groundColor.setHSL( 0.095, 1, 0.75 );
+    const hemiLight = new THREE.HemisphereLight( 0x9999ff, 0x333300, 1 );
+    hemiLight.color.setHSL( 0.6, 1, 0.6 );
+    hemiLight.groundColor.setHSL( 0.095, 1, 0.75 );
     hemiLight.position.set( 0, 0, 0 );
     scene.add( hemiLight );
 
@@ -20,7 +20,7 @@ export function initEnvironment(scene, renderer, meshesList, layers) {
     const dirLight = new THREE.DirectionalLight( 0xffffff, 1 );
     dirLight.color.setHSL( 0.1, 1, 0.95 );
     dirLight.position.set( 1, 1.75, -1 );
-    dirLight.position.multiplyScalar( 2 );
+    dirLight.position.multiplyScalar( 5 );
     scene.add( dirLight );
 
     dirLight.castShadow = true;
@@ -28,7 +28,7 @@ export function initEnvironment(scene, renderer, meshesList, layers) {
     dirLight.shadow.mapSize.width = 1028;
     dirLight.shadow.mapSize.height = 1028;
 
-    const d = 1;
+    const d = 20;
 
     dirLight.shadow.camera.left = - d;
     dirLight.shadow.camera.right = d;

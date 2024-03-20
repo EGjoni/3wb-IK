@@ -10,6 +10,7 @@ intersectsDisplay.innerHTML = `Intersected Coordinates:`
 window.dbgContainer = dbgContainer;
 window.intersectsDisplay = intersectsDisplay;
 dbgContainer.appendChild(intersectsDisplay);
+window.perfing = false;
 let debugstyle = document.createElement('style');
 debugstyle.innerHTML = `
 .grid-container {
@@ -174,7 +175,8 @@ function makePinsList(pinSize, into = scene, armature) {
             if (ikpin.targetNode.toTrack == null) {
                 //let boneHeight = b.height
                 const geometry = ikpin.forBone?.bonegeo?.geometry ?? new THREE.BoxGeometry(baseSize * pinSize / 2, b.height, baseSize * pinSize);
-                const material = new THREE.MeshLambertMaterial({ color: 0xff0000, transparent: true, opacity: 0.6 });
+                //const material = new THREE.MeshLambertMaterial({ color: 0xff0000, transparent: true, opacity: 0.6});
+                const material = new THREE.MeshBasicMaterial({ color: 0xff0000,  wireframe: true });
                 const targMesh = new THREE.Mesh(geometry, material);
                 //targMesh.position.set(0, b.height/2, 0);
                 const meshWrapper = new THREE.Object3D();
@@ -198,24 +200,23 @@ function makePinsList(pinSize, into = scene, armature) {
 }
 
 
-function doSolve(bone = null, interacted = false, preSolveCallback = null, inSolveCallback = null, solveCompleteCallback = null) {
+async function doSolve(bone = null, interacted = false, preSolveCallback = null, inSolveCallback = null, solveCompleteCallback = null) {
+    /**@type {[EWBIK]} */
     let armatures = window.armatures ?? null;
     if (bone != null) armatures = [bone.parentArmature];
 
-    //if (autoSolve || interactionSolve) {
+    //we loop through all armatures in the scene because some of the demos have multiple armatures interacting with one another
     for (let a of armatures) {
         if (a.ikReady) {
-            if (autoSolve || (interacted && interactionSolve)) {
-                let callbacks = undefined;
-                if(autoSolve) {
-                    bone = null; /*we're solving for the whole armature when autoSolve is on anyway so avoid intermittently specifying a new bone to work from, because this invalidates the cache*/
-                }
-                if(interacted && interactionSolve) {
-                    callbacks = window.bonestepcallbacks;
-                }
-                a.solve(bone, undefined, 0, callbacks);
+            if (autoSolve) {
+                 /*null indicates we're solving the whole armature*/
+                await a.solve(null, undefined, 0, null, window.frameCount);
+            }
+            else if (interacted && interactionSolve) {
+                await a.solve(bone, undefined, 0, null, window.frameCount);// callbacks);
             } else if (interacted && !interactionSolve) {
-                a.noOp(bone);
+                //this is just to display the amount of pain a bone is in when interacting without solving.
+               await a.noOp(bone);
             }
         }
     }
@@ -223,16 +224,6 @@ function doSolve(bone = null, interacted = false, preSolveCallback = null, inSol
     if (bone != null) {
         updateInfoPanel(bone);
     }
-    /*else {
-        for (let a of armatures) {
-            if ((interacted && interactionSolve)) {
-                a.solve(bone);
-            } else if (!(autoSolve || (interacted && interactionSolve))) {
-                a.noOp(bone)
-            }
-            
-        }
-    }*/
 }
 
 /**fucks with the scene hard. Makes everything from the rootnode up orthonormal*/
@@ -243,21 +234,13 @@ async function orthonormalize(startnode) {
     if(startnode.position != null && startnode.quaternion != null && startnode.children != null) {
         let oldChildren = [...startnode.children];
         for(let c of oldChildren) {
-            //c.updateMatrixWorld();
             window.scene.attach(c);
-            //c.updateMatrixWorld();
             console.log(c.name + "  scene attach");
-            //requestAnimationFrame(window.render);
         }
-        //startnode.updateMatrixWorld();
         startnode.scale.set(1,1,1);
-        //startnode.updateMatrixWorld();
         for(let c of oldChildren) {
-            //c.updateMatrixWorld();
             startnode.attach(c);
-            //c.updateMatrixWorld();
             console.log(c.name + "  par attach");
-            //requestAnimationFrame(window.render);
         }
         for(let c of startnode.children) {
             orthonormalize(c);
@@ -285,10 +268,7 @@ function initControls(THREE, renderer) {
 
     boneCtrls = new TransformControls(camera, renderer.domElement);
     boneCtrls.space = 'local';
-    /*boneCtrls.addEventListener('change', ()=> {
-        console.log("Bone change");
-        render();
-    });*/
+
     boneCtrls.addEventListener('dragging-changed', function (event) {
         bone_transformActive = event.value;
         orbitControls.enabled = !event.value;
@@ -334,7 +314,6 @@ function initControls(THREE, renderer) {
         boneCtrls.visible = !event.value;
         pinOrientCtrls.visible = !event.value;
         //pinTranslateCtrls.visible = !event.value;
-        //render();
     });
     pinOrientCtrls.addEventListener('objectChange', function (event) {
         boneCtrls.enabled = false;
@@ -351,7 +330,6 @@ function initControls(THREE, renderer) {
         pinOrientCtrls.visible = false;
         //pinTranslateCtrls.visible = false;
         //armature.solve();
-        //render();
     });
     //pinOrientCtrls.mode = 'rotate';
 
@@ -595,6 +573,7 @@ async function switchSelected(key) {
             pinOrientCtrls.enabled != pinOrientCtrls.enabled;
             break;
         case 't': //checkbox, toggle the translate widget
+            window.perfing = !window.perfing;
             //pinTranslateCtrls.enabled != pinTranslateCtrls.enabled;
             break;
     }

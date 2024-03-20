@@ -13,7 +13,7 @@ export class IKPin {
     enabled = true;
     /**@type {IKNode} */
     targetNode = null;
-    pinWeight = 1;
+    pinWeight = 0.5;
     modeCode = 3;
     xPriority = 1;
     yPriority = 1;
@@ -326,7 +326,7 @@ export class IKPin {
 
     setPinWeight(weight) {
         const prevWeight = this.pinWeight;
-        this.pinWeight = Math.min(Math.max(weight, 0), 1);
+        this.pinWeight = Math.max(weight, 0);
         this.forBone?.parentArmature.updateShadowSkelRateInfo();
         if(this.isEnabled()) {
             if(prevWeight <= 0 && this.pinWeight > 0) {

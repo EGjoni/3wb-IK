@@ -207,12 +207,8 @@
         let lastmousedown = Date.now();
         function initControls() {
             orbitControls = new OrbitControls(camera, renderer.domElement);
-            orbitControls.addEventListener('change', render);
 
             boneCtrls = new TransformControls(camera, renderer.domElement);
-            boneCtrls.addEventListener('change', () => {
-                render();
-            });
             boneCtrls.addEventListener('dragging-changed', function (event) {
                 transformActive = event.value;
                 orbitControls.enabled = !event.value;
@@ -223,12 +219,10 @@
             boneCtrls.mode = 'rotate';
 
             pinOrientCtrls = new TransformControls(camera, renderer.domElement);
-            pinOrientCtrls.addEventListener('change', render);
             pinOrientCtrls.addEventListener('dragging-changed', function (event) {
                 orbitControls.enabled = !event.value;
                 boneCtrls.enabled = !event.value;
                 pinTranslateCtrls.enabled = !event.value;
-                render();
             });
             pinOrientCtrls.addEventListener('objectChange', function (event) {
                 //orbitControls.enabled = !event.value;
@@ -239,7 +233,6 @@
                 tracknode.adoptTrackedLocal();
                 if (interactionSolve)
                     Armature.solve();
-                render();
             });
             pinOrientCtrls.mode = 'rotate';
 
@@ -250,7 +243,6 @@
                 boneCtrls.enabled = !event.value;
                 pinOrientCtrls.enabled = !event.value;
                 transformActive = event.value;
-                render();
             });
             pinTranslateCtrls.addEventListener('objectChange', function (event) {
                 //orbitControls.enabled = false;
@@ -260,7 +252,6 @@
                 tracknode.adoptTrackedLocal();
                 if (interactionSolve)
                     Armature.solve();
-                render();
                 //pinOrientCtrls.enabled = !event.value;
             });
             pinTranslateCtrls.mode = 'translate';

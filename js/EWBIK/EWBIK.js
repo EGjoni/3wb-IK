@@ -1,7 +1,7 @@
 import { BoneState, SkeletonState } from "./solver/SkeletonState.js"
 import { ShadowSkeleton } from "./solver/ShadowSkeleton.js"
 import { IKTransform } from "./util/nodes/IKTransform.js";
-import { Vec3, any_Vec3, Vec3Pool, NoPool }  from "./util/vecs.js";
+import { Vec3, any_Vec3, Vec3Pool, NoPool } from "./util/vecs.js";
 import { CallbacksSequence } from "./CallbacksSequence.js";
 import { Rot } from "./util/Rot.js";
 import { IKNode, TrackingNode } from "./util/nodes/IKNodes.js";
@@ -100,7 +100,7 @@ export class EWBIK {
     defaultIterations = 15;
     dampening = EWBIK.__default_dampening;
     defaultStabilizingPassCount = 0;
-    
+
     /** @type {SkeletonState} */
     skelState;
     armature = null;
@@ -122,6 +122,7 @@ export class EWBIK {
     /**@type {Promise} prevents calling the solver before it's done*/
     activeSolve = null;
     pendingSolve = null;
+    lastFrameNumber = 0;
 
     /**
      * 
@@ -177,7 +178,7 @@ export class EWBIK {
 
     makeBoneGeo(boneRef, height, radius, mat, hullpoints) {
         const cone = new THREE.ConeGeometry(radius * height, height, 5);
-        cone.translate(0, height/2, 0);
+        cone.translate(0, height / 2, 0);
         const hull = convexBlob(cone, ...hullpoints);
         const material = new THREE.MeshPhongMaterial(mat);
         const boneplate = new THREE.Mesh(hull, material);
@@ -217,15 +218,15 @@ export class EWBIK {
             if (orientation.children.length == 0) {
                 let matObj = null;
                 if (this.skelState?.getBoneStateById(bone.ikd) == null || bone.parent == null) {
-                    matObj = {color: new THREE.Color(0.2, 0.2, 0.8), transparent: true, opacity: 0.6 };
+                    matObj = { color: new THREE.Color(0.2, 0.2, 0.8), transparent: true, opacity: 0.6 };
                 } else {
-                    matObj = {color: bone.color, transparent: true, opacity: 1.0 };
+                    matObj = { color: bone.color, transparent: true, opacity: 1.0 };
                 }
-                let hullPoints = []; 
-                for(let c of bone.childBones()) {
+                let hullPoints = [];
+                for (let c of bone.childBones()) {
                     hullPoints.push(orientation.worldToLocal(bone.localToWorld(c.position.clone())));
                 }
-                let thisRadius = bone.parent instanceof THREE.Bone? radius : radius/2; //sick and tired of giant root bones. Friggen whole ass trunks.
+                let thisRadius = bone.parent instanceof THREE.Bone ? radius : radius / 2; //sick and tired of giant root bones. Friggen whole ass trunks.
                 let bonegeo = this.makeBoneGeo(bone, Math.max(bone.height ?? bone.parent?.height ?? minSize, minSize), thisRadius, matObj, hullPoints);
                 orientation.bonegeo = bonegeo;
                 bone.setBonegeo(bonegeo);
@@ -289,7 +290,7 @@ export class EWBIK {
         }
         return this.lastRequestedSolveFromBoneState;
     }
-    
+
 
     /**
      * automatically solves the IK system of this armature from the given bone using
@@ -299,14 +300,16 @@ export class EWBIK {
      * @param {Number} iterations  number of iterations to run. Set this to null or -1 if you want to use the armature's default.
      * @param stabilizingPasses number of stabilization passes to run. Set this to -2 if you want to use the armature's default. -1 tells it to break constraints if need be, 0 means no stabilization, 1 means a single (very cheap) stabilization pass which may increase grindiness in extreme poses. Greater than 1 reduces grindiness, but at signifcant cost.
      * @param {CallbacksSequence} callbacks to snoop on solver state
+     * @param {Number} frameNumber entirely optional and for convenience. If you're counting frames, you can provide the frame number you're on here to make sure the solver doesn't get called more than once per frame.
+     * this will cause any solve requests beyond the first one in a frame to be ignored. Please be mindful that -- due to the limits of javascript 64-bit integers,
+     * any animation running at 120 frames per second will integer overflow after approximately 4.9 million years, and you should not use this feature if you intend to run your animation for longer than that.
      */
-    async solve(bone, iterations = this.getDefaultIterations(), stabilizingPasses = this.getDefaultStabilizingPassCount(), callbacks) {
+    async solve(bone, iterations = this.getDefaultIterations(), stabilizingPasses = this.getDefaultStabilizingPassCount(), callbacks, frameNumber = this.lastFrameNumber+1) {
         this.pendingSolve = async function (armature, bone, iterations, stabilizingPasses, callbacks) {
             return await armature.__solve(bone, iterations, stabilizingPasses, callbacks);
         };
-        if (this.activeSolve != null) {
-            //console.log("waiting. . .");
-            await this.activeSolve;
+        if (this.lastFrameNumber >= frameNumber) {
+                this.activeSolve = this.pendingSolve;
         }
         //console.log("cleared. . .");
         if (this.pendingSolve != null) {
@@ -314,11 +317,17 @@ export class EWBIK {
             this.pendingSolve = null;
             //console.log("solving");
             if (bone == null || this.boneToStateMap.get(bone) != null) {
-                this.activeSolve = doSolve(this, bone, iterations, stabilizingPasses, callbacks);
-                await this.activeSolve;
+                if(frameNumber > this.lastFrameNumber) {
+                    this.activeSolve = doSolve(this, bone, iterations, stabilizingPasses, callbacks);                    
+                }
+                this.lastFrameNumber = frameNumber;
             }
-            this.activeSolve = null;
-            //console.log("solvied");
+            this.activeSolve = null;            //console.log("solvied");
+        }
+        if(this.activeSolve != null) {
+            return await this.activeSolve;
+        } else {
+            return;
         }
     }
 
@@ -354,7 +363,6 @@ export class EWBIK {
         //let forBoneState = this.getBoneStateFor(bone);
         callbacks?.__initStep((callme, bs, ts, wb) => this.stepWiseUpdateResult(callme, bs, ts, wb));
         //let ds = this.shadowSkel.debugState;
-        
         this.shadowSkel.solve(
             iterations == -1 ? this.getDefaultIterations() : iterations,
             stabilizingPasses == -2 ? this.getDefaultStabilizingPassCount : stabilizingPasses,
@@ -401,7 +409,7 @@ export class EWBIK {
      * @param stabilizingPasses number of stabilization passes to run. Set this to -2 if you want to use the armature's default. -1 tells it to break constraints if need be, 0 means no stabilization, 1 means a single (very cheap) stabilization pass which may increase grindiness in extreme poses. Greater than 1 reduces grindiness, but at signifcant cost.
      * @param {CallbacksSequence} callbacks to snoop on solver state
      */
-    async _doSinglePullbackStep(bone = null, iterations = this.getDefaultIterations(), stabilizationPasses= this.getDefaultStabilizingPassCount(), callbacks) {
+    async _doSinglePullbackStep(bone = null, iterations = this.getDefaultIterations(), stabilizationPasses = this.getDefaultStabilizingPassCount(), callbacks) {
         if (this.dirtySkelState)
             this._regenerateShadowSkeleton();
         if (this.dirtyRate) {
@@ -440,7 +448,7 @@ export class EWBIK {
         this.alignBoneToSolverResult(wb.forBone, ts, wb);
         callMe(bone, ts, wb);
     }
-    
+
     /**
      * read back the solver results from the given BoneState to the corresponding AbstractBone. 
      * The solver only ever modifies things in local space, so we can just markDirty after
@@ -471,9 +479,9 @@ export class EWBIK {
     }
 
     async regenerateShadowSkeleton(force) {
-        this.dirtySkelState = true;        
+        this.dirtySkelState = true;
         this.pendingSolve = null; //invalidate any pending solve
-        if (force)         
+        if (force)
             return this._regenerateShadowSkeleton();
         this.dirtyRate = true;
     }
@@ -527,7 +535,7 @@ export class EWBIK {
                 let childMagSq = childvec.magSq();
                 let childMag = Math.sqrt(childMagSq);
                 sum_sqheight += childMagSq; //helps weigh in favor of further bones, because a lot of rigs do weird annoying things with twist bones.
-                sumheight += childMag; 
+                sumheight += childMag;
                 minChild = Math.max(Math.min(minChild, childMag), 0.01);
                 maxChild = Math.max(maxChild, sumheight);
                 sumVec.add(childvec);
@@ -537,19 +545,19 @@ export class EWBIK {
             fromBone.height = fromBone.parent.height;
             if (count > 0) {
                 normeddir = sumVec.div(count).normalize();
-                if(mode == 'cone')
-                    fromBone.height = Math.sqrt(sum_sqheight)/Math.sqrt(count);
-                if(mode == 'plate')
+                if (mode == 'cone')
+                    fromBone.height = Math.sqrt(sum_sqheight) / Math.sqrt(count);
+                if (mode == 'plate')
                     fromBone.height = minChild;
             }
 
             //let rotTo = pcaOrientation(childPoints, fromBone, 
-              //  (vecs, refBasis) => {                    
-                    let rotTo = Rot.fromVecs(EWBIK.YDIR, normeddir);
-                //    return rotTo; 
-               // }
+            //  (vecs, refBasis) => {                    
+            let rotTo = Rot.fromVecs(EWBIK.YDIR, normeddir);
+            //    return rotTo; 
+            // }
             //);
-            
+
             orientation.quaternion.set(-rotTo.x, -rotTo.y, -rotTo.z, rotTo.w);
 
             fromBone.setIKBoneOrientation(orientation);
@@ -594,11 +602,13 @@ export class EWBIK {
         this.lastRequestedSolveFromBone = null;
         this.dirtySkelState = false;
         this._updateShadowSkelRateInfo();
+        this.ikReady = true;
         this.pool.finalize();
     }
 
     setDampening(val) {
         this.dampening = val;
+        this.shadowSkel?.setDampening(this.dampening, this.getDefaultIterations());
         this.updateShadowSkelRateInfo();
     }
 
@@ -866,9 +876,9 @@ export class EWBIK {
 
     updateSkelStateBone(b, bs) {
         this.updateSkelStateAxes(b, bs.getFrameTransform(), b.parent, true);
-        if (b.getConstraint() != null) {
+        /*if (b.getConstraint() != null) {
             this.updateSkelStateConstraint(b.getConstraint(), bs.getConstraint());
-        }
+        }*/
         let ts = bs.getTarget();
         if (ts != null) {
             this.updateSkelStateTarget(b.getIKPin(), ts);
@@ -924,27 +934,27 @@ export class EWBIK {
             this._updateShadowSkelRateInfo(iterations);
 
 
-        let ds =  this.shadowSkel.debugState;
-        if(ds.currentIteration == 0) {
+        let ds = this.shadowSkel.debugState;
+        if (ds.currentIteration == 0) {
             this.updateskelStates();
             this.shadowSkel.updateReturnfulnessDamps(iterations);
             this.shadowSkel.alignSimAxesToBoneStates();
         }
         let i = 0;
         //let doNothing = ()=>{};
-         
+
         let endOnIndex = this.shadowSkel.getEndOnIndex(solveFrom);
         this.shadowSkel.updateReturnfulnessDamps(iterations);
         callbacks?.__initStep((callme, bs, ts, wb) => this.stepWiseUpdateResult(callme, bs, ts, wb));
-        let doalign = (bs, ts, wb) => this.alignBoneToSolverResult(bs, ts, wb);    
-        
+        let doalign = (bs, ts, wb) => this.alignBoneToSolverResult(bs, ts, wb);
+
         this.shadowSkel.solveToTargets(this.getDefaultStabilizingPassCount(), endOnIndex, doalign, callbacks, ds.currentIteration);
-        ds.currentIteration = ds.currentIteration+1;
-        if(ds.currentIteration >= iterations) {
+        ds.currentIteration = ds.currentIteration + 1;
+        if (ds.currentIteration >= iterations) {
             ds.solveCalls++;
             ds.currentIteration = 0;
         }
-        console.log('solve#: ' +ds.solveCalls +'\t:: itr :: ' +ds.currentIteration);
+        console.log('solve#: ' + ds.solveCalls + '\t:: itr :: ' + ds.currentIteration);
     }
 
     /**
@@ -959,7 +969,7 @@ export class EWBIK {
         if (this.dirtyRate)
             this._updateShadowSkelRateInfo(iterations);
         let ds = this.shadowSkel.debugState;
-        if(ds.currentIteration == 0) {
+        if (ds.currentIteration == 0) {
             this.updateskelStates();
             this.shadowSkel.updateReturnfulnessDamps(iterations);
             this.shadowSkel.alignSimAxesToBoneStates();
@@ -967,11 +977,11 @@ export class EWBIK {
         this.shadowSkel.incrStep();
         callbacks?.__initStep((callme, bs, ts, wb) => this.stepWiseUpdateResult(callme, bs, ts, wb));
         this.shadowSkel.debug_solve(iterations, this.getDefaultStabilizingPassCount(), solveFrom, (bs, ts, wb) => this.alignBoneToSolverResult(bs, ts, wb), callbacks);
-        if(ds.completedIteration) {
-            if(ds.currentIteration >= iterations) {
+        if (ds.completedIteration) {
+            if (ds.currentIteration >= iterations) {
                 ds.solveCalls++;
                 ds.currentIteration = 0;
-                console.log('solve#: ' +ds.solveCalls +'\t:: itr :: ' +ds.currentIteration);
+                console.log('solve#: ' + ds.solveCalls + '\t:: itr :: ' + ds.currentIteration);
             }
         }
     }
@@ -1085,7 +1095,7 @@ let betterbones = {
         /** @type {IKTransform} */
         if (this.orientation == null)
             this.orientation = newOrientation
-        else if(newOrientation != this.orientations) {
+        else if (newOrientation != this.orientations) {
             this.orientation.copy(newOrientation);
         }
         this.orientation.placeholder = false;
@@ -1103,18 +1113,18 @@ let betterbones = {
         return this.orientation;
     },
 
-    getBonegeo(){
+    getBonegeo() {
         this._bonegeo;
     },
 
     setBonegeo(newgeo) {
-        if(newgeo != null) {
+        if (newgeo != null) {
             if (this.bonegeo != newgeo) {
                 this.orientation.remove(this.bonegeo);
                 this.bonegeo?.material.dispose();
-                this.bonegeo?.geometry.dispose();            
+                this.bonegeo?.geometry.dispose();
             }
-            if(this.orientation.children.indexOf(newgeo) == -1) 
+            if (this.orientation.children.indexOf(newgeo) == -1)
                 this.orientation.add(newgeo);
         }
         this.orientation.bonegeo = newgeo;

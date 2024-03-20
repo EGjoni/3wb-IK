@@ -230,8 +230,8 @@ export class IKTransform {
         return result;  
     }
 
-    getLocalOfRotation(inRot) {		
-        let resultNew = this.inverseRotation.applyAfter(inRot).applyAfter(this.rotation);
+    getLocalOfRotation(inRot, outRot) {		
+        let resultNew = this.inverseRotation.applyAfter(inRot, outRot).applyAfter(this.rotation, outRot);
         //let resultNew =  inRot.applyWithin(this.rotation).applyAfter(this.rotation); //hamilton
         return resultNew;			
     }

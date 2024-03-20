@@ -21,7 +21,8 @@ export class ShadowSkeleton {
         this.buildTraversalArray();
     }
 
-    /**doesn't solve for anything, just updates the pain info of each bone for debugging*/
+    /**doesn't solve for anything, 
+     * just updates the pain info of each bone for visualization purposes*/
     noOp(fromBone, iterations, onComplete, callbacks = null) {
         this.alignSimAxesToBoneStates();
         //this.pullBack(iterations, solveFrom, false, null);
@@ -56,6 +57,7 @@ export class ShadowSkeleton {
       */
 
     solve(iterations, stabilizationPasses, solveFrom, onComplete, callbacks = null) {
+        if(window.perfing) performance.mark("shadowSkelSolve start");
         this.alignSimAxesToBoneStates();
         const endOnIndex = this.getEndOnIndex(solveFrom)
         //this.pullBack(iterations, solveFrom, false, null);
@@ -64,6 +66,9 @@ export class ShadowSkeleton {
         for (let i = 0; i < iterations; i++) {
             this.solveToTargets(stabilizationPasses, endOnIndex, null, callbacks, i);
         }
+
+        if(window.perfing) performance.mark("shadowSkelSolve end");
+        if(window.perfing) performance.measure("shadowSkelSolve", "shadowSkelSolve start", "shadowSkelSolve end");   
         this.updateBoneStates(onComplete, callbacks);        
     }
 
@@ -102,15 +107,19 @@ export class ShadowSkeleton {
         ;
         let translate = endOnIndex === this.traversalArray.length - 1;
         let skipConstraints = stabilizationPasses < 0;
+        if(window.perfing) performance.mark("solveToTargetsp1 start");
         stabilizationPasses = Math.max(0, stabilizationPasses);
         if (translate) { //special case. translate and rotate the rootbone first to minimize deviation from innermost targets
             this.traversalArray[endOnIndex].fastUpdateOptimalRotationToPinnedDescendants(0, translate, true, currentIteration);
         }
+        if(window.perfing) performance.mark("solveToTargetsp1 end");
+        if(window.perfing) performance.measure("solveToTargetsp1", "solveToTargetsp1 start", "solveToTargetsp1 end");  
         this.accumulatingPain = 0;
         this.maxPain = 0;
+        if(window.perfing) performance.mark("solveToTargetsp2 start");
         for (let j = 0; j <= endOnIndex; j++) {
             const wb = this.traversalArray[j];
-            callbacks?.beforeIteration(wb.forBone.directRef, wb.forBone.getFrameTransform(), wb);
+            //callbacks?.beforeIteration(wb.forBone.directRef, wb.forBone.getFrameTransform(), wb);
             wb.pullBackTowardAllowableRegion(currentIteration, callbacks);
             wb.fastUpdateOptimalRotationToPinnedDescendants(stabilizationPasses, translate && j === endOnIndex, skipConstraints, currentIteration);
             let bonepain = wb.getOwnPain();
@@ -119,12 +128,15 @@ export class ShadowSkeleton {
                 this.maxpainbone = this.traversalArray[j].forBone.directRef;
             }
             this.accumulatingPain += bonepain;
-            callbacks?.afterIteration(wb.forBone.directRef, wb.forBone.getFrameTransform(), wb);
+            //callbacks?.afterIteration(wb.forBone.directRef, wb.forBone.getFrameTransform(), wb);
         }
         this.lastPainTotal = this.accumulatingPain;
 
         //this.updateBoneStates(onComplete, callbacks);
         this.pool.releaseAll();
+        if(window.perfing) performance.mark("solveToTargetsp2 end");
+        if(window.perfing) performance.measure("solveToTargetsp2", "solveToTargetsp2 start", "solveToTargetsp2 end");  
+        if(window.perfing) performance.measure("solveToTargets", "solveToTargetsp1 start", "solveToTargetsp2 end");  
     }
 
     /**
@@ -199,7 +211,7 @@ export class ShadowSkeleton {
             wb.simLocalAxes.localMBasis.translate.toArray(ts.translation);
             wb.simLocalAxes.localMBasis.rotation.normalize();
             wb.simLocalAxes.localMBasis.rotation.toArray(ts.rotation);
-            callbacks?.afterSolve(bs.directRef, ts, wb);
+            //callbacks?.afterSolve(bs.directRef, ts, wb);
             if(onComplete)
                 onComplete(bs, ts, wb);
         }
@@ -386,7 +398,7 @@ export class ShadowSkeleton {
         }
 
         if (ds.currentTraversalIndex <= endOnIndex) {
-            this.debug_bone_solveToTargets(stabilizationPasses, translate, endOnIndex, onComplete, callbacks, ds);
+            this.debug_bone_solveToTargets(stabilizationPasses, false, endOnIndex, onComplete, callbacks, ds);
         } else {
             this.lastPainTotal = this.accumulatingPain;
         }
