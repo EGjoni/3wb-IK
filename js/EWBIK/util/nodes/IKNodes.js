@@ -410,8 +410,6 @@ export class IKNode {
             this.getParentAxes()._disown(this);
             this.parent = null;
             this.areGlobal = true;
-            this.markDirty();
-            this.updateGlobal();
         }
         return this;
     }
@@ -474,7 +472,7 @@ export class IKNode {
     /**
      * @returns {IKNode} a copy of this node with likely the same global values, no parent, and likely different local values
      */
-    freeGlobalclone() {
+    freeGlobalClone() {
         const freeCopy = new IKNode(this.getGlobalMBasis(), null, undefined, this.pool);
         freeCopy.markDirty();
         freeCopy.updateGlobal();
@@ -484,7 +482,7 @@ export class IKNode {
     /**
      * @returns {IKNode} a copy of this node without a parent, the same local values, and likely different global values
      */
-    freeclone() {
+    freeClone() {
         const freeCopy = new IKNode(this.getLocalMBasis(), null, undefined, this.pool);
         freeCopy.getLocalMBasis().adoptValues(this.localMBasis);
         freeCopy.markDirty();
@@ -494,7 +492,7 @@ export class IKNode {
 
     /**
      * @return {IKNode} a copy of this node which is attached to the same parent and has the same local / global values */
-    attachedclone() {
+    attachedClone() {
         this.updateGlobal();
         const copy = new IKNode(null, this.getParentAxes(), undefined, this.pool);
         copy.getLocalMBasis().adoptValues(this.localMBasis);
@@ -633,10 +631,10 @@ export class TrackingNode extends IKNode {
         super.updateGlobal();
         if (this.toTrack != null) {
             if ((this.parent == null) || this.toTrack.parent == this.parent?.toTrack) {
-                this.updateUnderlyingFrom_Local();
+                this.updateTrackedFrom_Local();
                 if (was_dirty) this.toTrack.updateWorldMatrix();
             } else {
-                this.updateUnderlyingFrom_Global(was_dirty, false);
+                this.updateTrackedFrom_Global(was_dirty, false);
             }
             //this.adoptLocalValuesFromObject3D(this.toTrack);
             //this.adoptGlobalValuesFromObject3D(this.toTrack);
@@ -661,11 +659,11 @@ export class TrackingNode extends IKNode {
         this.adoptLocalValuesFromObject3D(this.toTrack);
         return this.localMBasis;
     }*/
-    updateUnderlyingFrom_Local() {
+    updateTrackedFrom_Local() {
         TrackingNode.transferLocalToObj3d(this.localMBasis, this.toTrack);
     }
 
-    updateUnderlyingFrom_Global(update_world, updateSelf = true) {
+    updateTrackedFrom_Global(update_world, updateSelf = true) {
         if (updateSelf)
             this.updateGlobal();
         else {
@@ -727,16 +725,9 @@ export class TrackingNode extends IKNode {
         obj3d.scale.y = localMBasis.scale.y;
         obj3d.scale.z = localMBasis.scale.z;
 
-        /*obj3d.quaternion.x = localMBasis.rotation.x;
-        obj3d.quaternion.y = localMBasis.rotation.y;
-        obj3d.quaternion.z = localMBasis.rotation.z;
-        obj3d.quaternion.w = localMBasis.rotation.w;*/ //jpl
-
         obj3d.quaternion.x = -localMBasis.rotation.x;
         obj3d.quaternion.y = -localMBasis.rotation.y;
         obj3d.quaternion.z = -localMBasis.rotation.z;
         obj3d.quaternion.w = localMBasis.rotation.w; //hamilton to jpl
-
-        obj3d.updateWorldMatrix()
     }
 }

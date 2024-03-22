@@ -80,7 +80,7 @@ export class Rest extends Returnful {
      * */
      _computePast_Pre_RawDiscomfortFor(previousResult) {
         /**doing acos() instead of 2*acos() because division by PI*2 instead of TAU means the multiplication by 2 cancels out */
-        return Math.acos(Math.abs(previousResult.fullRotation.w)) * Constraint.HALF_PI_RECIP;
+        return Math.acos(Math.abs(previousResult.fullRotation.normalize().w)) * Constraint.HALF_PI_RECIP;
      }
  
      /**

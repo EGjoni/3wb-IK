@@ -145,6 +145,10 @@ export class Constraint {
         return result;
     }
 
+    updateDisplay() {
+
+    }
+
 
     tempNode1 = new IKNode();
 }
@@ -201,7 +205,8 @@ export class Returnful extends Constraint {
     * @return {ConstraintResult} an object providing information about how much to rotate the object in which direction to make it maximally comfortable. How much to rotate to do so while obeying clamp rules. how much pain the joint was in prior to fixing, how much after the proposed fix, etc.
       */   
      updateFullPreferenceRotation (currentState, currentBoneOrientation, iteration, calledBy = null) {
-         return Rot.IDENTITY; 
+         this.constraintResult._fullRotation = Rot.IDENTITY;
+         return this.constraintResult;
      }
 
 
@@ -296,7 +301,7 @@ export class Returnful extends Constraint {
      }
      
      updatePerIterationLeewayCache(iterations) {
-         this.giveup = iterations*this.stockholmRate;
+         this.giveup = Math.floor(iterations*this.stockholmRate);
          this.leewayCache = new Array(Math.floor(this.giveup));
          let max = this.preferenceLeeway;
          for(let i = 0; i<this.giveup; i++) {
@@ -312,7 +317,7 @@ export class Returnful extends Constraint {
       * @returns a number from 0 - 1, implying amount of pain
       * */
      _computePast_Pre_RawDiscomfortFor(previousResult) {
- 
+        throw new Error("Returnful Constraints must return Pre_RawDiscomfort");
      }
  
      /**
@@ -321,8 +326,13 @@ export class Returnful extends Constraint {
       * @returns a number from 0 - 1, implying amount of pain
       * */
      _computePast_Post_RawDiscomfortFor(previousResult) {
- 
+        throw new Error("Returnful Constraints must return Post_RawDiscomfort");
      }
+
+     invalidatePain() {
+        this.constraintResult.raw_postCallDiscomfort = null;
+        this.constraintResult.raw_preCallDiscomfort = null;
+    }
 
     getBasisAxes() {
         return this.basisAxes;
@@ -422,8 +432,14 @@ export class ConstraintStack extends LimitingReturnful {
 
     /**invalidates the ConstraintResult object maintained by this constraint (and all such child constraints*/
     markDirty() {
+        this.constraintResult.markSet(false);
         for(let c of this.allconstraints)
-            this.constraintResult.markSet(false);
+            c.constraintResult.markSet(false);
+    }
+
+    updateDisplay() {
+        for(let c of this.allconstraints)
+            c.updateDisplay();
     }
 
     childDisabled() {
@@ -460,7 +476,7 @@ export class ConstraintStack extends LimitingReturnful {
     }
 
     updatePerIterationLeewayCache(iterations) {
-        this.giveup = this.stockholmRate  ? iterations*this.stockholmRate : iterations; 
+        this.giveup = Math.floor(this.stockholmRate  ? iterations*this.stockholmRate : iterations); 
         this.leewayCache = new Array(Math.floor(this.giveup));
         let max = this.preferenceLeeway;
 
@@ -478,7 +494,7 @@ export class ConstraintStack extends LimitingReturnful {
                 let t = 1-(i/this.giveup); 
                 if(this.stockholmRate == null) t = 1;
                 let angle = max * t;
-                this.leewayCache[i] = Math.max(Math.cos(angle*0.5), c.leewayCache[i]);
+                this.leewayCache[i] = Math.min(Math.cos(angle*0.5), c.leewayCache[i] ?? 1);
             }
         }
     }
@@ -509,7 +525,7 @@ export class ConstraintStack extends LimitingReturnful {
 
         this.lastPrefState.localMBasis.adoptValues(currentState.localMBasis);
         for(let c of this.returnfulled) {
-            if(c.lastCalled > c.giveup) continue;            
+            if(c.lastCalled >= c.giveup) continue;            
             c.updateFullPreferenceRotation(this.lastPrefState, currentBoneOrientation, iteration, calledBy, cosHalfReturnfullness, angleReturnfullness);
         }
         let maxDiscomfort = this.constraintResult.raw_preCallDiscomfort;
@@ -525,7 +541,7 @@ export class ConstraintStack extends LimitingReturnful {
             }
         } else {
             for(let c of this.returnfulled) {
-                if(c.lastCalled > c.giveup) continue;
+                if(c.lastCalled >= c.giveup) continue;
                 let constraintResult = c.getWeightClampedPreferenceRotation(this.lastPrefState, currentBoneOrientation, iteration, calledBy);
                 let rotBy = constraintResult.clampedRotation;
                 this.lastPrefState.rotateByLocal(rotBy);
@@ -558,10 +574,13 @@ export class ConstraintStack extends LimitingReturnful {
 
     /**lets this ConstraintStack know it should invalidate the pain of its children, as the total has likely changed  */
     invalidatePain() {
-        this.constraintResult.postCallDiscomfort = null;
+        //this.constraintResult.postCallDiscomfort = null;
+        for(let c of this.allconstraints) {
+            c.invalidatePain();
+        }
         this.constraintResult.raw_postCallDiscomfort = null;
         this.constraintResult.raw_preCallDiscomfort = null;
-        this.constraintResult.preCallDiscomfort = null;
+        //this.constraintResult.preCallDiscomfort = null;
     }
  
      /**
@@ -601,6 +620,7 @@ export class ConstraintResult {
     last_iteration = 0;
     pool = noPool;
     forConstraint = null;
+    wasChecked = false;
 
     constructor(forConstraint, pool = noPool) {
         this.pool = noPool; 

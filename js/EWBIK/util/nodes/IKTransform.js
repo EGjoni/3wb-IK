@@ -17,7 +17,10 @@ export class IKTransform {
     forceOrthonormality = true;
 
     chirality = IKTransform.RIGHT;
-    /**@type {Rot} */
+    /**
+     * @type {Rot}
+     * @defaultValue `Rot.IDENTITY.clone()`
+     */
     rotation = Rot.IDENTITY.clone();
     /**@type {Rot} */
     _inverseRotation = Rot.IDENTITY.conjugated();
@@ -302,14 +305,11 @@ export class IKTransform {
 
     updateRays() {
         this._xRay.setP1(this.translate);
-        this._xRay.setHeading(this.xBase);
         this._yRay.setP1(this.translate);
-        this._yRay.setHeading(this.yBase);
         this._zRay.setP1(this.translate);
-        this._zRay.setHeading(this.zBase);
-        this.rotation.applyToRay(this._xRay, this._xRay);
-        this.rotation.applyToRay(this._yRay, this._yRay);
-        this.rotation.applyToRay(this._zRay, this._zRay);
+        this.rotation.applyToVec(this.xBase, this._xRay.p2);
+        this.rotation.applyToVec(this._yRay, this._yRay.p2);
+        this.rotation.applyToVec(this._zRay, this._zRay.p2);
         this.scale.setComponents([this.xBase.mag(), this.yBase.mag(), this.zBase.mag()]);
         this.raysDirty = false;
     }

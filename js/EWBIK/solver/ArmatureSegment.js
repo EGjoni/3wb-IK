@@ -283,10 +283,10 @@ class WorkingBone {
         this.simLocalAxes = chain.simTransforms[forBone.getFrameTransform().getIndex()];
         this.simBoneAxes = chain.simTransforms[forBone.getOrientationTransform().getIndex()];
         /**@type {IKNode} */
-        this.desiredState = this.simLocalAxes.attachedclone();
-        this.desiredBoneOrientation = this.simBoneAxes.freeclone().setRelativeToParent(this.desiredState);
-        this.previousState= this.simLocalAxes.attachedclone(); 
-        this.previousBoneOrientation = this.simBoneAxes.freeclone().setRelativeToParent(this.desiredState);
+        this.desiredState = this.simLocalAxes.attachedClone();
+        this.desiredBoneOrientation = this.simBoneAxes.freeClone().setRelativeToParent(this.desiredState);
+        this.previousState= this.simLocalAxes.attachedClone(); 
+        this.previousBoneOrientation = this.simBoneAxes.freeClone().setRelativeToParent(this.desiredState);
         this.chain = chain;
         this.hasPinnedAncestor = this.chain.hasPinnedAncestor;
 
@@ -343,26 +343,17 @@ class WorkingBone {
 
     fastUpdateOptimalRotationToPinnedDescendants(stabilizePasses, translate, skipConstraint) {
         if(window.perfing) performance.mark("fastUpdateOptimalRotationToPinnedDescendants start");
-        //translate = false;
-        //this.simLocalAxes.updateGlobal();
-        //this.previousState.adoptLocalValuesFromIKNode(this.simLocalAxes); 
         if(this.cosHalfDampen == 1) {
             if(this.chain.wb_segmentRoot == this) 
                 this.chain.previousDeviation = Infinity;
             return;
         }
         this.updateDescendantsPain();
-
-        if(this.chain.expectedTargs != null) {
-            this.updateTargetHeadings(this.chain.expectedTargs,this.chain.weights, this.myWeights);
-            this.updateTipHeadings(this.chain.expectedTips,  !translate);
-        }
         this.updateTargetHeadings(this.chain.boneCenteredTargetHeadings, this.chain.weights, this.myWeights);
         //const prevOrientation = Rot.fromRot(this.simLocalAxes.localMBasis.rotation);
         let gotCloser = true;
         for (let i = 0; i <= stabilizePasses; i++) {
             this.updateTipHeadings(this.chain.boneCenteredTipHeadings, !translate);
-            this.chain.hasFastPass = false;            
             this.updateOptimalRotationToPinnedDescendants(translate, skipConstraint, this.chain.boneCenteredTipHeadings, this.chain.boneCenteredTargetHeadings, this.chain.weights);
             if (stabilizePasses > 0) {
                 this.updateTipHeadings(this.chain.uniform_boneCenteredTipHeadings, !translate);
@@ -388,7 +379,7 @@ class WorkingBone {
 
     /**returns the rotation that was applied (in local space), but does indeed apply it*/
     updateOptimalRotationToPinnedDescendants(translate, skipConstraints, localizedTipHeadings, localizedTargetHeadings, weights) {
-        if(window.perfing) performance.mark("updateOptimalRotationToPinnedDescendants start");
+        //if(window.perfing) performance.mark("updateOptimalRotationToPinnedDescendants start");
         let desiredRotation = this.chain.qcpConverger.weightedSuperpose(localizedTipHeadings, localizedTargetHeadings, weights, translate);
         //qcpRot = Rot.fromVecs(localizedTipHeadings[1], localizedTargetHeadings[1]);
         const translateBy = this.chain.qcpConverger.getTranslation();
@@ -414,22 +405,16 @@ class WorkingBone {
             }
             this.simLocalAxes.rotateByLocal(localDesiredRotby);
         }
-        if(!translate && this?.parentBone?.parentBone != null) {
+        /*if(!translate) {
             this.chain.hasFastPass = true; 
-            this.chain.expectedTargs = [];
-            this.chain.expectedTips = []; 
-            for(let i = 0; i<localizedTipHeadings.length; i++) {
-                this.chain.expectedTargs.push(localizedTargetHeadings[i].clone());
-                this.chain.expectedTips.push(localizedTipHeadings[i].clone());
-            }
             this.post_UpdateTargetHeadings(localizedTargetHeadings, weights, reglobalizedRot);
             this.post_UpdateTipHeadings(localizedTipHeadings, true, reglobalizedRot);           
         } else {
             this.chain.hasFastPass = false;
 
-        }
+        }*
         if(window.perfing) performance.mark("updateOptimalRotationToPinnedDescendants end");
-        if(window.perfing) performance.measure("updateOptimalRotationToPinnedDescendants", "updateOptimalRotationToPinnedDescendants start", "updateOptimalRotationToPinnedDescendants end");   
+        if(window.perfing) performance.measure("updateOptimalRotationToPinnedDescendants", "updateOptimalRotationToPinnedDescendants start", "updateOptimalRotationToPinnedDescendants end");   */
         return localDesiredRotby;
     }
 
@@ -464,17 +449,17 @@ class WorkingBone {
         if(window.perfing) performance.mark("updateTargetHeadings start");
         let hdx = 0;
         const workingRay = this.workingRay;
-        let origin = null;
+        let origin = this.simLocalAxes.origin(); //null
         for (let i = 0; i < this.chain.pinnedBones.length; i++) {
             const sb = this.chain.pinnedBones[i];
             const targetAxes = sb.simTargetAxes;
-            if(sb != this && sb.chain.hasFastPass && this.simLocalAxes.dirty == false) {
+            /*if(sb != this && sb.chain.hasFastPass && this.simLocalAxes.dirty == false) {
                 origin = this.simLocalAxes.globalMBasis.translate;
                 hdx += this.fast_updateTargetHeadings(localizedTargetHeadings, baseWeights, weights, hdx, sb, i, origin); 
                 continue;
             } 
             if(origin == null) origin = this.simLocalAxes.origin();
-            sb.chain.hasFastPass = false;
+            sb.chain.hasFastPass = false;*/
             
             targetAxes.updateGlobal();            
             localizedTargetHeadings[hdx].set(targetAxes.origin()).sub(origin);
@@ -517,91 +502,7 @@ class WorkingBone {
         if(window.perfing) performance.mark("updateTargetHeadings end");
         if(window.perfing) performance.measure("updateTargetHeadings", "updateTargetHeadings start", "updateTargetHeadings end");    
     }
-
-
-    fast_updateTargetHeadings(localizedTargetHeadings, baseWeights, weights, hdxStart, sb, i, myOrigin) {
-        if(window.perfing) performance.mark("fast_updateTargetHeadings start");
-        const modeCode = sb.targetState.getModeCode();
-        const targetOrigin = localizedTargetHeadings[hdxStart];
-        let updated = 0;
-        let hdx = hdxStart;
-        const tipOrigin = myOrigin;
-        let painScalar = (1+this.descendantAveragePain[i]);
-        let combinedOffset = this.pool.any_Vec3(targetOrigin.x - myOrigin.x, targetOrigin.y -myOrigin.y, targetOrigin.z - myOrigin.z);
-        weights[hdx] = painScalar * baseWeights[hdx];
-            
-        hdx++; updated++;
-
-        if ((modeCode & TargetState.XDir) != 0) {
-            //weights[hdx] = painScalar*baseWeights[hdx];
-            //weights[hdx+1] = painScalar*baseWeights[hdx+1];
-            localizedTargetHeadings[hdx].sub(targetOrigin).mult(1/weights[hdx]).add(combinedOffset);
-            localizedTargetHeadings[hdx+1].sub(targetOrigin).mult(1/weights[hdx+1]).add(combinedOffset);   //set(xTip.p2).sub(myOrigin);
-            hdx += 2;
-            updated+=2;
-        }
-        if ((modeCode & TargetState.YDir) != 0) {
-            //weights[hdx] = painScalar*baseWeights[hdx];
-            //weights[hdx+1] = painScalar*baseWeights[hdx+1];
-            localizedTargetHeadings[hdx].sub(targetOrigin).mult(1/weights[hdx]).add(combinedOffset); ;
-            localizedTargetHeadings[hdx+1].sub(targetOrigin).mult(1/weights[hdx+1]).add(combinedOffset); ;
-            hdx += 2;
-            updated+=2;
-        }
-        if ((modeCode & TargetState.ZDir) != 0) {
-            //weights[hdx] = painScalar*baseWeights[hdx];
-            //weights[hdx+1] = painScalar*baseWeights[hdx+1];
-            localizedTargetHeadings[hdx].sub(targetOrigin).mult(1/weights[hdx]).add(combinedOffset); ;
-            localizedTargetHeadings[hdx+1].sub(targetOrigin).mult(1/weights[hdx+1]).add(combinedOffset); ;
-            hdx += 2;
-            updated+=2;
-        }
-
-        localizedTargetHeadings[hdxStart].set(combinedOffset);
-        if(window.perfing) performance.mark("fast_updateTargetHeadings end");
-        if(window.perfing) performance.measure("fast_updateTargetHeadings", "fast_updateTargetHeadings start", "fast_updateTargetHeadings end");
-            
-        return updated;
-    }
-
-    fast_updateTipHeadings(localizedTipHeadings, scale, hdxStart, sb, myOrigin) {
-        if(window.perfing) performance.mark("fast_updateTipHeadings start");
-        const modeCode = sb.targetState.getModeCode();
-        let updated = 0;
-        let hdx = hdxStart;
-        const tipOrigin = localizedTipHeadings[hdx];
-        let scaleBy = scale ? 1+myOrigin.dist(tipOrigin) : 1;
-        let combinedOffset = this.pool.any_Vec3(tipOrigin.x - myOrigin.x, tipOrigin.y -myOrigin.y, tipOrigin.z - myOrigin.z);
-        hdx++; updated++;
-
-        if ((modeCode & TargetState.XDir) != 0) {
-            localizedTipHeadings[hdx].sub(tipOrigin).mult(scaleBy).add(combinedOffset);
-            localizedTipHeadings[hdx+1].sub(tipOrigin).mult(scaleBy).add(combinedOffset);  
-            hdx += 2;
-            updated+=2;
-        }
-        if ((modeCode & TargetState.YDir) != 0) {
-            localizedTipHeadings[hdx].sub(tipOrigin).mult(scaleBy).add(combinedOffset); ;
-            localizedTipHeadings[hdx+1].sub(tipOrigin).mult(scaleBy).add(combinedOffset); ;
-            hdx += 2;
-            updated+=2;
-        }
-        if ((modeCode & TargetState.ZDir) != 0) {
-            localizedTipHeadings[hdx].sub(tipOrigin).mult(scaleBy).add(combinedOffset); ;
-            localizedTipHeadings[hdx+1].sub(tipOrigin).mult(scaleBy).add(combinedOffset); ;
-            hdx += 2;
-            updated+=2;
-        }
-        localizedTipHeadings[hdxStart].set(combinedOffset);
-
-        if(window.perfing) performance.mark("fast_updateTipHeadings end");
-        if(window.perfing) performance.measure("fast_updateTipHeadings", "fast_updateTipHeadings start", "fast_updateTipHeadings end");   
-        return updated;
-    }
-
-  
-
-
+    
     updateTipHeadings(localizedTipHeadings, scale) {
         if(window.perfing) performance.mark("updateTipHeadings start");
         let hdx = 0;
@@ -609,11 +510,11 @@ class WorkingBone {
         const workingRay = this.workingRay;
         for (let i = 0; i < this.chain.pinnedBones.length; i++) {
             const sb = this.chain.pinnedBones[i];
-            if(sb != this && sb.chain.hasFastPass && this.simLocalAxes.dirty == false) {
+            /*if(sb != this && sb.chain.hasFastPass && this.simLocalAxes.dirty == false) {
                 hdx += this.fast_updateTipHeadings(localizedTipHeadings, scale, hdx, sb, myOrigin); 
                 continue;
             }
-            sb.chain.hasFastPass = false;
+            sb.chain.hasFastPass = false;*/
 
             const tipAxes = sb.simBoneAxes;
             tipAxes.updateGlobal();    
@@ -655,108 +556,6 @@ class WorkingBone {
         }
         if(window.perfing) performance.mark("updateTipHeadings end");
         if(window.perfing) performance.measure("updateTipHeadings", "updateTipHeadings start", "updateTipHeadings end");   
-    }
-
-    /**Updates the tip headings to match the rotation all of the multiplications to prepare them for any ancestor of this bone,
-     * also undoes any scaling or translation it applied to the headings prior to solving. 
-     * This concept only works if bases are orthornormal, and it shouldn't be used by tips themselves. but the speedups are significant when you can
-     * get away with it.*/
-    post_UpdateTipHeadings(localizedTipHeadings, scale, applyRot) {
-        if(window.perfing) performance.mark("post_updateTipHeadings start");
-        let hdx = 0;
-        if(this.targetState != null) this.simBoneAxes.updateGlobal();
-        const myOrigin = this.simLocalAxes.globalMBasis.translate;
-        this.applyRotToVecArray(applyRot, localizedTipHeadings, localizedTipHeadings);
-        for (let i = 0; i < this.chain.pinnedBones.length; i++) {
-            const sb = this.chain.pinnedBones[i];
-            const tipOrigin = localizedTipHeadings[hdx];        
-            const target = sb.targetState;
-            const modeCode = target.getModeCode();
-            const combinedOffset = this.pool.any_Vec3(tipOrigin.x +myOrigin.x, tipOrigin.y +myOrigin.y, tipOrigin.z + myOrigin.z);
-            
-            let origidx = hdx;
-            let unscaleBy = scale ? 1/(1+combinedOffset.mag()) : 1;                       
-            hdx++;
-
-            if ((modeCode & TargetState.XDir) != 0) {
-                localizedTipHeadings[hdx].sub(tipOrigin).mult(unscaleBy).add(combinedOffset);
-                localizedTipHeadings[hdx+1].sub(tipOrigin).mult(unscaleBy).add(combinedOffset);   //set(xTip.p2).sub(myOrigin);
-                hdx += 2;
-            }
-            if ((modeCode & TargetState.YDir) != 0) {
-                localizedTipHeadings[hdx].sub(tipOrigin).mult(unscaleBy).add(combinedOffset); ;
-                localizedTipHeadings[hdx+1].sub(tipOrigin).mult(unscaleBy).add(combinedOffset); ;
-                hdx += 2;
-            }
-            if ((modeCode & TargetState.ZDir) != 0) {
-                localizedTipHeadings[hdx].sub(tipOrigin).mult(unscaleBy).add(combinedOffset); ;
-                localizedTipHeadings[hdx+1].sub(tipOrigin).mult(unscaleBy).add(combinedOffset); ;
-                hdx += 2;
-            }
-            localizedTipHeadings[origidx].add(myOrigin);
-            sb.chain.hasFastPass = true; 
-        }
-        this.chain.hasFastPass = true;
-        if(window.perfing) performance.mark("post_updateTipHeadings end");
-        if(window.perfing) performance.measure("post_updateTipHeadings", "post_updateTipHeadings start", "post_updateTipHeadings end");   
-    }
-
-    post_UpdateTargetHeadings(localizedTargetHeadings, weights, applyRot) {
-        if(window.perfing) performance.mark("post_UpdateTargetHeadings start");
-        let hdx = 0;
-        if(this.targetState != null) this.simBoneAxes.updateGlobal();
-        const workingRay = this.workingRay;
-        const myOrigin = this.simLocalAxes.globalMBasis.translate;
-        const {XDir, YDir, ZDir} = TargetState;
-        for (let i = 0; i < this.chain.pinnedBones.length; i++) {
-            const sb = this.chain.pinnedBones[i];            
-            let doApplyRot = false;
-            let orighdx = hdx;
-            if(this.cyclicTargets.has(sb.targetAxes)) { 
-                // if the target is a child of the axes we're rotating, we'll need to account for the fact that we're chasing our own tail
-                doApplyRot = true;
-                applyRot.applyToVec(localizedTargetHeadings[hdx], localizedTargetHeadings[hdx]);
-            }
-            const targetOrigin =  localizedTargetHeadings[hdx];
-            const combinedOffset = this.pool.any_Vec3(targetOrigin.x +myOrigin.x, targetOrigin.y +myOrigin.y, targetOrigin.z + myOrigin.z);
-            let painScalar = (1+this.descendantAveragePain[i]);
-            const modeCode = sb.targetState.getModeCode();
-            hdx++;
-            if (modeCode & XDir) {
-                let invPain = 1/(painScalar*weights[hdx]);
-                if(doApplyRot) {
-                    applyRot.applyToVec(localizedTargetHeadings[hdx], localizedTargetHeadings[hdx]);
-                    applyRot.applyToVec(localizedTargetHeadings[hdx+1], localizedTargetHeadings[hdx+1]);
-                }
-                localizedTargetHeadings[hdx].sub(targetOrigin).mult(invPain).add(combinedOffset);
-                localizedTargetHeadings[hdx+1].sub(targetOrigin).mult(invPain).add(combinedOffset);  
-                hdx += 2;
-            }
-            if (modeCode & YDir) {
-                let invPain = 1/(painScalar*weights[hdx]);
-                if(doApplyRot) {
-                    applyRot.applyToVec(localizedTargetHeadings[hdx], localizedTargetHeadings[hdx]);
-                    applyRot.applyToVec(localizedTargetHeadings[hdx+1], localizedTargetHeadings[hdx+1]);
-                }                
-                localizedTargetHeadings[hdx].sub(targetOrigin).mult(invPain).add(combinedOffset);
-                localizedTargetHeadings[hdx+1].sub(targetOrigin).mult(invPain).add(combinedOffset);                
-                hdx += 2;
-            }
-            if (modeCode & ZDir) {
-                let invPain = 1/(painScalar*weights[hdx]);
-                if(doApplyRot) {
-                    applyRot.applyToVec(localizedTargetHeadings[hdx], localizedTargetHeadings[hdx]);
-                    applyRot.applyToVec(localizedTargetHeadings[hdx+1], localizedTargetHeadings[hdx+1]);
-                }
-                localizedTargetHeadings[hdx].sub(targetOrigin).mult(invPain).add(combinedOffset);
-                localizedTargetHeadings[hdx+1].sub(targetOrigin).mult(invPain).add(combinedOffset);     
-                hdx += 2;
-            }
-            localizedTargetHeadings[orighdx].add(myOrigin);
-            sb.chain.hasFastPass = true;
-        }
-        if(window.perfing) performance.mark("post_UpdateTargetHeadings end");
-        if(window.perfing) performance.measure("post_UpdateTargetHeadings", "post_UpdateTargetHeadings start", "post_UpdateTargetHeadings end");   
     }
 
     updateDescendantsPain() {
@@ -888,3 +687,196 @@ class WorkingBone {
 }
 
 export default ArmatureSegment;
+
+
+
+
+/**
+ * 
+ * 
+ * fast_updateTargetHeadings(localizedTargetHeadings, baseWeights, weights, hdxStart, sb, i, myOrigin) {
+        if(window.perfing) performance.mark("fast_updateTargetHeadings start");
+        const modeCode = sb.targetState.getModeCode();
+        const targetOrigin = localizedTargetHeadings[hdxStart];
+        let updated = 0;
+        let hdx = hdxStart;
+        const tipOrigin = myOrigin;
+        let painScalar = (1+this.descendantAveragePain[i]);
+        let combinedOffset = this.pool.any_Vec3(targetOrigin.x - myOrigin.x, targetOrigin.y -myOrigin.y, targetOrigin.z - myOrigin.z);
+        weights[hdx] = painScalar * baseWeights[hdx];
+            
+        hdx++; updated++;
+
+        if ((modeCode & TargetState.XDir) != 0) {
+            //weights[hdx] = painScalar*baseWeights[hdx];
+            //weights[hdx+1] = painScalar*baseWeights[hdx+1];
+            localizedTargetHeadings[hdx].sub(targetOrigin).mult(1/weights[hdx]).add(combinedOffset);
+            localizedTargetHeadings[hdx+1].sub(targetOrigin).mult(1/weights[hdx+1]).add(combinedOffset);   //set(xTip.p2).sub(myOrigin);
+            hdx += 2;
+            updated+=2;
+        }
+        if ((modeCode & TargetState.YDir) != 0) {
+            //weights[hdx] = painScalar*baseWeights[hdx];
+            //weights[hdx+1] = painScalar*baseWeights[hdx+1];
+            localizedTargetHeadings[hdx].sub(targetOrigin).mult(1/weights[hdx]).add(combinedOffset); ;
+            localizedTargetHeadings[hdx+1].sub(targetOrigin).mult(1/weights[hdx+1]).add(combinedOffset); ;
+            hdx += 2;
+            updated+=2;
+        }
+        if ((modeCode & TargetState.ZDir) != 0) {
+            //weights[hdx] = painScalar*baseWeights[hdx];
+            //weights[hdx+1] = painScalar*baseWeights[hdx+1];
+            localizedTargetHeadings[hdx].sub(targetOrigin).mult(1/weights[hdx]).add(combinedOffset); ;
+            localizedTargetHeadings[hdx+1].sub(targetOrigin).mult(1/weights[hdx+1]).add(combinedOffset); ;
+            hdx += 2;
+            updated+=2;
+        }
+
+        localizedTargetHeadings[hdxStart].set(combinedOffset);
+        if(window.perfing) performance.mark("fast_updateTargetHeadings end");
+        if(window.perfing) performance.measure("fast_updateTargetHeadings", "fast_updateTargetHeadings start", "fast_updateTargetHeadings end");
+            
+        return updated;
+    }
+
+    fast_updateTipHeadings(localizedTipHeadings, scale, hdxStart, sb, myOrigin) {
+        if(window.perfing) performance.mark("fast_updateTipHeadings start");
+        const modeCode = sb.targetState.getModeCode();
+        let updated = 0;
+        let hdx = hdxStart;
+        const tipOrigin = localizedTipHeadings[hdx];
+        let scaleBy = scale ? 1+myOrigin.dist(tipOrigin) : 1;
+        let combinedOffset = this.pool.any_Vec3(tipOrigin.x - myOrigin.x, tipOrigin.y -myOrigin.y, tipOrigin.z - myOrigin.z);
+        hdx++; updated++;
+
+        if ((modeCode & TargetState.XDir) != 0) {
+            localizedTipHeadings[hdx].sub(tipOrigin).mult(scaleBy).add(combinedOffset);
+            localizedTipHeadings[hdx+1].sub(tipOrigin).mult(scaleBy).add(combinedOffset);  
+            hdx += 2;
+            updated+=2;
+        }
+        if ((modeCode & TargetState.YDir) != 0) {
+            localizedTipHeadings[hdx].sub(tipOrigin).mult(scaleBy).add(combinedOffset); ;
+            localizedTipHeadings[hdx+1].sub(tipOrigin).mult(scaleBy).add(combinedOffset); ;
+            hdx += 2;
+            updated+=2;
+        }
+        if ((modeCode & TargetState.ZDir) != 0) {
+            localizedTipHeadings[hdx].sub(tipOrigin).mult(scaleBy).add(combinedOffset); ;
+            localizedTipHeadings[hdx+1].sub(tipOrigin).mult(scaleBy).add(combinedOffset); ;
+            hdx += 2;
+            updated+=2;
+        }
+        localizedTipHeadings[hdxStart].set(combinedOffset);
+
+        if(window.perfing) performance.mark("fast_updateTipHeadings end");
+        if(window.perfing) performance.measure("fast_updateTipHeadings", "fast_updateTipHeadings start", "fast_updateTipHeadings end");   
+        return updated;
+    }
+
+ * 
+    /**Updates the tip headings to match the rotation all of the multiplications to prepare them for any ancestor of this bone,
+     * also undoes any scaling or translation it applied to the headings prior to solving. 
+     * This concept only works if bases are orthornormal, and it shouldn't be used by tips themselves. but the speedups are significant when you can
+     * get away with it.*/
+
+    /**
+    post_UpdateTipHeadings(localizedTipHeadings, scale, applyRot) {
+        if(window.perfing) performance.mark("post_updateTipHeadings start");
+        let hdx = 0;
+        if(this.targetState != null) this.simBoneAxes.updateGlobal();
+        const myOrigin = this.simLocalAxes.globalMBasis.translate;
+        this.applyRotToVecArray(applyRot, localizedTipHeadings, localizedTipHeadings);
+        for (let i = 0; i < this.chain.pinnedBones.length; i++) {
+            const sb = this.chain.pinnedBones[i];
+            const tipOrigin = localizedTipHeadings[hdx];        
+            const target = sb.targetState;
+            const modeCode = target.getModeCode();
+            const combinedOffset = this.pool.any_Vec3(tipOrigin.x +myOrigin.x, tipOrigin.y +myOrigin.y, tipOrigin.z + myOrigin.z);
+            
+            let origidx = hdx;
+            let unscaleBy = scale ? 1/(1+combinedOffset.mag()) : 1;                       
+            hdx++;
+
+            if ((modeCode & TargetState.XDir) != 0) {
+                localizedTipHeadings[hdx].sub(tipOrigin).mult(unscaleBy).add(combinedOffset);
+                localizedTipHeadings[hdx+1].sub(tipOrigin).mult(unscaleBy).add(combinedOffset);   //set(xTip.p2).sub(myOrigin);
+                hdx += 2;
+            }
+            if ((modeCode & TargetState.YDir) != 0) {
+                localizedTipHeadings[hdx].sub(tipOrigin).mult(unscaleBy).add(combinedOffset); ;
+                localizedTipHeadings[hdx+1].sub(tipOrigin).mult(unscaleBy).add(combinedOffset); ;
+                hdx += 2;
+            }
+            if ((modeCode & TargetState.ZDir) != 0) {
+                localizedTipHeadings[hdx].sub(tipOrigin).mult(unscaleBy).add(combinedOffset); ;
+                localizedTipHeadings[hdx+1].sub(tipOrigin).mult(unscaleBy).add(combinedOffset); ;
+                hdx += 2;
+            }
+            localizedTipHeadings[origidx].add(myOrigin);
+            sb.chain.hasFastPass = true; 
+        }
+        this.chain.hasFastPass = true;
+        if(window.perfing) performance.mark("post_updateTipHeadings end");
+        if(window.perfing) performance.measure("post_updateTipHeadings", "post_updateTipHeadings start", "post_updateTipHeadings end");   
+    }
+
+    post_UpdateTargetHeadings(localizedTargetHeadings, weights, applyRot) {
+        if(window.perfing) performance.mark("post_UpdateTargetHeadings start");
+        let hdx = 0;
+        if(this.targetState != null) this.simBoneAxes.updateGlobal();
+        const workingRay = this.workingRay;
+        const myOrigin = this.simLocalAxes.globalMBasis.translate;
+        const {XDir, YDir, ZDir} = TargetState;
+        for (let i = 0; i < this.chain.pinnedBones.length; i++) {
+            const sb = this.chain.pinnedBones[i];            
+            let doApplyRot = false;
+            let orighdx = hdx;
+            if(this.cyclicTargets.has(sb.targetAxes)) { 
+                // if the target is a child of the axes we're rotating, we'll need to account for the fact that we're chasing our own tail
+                doApplyRot = true;
+                applyRot.applyToVec(localizedTargetHeadings[hdx], localizedTargetHeadings[hdx]);
+            }
+            const targetOrigin =  localizedTargetHeadings[hdx];
+            const combinedOffset = this.pool.any_Vec3(targetOrigin.x +myOrigin.x, targetOrigin.y +myOrigin.y, targetOrigin.z + myOrigin.z);
+            let painScalar = (1+this.descendantAveragePain[i]);
+            const modeCode = sb.targetState.getModeCode();
+            hdx++;
+            if (modeCode & XDir) {
+                let invPain = 1/(painScalar*weights[hdx]);
+                if(doApplyRot) {
+                    applyRot.applyToVec(localizedTargetHeadings[hdx], localizedTargetHeadings[hdx]);
+                    applyRot.applyToVec(localizedTargetHeadings[hdx+1], localizedTargetHeadings[hdx+1]);
+                }
+                localizedTargetHeadings[hdx].sub(targetOrigin).mult(invPain).add(combinedOffset);
+                localizedTargetHeadings[hdx+1].sub(targetOrigin).mult(invPain).add(combinedOffset);  
+                hdx += 2;
+            }
+            if (modeCode & YDir) {
+                let invPain = 1/(painScalar*weights[hdx]);
+                if(doApplyRot) {
+                    applyRot.applyToVec(localizedTargetHeadings[hdx], localizedTargetHeadings[hdx]);
+                    applyRot.applyToVec(localizedTargetHeadings[hdx+1], localizedTargetHeadings[hdx+1]);
+                }                
+                localizedTargetHeadings[hdx].sub(targetOrigin).mult(invPain).add(combinedOffset);
+                localizedTargetHeadings[hdx+1].sub(targetOrigin).mult(invPain).add(combinedOffset);                
+                hdx += 2;
+            }
+            if (modeCode & ZDir) {
+                let invPain = 1/(painScalar*weights[hdx]);
+                if(doApplyRot) {
+                    applyRot.applyToVec(localizedTargetHeadings[hdx], localizedTargetHeadings[hdx]);
+                    applyRot.applyToVec(localizedTargetHeadings[hdx+1], localizedTargetHeadings[hdx+1]);
+                }
+                localizedTargetHeadings[hdx].sub(targetOrigin).mult(invPain).add(combinedOffset);
+                localizedTargetHeadings[hdx+1].sub(targetOrigin).mult(invPain).add(combinedOffset);     
+                hdx += 2;
+            }
+            localizedTargetHeadings[orighdx].add(myOrigin);
+            sb.chain.hasFastPass = true;
+        }
+        if(window.perfing) performance.mark("post_UpdateTargetHeadings end");
+        if(window.perfing) performance.measure("post_UpdateTargetHeadings", "post_UpdateTargetHeadings start", "post_UpdateTargetHeadings end");   
+    }
+
+ */

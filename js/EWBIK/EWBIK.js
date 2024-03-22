@@ -1018,11 +1018,8 @@ let betterbones = {
     /**
      * temporary version of setIKOrientationLock for convenience in locking things
      * without worrying about if they're already locked.
-     * 
-     * if set to true, the IK system will not rotate this bone. 
-     * If set to false, the value of setIKOrientationLock will be used. 
-     * 
-     * @param {boolean} lock
+     *
+     * @param {function} callback to call when checking ock state. Should return true if locked, false otherwise
      */
     setTempIKOrientationLock(lock) {
         let prevLock = this.getIKOrientationLock();
@@ -1030,6 +1027,14 @@ let betterbones = {
         if (lock != prevLock)
             this.parentArmature?.updateShadowSkelRateInfo();
     },
+    
+    /*setTempIKOrientationLock(callback = (forBone)=>false) {
+        let prevLock = this.getIKOrientationLock();
+        this.tempLock = callback(this);
+        this._tempLockFunc = callback;
+        if (lock != prevLock)
+            this.parentArmature?.updateShadowSkelRateInfo();
+    },*/
 
     /**
      * if set to true, the IK system will not rotate this bone.
@@ -1042,7 +1047,7 @@ let betterbones = {
             this.parentArmature?.updateShadowSkelRateInfo();
     },
     getIKOrientationLock() {
-        return this.orientationLock || this.tempLock;
+        return this.orientationLock || this.tempLock;//_tempLockCallback();
     },
 
     setStiffness(stiffness) {

@@ -44,7 +44,7 @@ export class IKPin {
             this.targetNode = new TrackingNode(null, undefined);           
             this.targetNode.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());
             this.targetNode.setParent(forBone.parentArmature.armatureNode);
-            this.targetNode.updateUnderlyingFrom_Global(true)
+            this.targetNode.updateTrackedFrom_Global(true)
         } else if(targetNode instanceof THREE.Object3D) {
             let trackNode = new TrackingNode(targetNode, undefined);
             this.targetNode = trackNode;

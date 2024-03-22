@@ -226,15 +226,14 @@ export class Rot {
 	 * @returns 
 	 */
 	
-    static multiply(a, b) {
+    static multiply(a, b, out = new Rot()) {
 		const aw = a.w, ax = a.x, ay = a.y, az = a.z; 
 		const bw = b.w, bx = b.x, by = b.y, bz = b.z; 
-        return new Rot(
-            aw * bw - ax * bx - ay * by - az * bz,
-            aw * bx + ax * bw + ay * bz - az * by,
-            aw * by - ax * bz + ay * bw + az * bx,
-            aw * bz + ax * by - ay * bx + az * bw
-        );
+        out.w = aw * bw - ax * bx - ay * by - az * bz;
+        out.x = aw * bx + ax * bw + ay * bz - az * by;
+        out.y = aw * by - ax * bz + ay * bw + az * bx;
+        out.z = aw * bz + ax * by - ay * bx + az * bw;
+        return out;
     }   
 
     static pre_multiply(a, b) {
@@ -816,20 +815,15 @@ export class Rot {
 	 * @param axisZ the Z component of the normalized axis for which to get the swing and twist rotation
 	 * @return an Array of Rot objects. With the first element representing the swing, and the second representing the twist
 	 * @see <a href="http://www.euclideanspace.com/maths/geometry/rotations/for/decomposition">calculation</a> */
-	getSwingTwist (axis) {
-        let twistRot = this.clone();
-		let resultRots = new Array(2);
-        this.workingInput.setComponents(twistRot.x, twistRot.y, twistRot.z);
+	getSwingTwist (axis, swingOut = new Rot(), twistOut=new Rot()) {
+        this.workingInput.setComponents(this.x, this.y, this.z);
 		let d = this.workingInput.dot(axis);
-		twistRot.set(twistRot.w, axis.x * d, axis.y * d, axis.z * d, true);
-		if (d < 0) twistRot.multiply(-1.0);
+		twistOut.set(this.w, axis.x * d, axis.y * d, axis.z * d, true);
+		if (d < 0) twistOut.multiply(-1.0);
 		
-		let swing = twistRot.clone();
+		swingOut.setComponents(twistOut);
 		swing.conjugate();
-		swing = Rot.multiply(swing, this);
-		
-		resultRots[0] = new Rot(swing);
-		resultRots[1] = new Rot(twistRot);
+		swing = Rot.multiply(swing, this, swing);
 		return resultRots;
 	}
 	

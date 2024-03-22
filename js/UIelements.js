@@ -11,8 +11,7 @@ import { Vec3, any_Vec3 } from "./EWBIK/util/vecs.js";
 import { Rot } from "./EWBIK/util/Rot.js";
 import { ConvexGeometry } from "convexGeo";
 import { ChainRots, BoneRots, RayDrawer } from "./EWBIK/util/debugViz/debugViz.js";
-import { Rest } from "./EWBIK/betterbones/Constraints/Rest/Rest.js";
-import { ConstraintStack} from "./EWBIK/betterbones/Constraints/Constraint.js";
+import { ConstraintStack, Returnful, Rest, Twist} from "./EWBIK/betterbones/Constraints/ConstraintStack.js";
 
 window.Vec3 = Vec3;
 window.Rot = Rot;
@@ -52,11 +51,8 @@ window.D = document;
 Element.prototype.qs = Element.prototype.querySelector;
 Element.prototype.qsall = Element.prototype.querySelectorAll;
 Document.prototype.byid = Document.prototype.getElementById;
-const constraintStackHTML = `
-<fieldset>
-<legend>Constrain Stack:</legend>
-<div class="subconstraints"> 
-</div>
+const stackInnards = `
+<legend>Constraint Stack:</legend>
 <div>
 <select class="constraint-select">
     <option value = "null"> Add New </option>
@@ -66,8 +62,20 @@ const constraintStackHTML = `
     <option value = "stack"> Subconstraints </option>
 </select> <button class="add-constraint">Add</button>
 </div>
+<div class="subconstraints"> 
+</div>`
+const constraintStackHTML = `
+<fieldset class="constraint-stack">
+${stackInnards}
 </fieldset>
 `;
+const defaultStack = `
+<div id="default-stack" class="constraint-stack">
+    <fieldset class="constraint-stack">
+        ${stackInnards}
+    </fieldset>
+</div>
+`
 
 
 
@@ -121,6 +129,12 @@ window.makeUI = function () {
             display: grid;
             grid-template-columns: 100%;
             grid-template-rows: 2em;
+        }
+        fieldset.constraint-stack {
+            background: #fff4;
+            overflow-y: auto;
+            max-height: 18em;
+            font-size: 0.9em;
         }
         
         .progress-text {
@@ -245,13 +259,9 @@ window.makeUI = function () {
                     <span id="pin-parent-mode-hint">Current parent"</span><span id="current-pin-parent"></span>
                     <button id="change-pin-parent">Change</button>
                 </div>
-            </div>
-            <fieldset>
-                <legend>Constraints:</legend>
-                <div id="constraints-div">
-                </div>
-            </fieldset>            
-        </fieldset>        
+            </div>                       
+        </fieldset>
+        ${defaultStack}            
     </fieldset>
 </div>
 <div>
@@ -705,8 +715,8 @@ ${bone.toString()}
             window.toInterstitial("Click a bone or target to attach to. Or hit Esc to cancel",
                 (selected) => {
                     if (selected != null) {
-                        let transform = selected?.targetNode ?? selected;
-                        window.contextPin.targetNode.setParent(transform);
+                        let transform = selected?.toTrack ?? selected;
+                        transform.attach(window.contextPin.toTrack);
                     }
                 });
         }
@@ -768,10 +778,38 @@ ${bone.toString()}
     })
 
 
-    window.emptyConstraintNode = document.createElement("div");
-    emptyConstraintNode.id = "default-stack";
-    emptyConstraintNode.classList.add("constraint-stack");
-    emptyConstraintNode.innerHTML = constraintStackHTML;
+    window.emptyConstraintNode = D.byid("default-stack").qs('.constraint-stack');
+
+
+    window.createConstraintStackDomElem = function(c) {
+        let newStack = constraintStackControls.cloneNode(true);
+        let toReturn = newStack; 
+        /*if(c.parentConstraint != null) {
+            toReturn = createGenericConstraintContainer(c);
+            toReturn.qs(".subconstraint-controls").appendChild(newStack);
+        }*/
+        
+        newStack.qs(".add-constraint").addEventListener("click", (e) => {
+            let val = newStack.parent.qs("constraint-select");
+            let subcst = null;
+            if (val == "kusudama") subcst = initKusudama(c);
+            if (val == "twist") subcst = initTwist(c);
+            if (val == "rest") subcst = initRest(c);
+            if (val == "stack") subcst = initStack(c);
+            if(subcst != null)
+                newStack.qs(".subconstraints").appendChild(subcst);
+        });
+
+        let allChildren = [...c.allconstraints];
+        let subconstraintContainer = toReturn.qs(".subconstraints");
+        for(let subc of allChildren) {
+            let childDom = getMakeConstraint_DOMElem(subc);
+            if(childDom.parentNode != subconstraintContainer) {
+                subconstraintContainer.appendChild(childDom);
+            }
+        }
+        return toReturn; 
+    }
 
     emptyConstraintNode.qs(".add-constraint").addEventListener("click", (e) => {
         if (window.contextBone != null) {
@@ -782,7 +820,7 @@ ${bone.toString()}
             }
             emptyConstraintNode.remove();
             let constController = getMakeConstraint_DOMElem(forBone.getConstraint());
-            htmlcontrols.byid("constraints-div").appendChild(constController);
+            htmlcontrols.byid("default-stack").appendChild(constController);
             let subcst = null;
             if (val == "kusudama") subcst = initKusudama(window.contextBone);
             if (val == "twist") subcst = initTwist(window.contextBone);
@@ -792,24 +830,129 @@ ${bone.toString()}
         }
     })
 
-    window.genericConstraintRow = document.createElement("div");
+    window.genericConstraintRow = document.createElement("fieldset");
     genericConstraintRow.classList.add("generic-constraint-row");
     genericConstraintRow.innerHTML = `
-<label for='constraint-enabled'>
+    <legend></legend>
 <input type='checkbox' name='constraint-enabled' class='constraint-enabled' checked>
-<span class="subconstraint-controls"> Delete constraint</span><button class='remove-constraint'></button>
+<label for="constraint-enabled" >enabled</label>
+</span><button class='remove-constraint'>X</button>
 `
+    window.createGenericConstraintContainer = function (c) {
+        let result = genericConstraintRow.cloneNode(true);
+        let text = "";
+        if(c instanceof Rest) text="Rest Constraint:";
+        if(c instanceof Twist) text = "Twist Constraint:"; 
+        if(c instanceof ConstraintStack) text= "Stack:";  
+        result.qs("legend").innerText = text;
+        let enabled = result.qs(".constraint-enabled");
+        enabled.addEventListener("change", (e) => {
+            if (e.checked) c.enable();
+            else c.disable();
+        });
+
+        let removeButton = result.qs(".remove-constraint");
+        removeButton.addEventListener("click", (e) => {
+            c.remove();
+            result.remove();
+        });
+        if(c instanceof Returnful) {
+            result.appendChild(createGenericReturnfulConfig(c));
+        }
+        return result;
+    }
+
+    window.genericReturnfulControls = document.createElement("div");
+    genericReturnfulControls.classList.add("returnful-controls");
+    genericReturnfulControls.innerHTML = `
+    <span class="current-discomfort"> </span>
+    <fieldset class="returnful-fields"> 
+        <form class="painfulness-form">
+            <input name="painfulness" type="range" min="0.0" max="1" step="0.00001" value="0.1">
+            <label for="painfulness">Painfulness: </label>
+            <output name="painfulness-output" for="painfulness" class="painfulness-output">0.1</output>
+        </form>
+        <form class="stockholm-form">
+            <input name="stockholm" type="range" min="0.0" max="1" step="0.00001" value="0.1">
+            <label for="stockholm">Stockholm rate: </label>
+            <output name="stockholm-output" for="stockholm" class="stockholm-output">0.1</output>
+        </form>
+    </fieldset>
+    `;
+    window.createGenericReturnfulConfig = function (c) {
+        let result = genericReturnfulControls.cloneNode(true);
+        let range = result.qs(".painfulness-form");
+        range.addEventListener("input", (event) => {
+            c.setPainfulness(event.target.value);
+            result.value = event.target.value;
+        })
+        let base = result.qs(".stockholm-form");
+        base.addEventListener("input", (event)=> {
+            c.setStockholmRate(event.target.value);
+            result.value = event.target.value;
+        });
+        return result; 
+    }
 
     window.restConstraintControls = document.createElement("div");
     restConstraintControls.classList.add("rest-constraint-controls");
     restConstraintControls.innerHTML = `
-<button class="set-current-pose-as-rest">Use Current Pose</button>
+<button class="set-current-pose-as-rest">Pose as Reference</button>
 <span class="current-discomfort"> </span>
 `;
 
-    window.constraintStackControls = document.createElement("div");
+    window.createRestDomElem = function(forRest) {
+        let genericContainer = createGenericConstraintContainer(forRest);
+        let newRest = restConstraintControls.cloneNode(true);
+        newRest.qs(".set-current-pose-as-rest").addEventListener("click", (e) => {
+            forRest.setCurrentAsRest();
+        });
+        genericContainer.appendChild(newRest);
+        return genericContainer;
+    }
+
+    window.twistConstraintControls = document.createElement("div");
+    twistConstraintControls.classList.add("twist-constraint-controls");
+    twistConstraintControls.innerHTML = `
+    <button class="set-current-pose-as-reference">Pose as Reference</button>
+    <span class="current-discomfort"> </span>
+    <fieldset class="twist-fields"> 
+        <form class="range-form">
+            <input name="range" type="range" min="0.0" max="6.28318" step="0.00001" value="0.1">
+            <label for="range">Range: </label>
+            <output name="range-result" for="range" class="range-output">0.1</output>
+        </form>
+        <form class="base-form">
+            <input name="base" type="range" min="0.0" max="6.28318" step="0.00001" value="0">
+            <label for="base">Base: </label>
+            <output name="base-result" for="base" class="base-output">0.1</output>
+        </form>
+    </fieldset>
+    `;
+
+    window.createTwistDomElem = function(forTwist) {
+        let wrapper = createGenericConstraintContainer(forTwist);
+        let result = twistConstraintControls.cloneNode(true);
+        wrapper.appendChild(result);
+        let range = result.qs(".range-form");
+        range.addEventListener("input", (event) => {
+            forTwist.setRange(event.target.value);
+            result.value = event.target.value;
+        })
+        let base = result.qs(".base-form");
+        base.addEventListener("input", (event)=> {
+            forTwist.setBase(event.target.value);
+            result.value = event.target.value;
+        });
+        result.qs('.set-current-pose-as-reference').addEventListener('click', (e) => {
+            forTwist.setCurrentAsReference();
+        });
+        return wrapper;
+    }
+
+    window.constraintStackControls = document.createElement("fieldset");
     constraintStackControls.classList.add("constraint-stack");
-    constraintStackControls.innerHTML = constraintStackHTML;
+    constraintStackControls.innerHTML = stackInnards;
     setDOMtoInternalState();
 }
 
@@ -847,10 +990,13 @@ window.updateInfoPanel = async function (item) {
 
     if (constraintStack != null) {
         let domConstraint = getMakeConstraint_DOMElem(constraintStack);
-        D.byid("constraints-div").childNodes.forEach(node => {node.remove()});
-        D.byid("constraints-div").appendChild(domConstraint);
+        let children = D.byid("default-stack").children;
+        for(let [key, node] of Object.entries(children)) {
+            node.remove();
+        }
+        D.byid("default-stack").appendChild(domConstraint);
     } else {
-        D.byid("constraints-div").appendChild(emptyConstraintNode);
+        D.byid("default-stack").appendChild(emptyConstraintNode);
     }
 
     /**@type {EWBIK} */
@@ -946,44 +1092,27 @@ window.updateInfoPanel = async function (item) {
  * @return A DOM element appropriate for modifying the given constraint 
 */
 window.getMakeConstraint_DOMElem = function (c) {
-    if (c.domControls != null) {
-        return c.domControls;
-    }
-    let result = genericConstraintRow.cloneNode(true);
+    let toReturn = c.domControls;
+    if(toReturn != null) return toReturn;
+   
     if (c instanceof Rest) {
-        let newRest = restConstraintControls.cloneNode(true);
-        result.qs(".subconstraint-controls").appendChild(newRest);
-        newRest.qs(".set-current-pose-as-rest").addEventListener("click", (e) => {
-            c.setCurrentAsRest();
-        });
+        toReturn = createRestDomElem(c);
     }
-    if (c instanceof ConstraintStack) {
-        let newStack = constraintStackControls.cloneNode(true);
-        result.qs(".subconstraint-controls").appendChild(newStack);
-        newStack.qs(".add-constraint").addEventListener("click", (e) => {
-            let val = newStack.parent.qs("constraint-select");
-            if (val == "kusudama") subcst = initKusudama(c);
-            if (val == "twist") subcst = initTwist(c);
-            if (val == "rest") subcst = initRest(c);
-            if (val == "stack") subcst = initStack(c);
-            newStack.qs(".subconstraints").appendChild(subcst);
-        });
+    else if(c instanceof Twist) {
+        toReturn = createTwistDomElem(c);
     }
-    let enabled = result.qs(".constraint-enabled");
-    enabled.addEventListener("change", (e) => {
-        if (enabled.checked) c.enable();
-        else c.disable();
-    });
-
-    let removeButton = result.qs(".remove-constraint");
-    removeButton.addEventListener("click", (e) => {
-        c.remove();
-        result.remove();
-    });
-    result.forConstraint = c;
-    c.domControls = result;
-    return result;
+    else if (c instanceof ConstraintStack) {        
+        toReturn = createConstraintStackDomElem(c);
+    }
+    
+    toReturn.forConstraint = c;
+    c.domControls = toReturn;
+    return toReturn;
 }
+
+
+
+
 
 
 

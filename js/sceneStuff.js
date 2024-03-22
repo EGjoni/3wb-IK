@@ -124,6 +124,11 @@ async function select(item) {
         window.contextPin.targetNode.toTrack.add(pinAxesHelper);
         pinAxesHelper.layers.set(window.boneLayer);
     }
+    if(contextBone != window.prevContextBone) {
+        window.prevContextBone?.setTempIKOrientationLock(false);
+        if(contextBone != null)
+            window.prevContextBone = contextBone;
+    }
     updateInfoPanel(item);
 }
 
@@ -199,6 +204,18 @@ function makePinsList(pinSize, into = scene, armature) {
     updateGlobalPinLists();
 }
 
+
+/**figures out if the import is fucked, and makes a polite attempt to unfuck it */
+function defuckify(obj) {
+    obj.traverse((child) => {
+        if (child.scale.x != 1) {
+            console.log("detected fuckery");
+            child.scale.set(1,1,1);
+            return false;
+        }
+        
+    });
+}
 
 async function doSolve(bone = null, interacted = false, preSolveCallback = null, inSolveCallback = null, solveCompleteCallback = null) {
     /**@type {[EWBIK]} */
@@ -280,7 +297,10 @@ function initControls(THREE, renderer) {
         //console.log("Bone Dragging-Change");
         if (selectedBone?.parentArmature.ikReady) {
             doSolve(selectedBone, true);//.parentArmature.solve();
+            
         }
+        if(selectedBone.getConstraint() != null)
+                selectedBone.getConstraint().updateDisplay();
 
     });
     boneCtrls.addEventListener('objectChange', function (event) {
@@ -297,6 +317,8 @@ function initControls(THREE, renderer) {
         if (selectedBone?.parentArmature.ikReady) {
             doSolve(selectedBone, true);//.parentArmature.solve();
         }
+        if(selectedBone.getConstraint() != null)
+            selectedBone.getConstraint().updateDisplay();
         bone_transformDragging = true;
 
     });
@@ -326,7 +348,8 @@ function initControls(THREE, renderer) {
         if (selectedPin?.forBone.parentArmature.ikReady) {
             doSolve(contextBone, true);//.parentArmature.solve();
         }
-
+        if(contextBone.getConstraint() != null)
+            contextBone.getConstraint().updateDisplay();
         pinOrientCtrls.visible = false;
         //pinTranslateCtrls.visible = false;
         //armature.solve();
@@ -484,13 +507,13 @@ function findThing(startNode, name) {
 
 function findBone(startNode) {
     if (startNode instanceof THREE.Bone)
-        return [startNode];
+        return startNode;
     for (let c of startNode.children) {
-        console.log(c.type);
-        let result = [...findBone(c)];
-        //if (result instanceof THREE.Bone) {
-        return result;
-        //}
+        console.log(c.type +" " +c.name);
+        let result = findBone(c);
+        if (result instanceof THREE.Bone) {
+            return result;
+        }
     }
 }
 
