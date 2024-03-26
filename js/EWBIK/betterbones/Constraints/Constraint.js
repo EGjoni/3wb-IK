@@ -22,7 +22,7 @@ export class Constraint {
      */
     basisAxes = null;
     parentConstraint = null; 
-    tempOutRot = null;
+    tempOutRot = Rot.IDENTITY.clone();
     enabled = true;
 
     /**
@@ -63,7 +63,6 @@ export class Constraint {
         }
         this.ikd = ikd;
         this.pool = pool;    
-        this.tempOutRot = Rot.IDENTITY.clone(); 
         if(basis != null) {
             this.basisAxes = basis ?? new IKNode(null,null,undefined,this.pool);
             this.boneOrientationAxes = new IKNode(null,null,undefined,this.pool);
@@ -145,6 +144,11 @@ export class Constraint {
         return result;
     }
 
+    invalidatePain() {
+        this.constraintResult.raw_postCallDiscomfort = null;
+        this.constraintResult.raw_preCallDiscomfort = null;
+    }
+
     updateDisplay() {
 
     }
@@ -158,7 +162,7 @@ export class Limiting extends Constraint {
     
     constructor(...params) {
         super(...params);
-        if(!forBone?.parent instanceof THREE.Bone) { 
+        if(!this.forBone?.parent instanceof THREE.Bone) { 
             console.warn("Root bones should not specify a constraint. Add this bone to a parent before attempting to register a constrain on it.");
         }
     }
@@ -178,6 +182,13 @@ export class Limiting extends Constraint {
 
     getBasisAxes() {
         return this.basisAxes;
+    }
+
+    isLimiting() {
+        return true;
+    }
+    isReturnful() {
+        return false;
     }
 }
 
@@ -205,7 +216,7 @@ export class Returnful extends Constraint {
     * @return {ConstraintResult} an object providing information about how much to rotate the object in which direction to make it maximally comfortable. How much to rotate to do so while obeying clamp rules. how much pain the joint was in prior to fixing, how much after the proposed fix, etc.
       */   
      updateFullPreferenceRotation (currentState, currentBoneOrientation, iteration, calledBy = null) {
-         this.constraintResult._fullRotation = Rot.IDENTITY;
+         this.constraintResult.fullRotation = Rot.IDENTITY;
          return this.constraintResult;
      }
 
@@ -220,7 +231,7 @@ export class Returnful extends Constraint {
         if(!this.constraintResult.isSet()) {
             this.updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy)
         }
-        this.constraintResult._clampedRotation = this.constraintResult.fullRotation;
+        this.constraintResult.clampedRotation = this.constraintResult.fullRotation;
         this.constraintResult._clampedRotation.clampToCosHalfAngle(this.leewayCache[iteration]);   
         
         return this.constraintResult;
@@ -240,7 +251,7 @@ export class Returnful extends Constraint {
         if(!this.constraintResult.isSet()) {
             this.updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy)
         }
-        this.constraintResult._clampedRotation = this.constraintResult.fullRotation;
+        this.constraintResult.clampedRotation = this.constraintResult.fullRotation;
         this.constraintResult._clampedRotation.clampToCosHalfAngle(1-((1-this.leewayCache[iteration])*weight*this.constraintResult.preCallDiscomfort));   
         
         return this.constraintResult;
@@ -294,6 +305,9 @@ export class Returnful extends Constraint {
       */
      setStockholmRate (val) {
          this.stockholmRate = val;
+         if (this.forBone && this.forBone.parentArmature) {
+            this.forBone.parentArmature.updateShadowSkelRateInfo(); 
+        }
      }
  
      getStockholmRate () {
@@ -329,19 +343,19 @@ export class Returnful extends Constraint {
         throw new Error("Returnful Constraints must return Post_RawDiscomfort");
      }
 
-     invalidatePain() {
-        this.constraintResult.raw_postCallDiscomfort = null;
-        this.constraintResult.raw_preCallDiscomfort = null;
-    }
-
     getBasisAxes() {
         return this.basisAxes;
+    }
+    isLimiting() {
+        return false;
+    }
+    isReturnful() {
+        return this.isEnabled();
     }
 }
 
 
 export class LimitingReturnful extends Returnful {
-    tempOutRot;
     constructor(...params) {
         super(...params);
     }
@@ -361,6 +375,23 @@ export class LimitingReturnful extends Returnful {
 
     getBasisAxes() {
         return this.basisAxes;
+    }
+
+    limitingActive = true; 
+    returnfulActive = true;
+
+    setLimitState(val) {
+        this.limitingActive = val;
+    }
+    setReturnfulState(val) {
+        this.returnfulActive = val;
+    }
+
+    isLimiting() {
+        return this.isEnabled() && this.limitingActive;
+    }
+    isReturnful() {
+        return this.isEnabled() && this.returnfulActive;
     }
 }
 
@@ -500,17 +531,21 @@ export class ConstraintStack extends LimitingReturnful {
     }
 
     getAcceptableRotation(currentState, currentBoneOrientation, desiredRotation, calledBy, cosHalfReturnfullness, angleReturnfullness) {
-        if(!this.isEnabled()) return desiredRotation;
-        this.currentTempState.localMBasis.adoptValues(currentState.localMBasis);
-        this.boneOrientationAxes.localMBasis.adoptValues(currentBoneOrientation);
-        
-        accumulatedRot = this.tempOutRot.setFromRot(calledBy);
-        for(let c of this.limiting) {
-            let rotBy = c.getAcceptableRotation(this.currentTempState, this.currentBoneOrientationAxes, accumulatedRot, calledBy);
-            this.currentTempState.rotateByLocal(rotBy);
-            rotBy.applyAfter(accumulatedRot, accumulatedRot);
+        if(this.limiting.size == 1) { //skip the rigamarole when there's no point
+            //maybe using a set here was a poor choice.
+            for(let c of this.limiting) return c.getAcceptableRotation(currentState, currentBoneOrientation, desiredRotation, calledBy, cosHalfReturnfullness, angleReturnfullness);
+        } else {
+            this.lastLimitState.localMBasis.adoptValues(currentState.localMBasis);
+            this.boneOrientationAxes.localMBasis.adoptValues(currentBoneOrientation);
+            
+            accumulatedRot = this.tempOutRot.setFromRot(calledBy);
+            for(let c of this.limiting) {
+                let rotBy = c.getAcceptableRotation(this.lastLimitState, this.currentBoneOrientationAxes, accumulatedRot, calledBy);
+                this.lastLimitState.rotateByLocal(rotBy);
+                rotBy.applyAfter(accumulatedRot, accumulatedRot);
+            }
+            return accumulatedRot;
         }
-        return accumulatedRot;
     }
 
     
@@ -601,6 +636,23 @@ export class ConstraintStack extends LimitingReturnful {
 
     getPainfulness() {
         return this.maxPain;  
+    }
+
+    limitingActive = true; 
+    returnfulActive = true;
+
+    setLimitState(val) {
+        this.limitingActive = val;
+    }
+    setReturnfulState(val) {
+        this.returnfulActive = val;
+    }
+
+    isLimiting() {
+        return this.limitingActive && this.limiting.size > 0 && this.isEnabled();
+    }
+    isReturnful() {
+        return this.returnfulActive && this.returnfulled.size > 0 && this.isEnabled();
     }
 
     tempOutRot = Rot.IDENTITY.clone();

@@ -60,11 +60,9 @@ export class Rest extends Returnful {
         /**@type {Rot} */
         let targframe = this.boneFrameRest.getLocalMBasis().rotation;
         let currRotFrame = currentState.getLocalMBasis().rotation;
-        let truepath = currRotFrame.getRotationTo(targframe);
-        let rotBy = truepath;
+        currRotFrame.getRotationTo(targframe, this.constraintResult.fullRotation);
 
-        this.constraintResult.reset(iteration);
-        this.constraintResult.fullRotation = rotBy.shorten();      
+        this.constraintResult.fullRotation.shorten();      
         this.constraintResult.markSet(true);
         return this.constraintResult;
     }

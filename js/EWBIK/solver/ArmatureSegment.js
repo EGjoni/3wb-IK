@@ -278,7 +278,7 @@ class WorkingBone {
         /** @type {ConstraintState} */
         this.cnstrntstate = forBone.getConstraint();
         this.constraint = this.cnstrntstate?.directReference;
-        this.hasLimitingConstraint = this.constraint != null && !(this.constraint instanceof Returnful);
+        this.hasLimitingConstraint = this.constraint?.isLimiting();
         /** @type {TransformState} */
         this.simLocalAxes = chain.simTransforms[forBone.getFrameTransform().getIndex()];
         this.simBoneAxes = chain.simTransforms[forBone.getOrientationTransform().getIndex()];
@@ -326,7 +326,7 @@ class WorkingBone {
     }
 
     updateCosDampening() {
-        this.hasLimitingConstraint = this.constraint != null && !(this.constraint instanceof Returnful);
+        this.hasLimitingConstraint = this.constraint?.isReturnful();
         const stiffness = this.forBone.getStiffness();
         const defaultDampening = this.chain.getDampening();
         this.stiffdampening = this.forBone.getParent() == null ? Math.PI : (1 - stiffness) * defaultDampening;
@@ -341,8 +341,9 @@ class WorkingBone {
         return this.chain.rootSegment;
     }
 
-    fastUpdateOptimalRotationToPinnedDescendants(stabilizePasses, translate, skipConstraint) {
-        if(window.perfing) performance.mark("fastUpdateOptimalRotationToPinnedDescendants start");
+
+    slowUpdateOptimalRotationToPinnedDescendants(stabilizePasses, translate, skipConstraint) {
+        //if(window.perfing) performance.mark("slowUpdateOptimalRotationToPinnedDescendants start");
         if(this.cosHalfDampen == 1) {
             if(this.chain.wb_segmentRoot == this) 
                 this.chain.previousDeviation = Infinity;
@@ -365,23 +366,38 @@ class WorkingBone {
                 } else gotCloser = false;
             }
         }
-        /*if (!gotCloser) {
+        if (!gotCloser) {
             this.simLocalAxes.setLocalOrientationTo(prevOrientation);
-        }*/
+        }
 
         //We've finished with this chain for this iteration, so next time we try to get deviation we start fresh
         if (this.chain.wb_segmentRoot == this) 
             this.chain.previousDeviation = Infinity;
+
+        //if(window.perfing) performance.mark("slowUpdateOptimalRotationToPinnedDescendants end");
+        //if(window.perfing) performance.measure("slowUpdateOptimalRotationToPinnedDescendants", "slowUpdateOptimalRotationToPinnedDescendants start", "slowUpdateOptimalRotationToPinnedDescendants end");   
+    }
+
+    fastUpdateOptimalRotationToPinnedDescendants(translate, skipConstraint) {
+        //if(window.perfing) performance.mark("fastUpdateOptimalRotationToPinnedDescendants start");
+        if(this.cosHalfDampen == 1) {
+            return;
+        }
+        this.updateDescendantsPain();
+        this.updateTargetHeadings(this.chain.boneCenteredTargetHeadings, this.chain.weights, this.myWeights);
+        
+        this.updateTipHeadings(this.chain.boneCenteredTipHeadings, !translate);
+        this.updateOptimalRotationToPinnedDescendants(translate, skipConstraint, this.chain.boneCenteredTipHeadings, this.chain.boneCenteredTargetHeadings, this.chain.weights);
+        
         //this.simLocalAxes.markDirty();
-        if(window.perfing) performance.mark("fastUpdateOptimalRotationToPinnedDescendants end");
-        if(window.perfing) performance.measure("fastUpdateOptimalRotationToPinnedDescendants", "fastUpdateOptimalRotationToPinnedDescendants start", "fastUpdateOptimalRotationToPinnedDescendants end");   
+        //if(window.perfing) performance.mark("fastUpdateOptimalRotationToPinnedDescendants end");
+        //if(window.perfing) performance.measure("fastUpdateOptimalRotationToPinnedDescendants", "fastUpdateOptimalRotationToPinnedDescendants start", "fastUpdateOptimalRotationToPinnedDescendants end");   
     }
 
     /**returns the rotation that was applied (in local space), but does indeed apply it*/
     updateOptimalRotationToPinnedDescendants(translate, skipConstraints, localizedTipHeadings, localizedTargetHeadings, weights) {
-        //if(window.perfing) performance.mark("updateOptimalRotationToPinnedDescendants start");
-        let desiredRotation = this.chain.qcpConverger.weightedSuperpose(localizedTipHeadings, localizedTargetHeadings, weights, translate);
-        //qcpRot = Rot.fromVecs(localizedTipHeadings[1], localizedTargetHeadings[1]);
+        ////if(window.perfing) performance.mark("updateOptimalRotationToPinnedDescendants start");
+        let desiredRotation = this.chain.qcpConverger.weightedSuperpose(localizedTipHeadings, localizedTargetHeadings, weights, translate);        
         const translateBy = this.chain.qcpConverger.getTranslation();
         const boneDamp = this.cosHalfDampen; 
         if (!translate) {
@@ -389,16 +405,14 @@ class WorkingBone {
         }
         let localDesiredRotby = this.simLocalAxes.getParentAxes().getGlobalMBasis().getLocalOfRotation(desiredRotation, this.chain.tempRot);
         let reglobalizedRot = desiredRotation;
-        if (this.hasLimitingConstraint) {
-            
-            let rotBy = this.constraint.getRectifyingRotation(this.simLocalAxes, this.simBoneAxes, localDesiredRotby);
+        if (this.hasLimitingConstraint && !skipConstraints) {            
+            let rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, localDesiredRotby);
             this.currentHardPain = 0;
-            if(rotBy != localDesiredRotby) { 
+            if(Rot.distance(rotBy, localDesiredRotby) > 1e-6) { 
                 this.currentHardPain = 1; //violating a hard constraint should be maximally painful.
             }
-            reglobalizedRot = this.simLocalAxes.parent.globalMBasis.getGlobalOfRotation(localDesiredRotby);
+            reglobalizedRot = this.simLocalAxes.parent.globalMBasis.rotation.applyAfter(localDesiredRotby);
             this.simLocalAxes.rotateByLocal(rotBy);
-            
         } else {
             if (translate) {
                 this.simLocalAxes.translateByGlobal(translateBy);
@@ -411,10 +425,9 @@ class WorkingBone {
             this.post_UpdateTipHeadings(localizedTipHeadings, true, reglobalizedRot);           
         } else {
             this.chain.hasFastPass = false;
-
         }*
-        if(window.perfing) performance.mark("updateOptimalRotationToPinnedDescendants end");
-        if(window.perfing) performance.measure("updateOptimalRotationToPinnedDescendants", "updateOptimalRotationToPinnedDescendants start", "updateOptimalRotationToPinnedDescendants end");   */
+        //if(window.perfing) performance.mark("updateOptimalRotationToPinnedDescendants end");
+        //if(window.perfing) performance.measure("updateOptimalRotationToPinnedDescendants", "updateOptimalRotationToPinnedDescendants start", "updateOptimalRotationToPinnedDescendants end");   */
         return localDesiredRotby;
     }
 
@@ -423,7 +436,7 @@ class WorkingBone {
      * where each bone weighs targets more heavily based on the amount of pain their descendants report toward that target.
     */
     setPerPinDescendantCounts(pinnedBones) {
-        if(window.perfing) performance.mark("setPerPinDescendantCounts start");
+        //if(window.perfing) performance.mark("setPerPinDescendantCounts start");
         this.descendantCounts = new Array(pinnedBones.length);
         this.descendantAveragePain = new Array(pinnedBones.length);
         this.childPathToPin = new Array(pinnedBones.length);
@@ -441,12 +454,12 @@ class WorkingBone {
             }
             this.descendantCounts[i] = count;
             this.descendantAveragePain[i] = 0;
-            if(window.perfing) performance.mark("setPerPinDescendantCounts end");
-            if(window.perfing) performance.measure("setPerPinDescendantCounts", "setPerPinDescendantCounts start", "setPerPinDescendantCounts end");   
+            //if(window.perfing) performance.mark("setPerPinDescendantCounts end");
+            //if(window.perfing) performance.measure("setPerPinDescendantCounts", "setPerPinDescendantCounts start", "setPerPinDescendantCounts end");   
         }
     }
     updateTargetHeadings(localizedTargetHeadings, baseWeights, weights) {
-        if(window.perfing) performance.mark("updateTargetHeadings start");
+        //if(window.perfing) performance.mark("updateTargetHeadings start");
         let hdx = 0;
         const workingRay = this.workingRay;
         let origin = this.simLocalAxes.origin(); //null
@@ -463,6 +476,7 @@ class WorkingBone {
             
             targetAxes.updateGlobal();            
             localizedTargetHeadings[hdx].set(targetAxes.origin()).sub(origin);
+            const localizedOrig = localizedTargetHeadings[hdx];
             let painScalar = (1+this.descendantAveragePain[i]);
             weights[hdx] = painScalar * baseWeights[hdx];
             const modeCode = sb.targetState.getModeCode();
@@ -470,41 +484,34 @@ class WorkingBone {
             if (modeCode & TargetState.XDir) {
                 weights[hdx] = painScalar*baseWeights[hdx];
                 weights[hdx+1] = painScalar*baseWeights[hdx+1];
-                const xTarget = workingRay;
-                xTarget.set(targetAxes.xRay());
-                xTarget.scaleBy(weights[hdx]);
-                localizedTargetHeadings[hdx].set(xTarget.p2).sub(origin);
-                xTarget.setToInvertedTip(localizedTargetHeadings[hdx + 1]).sub(origin);
+                targetAxes.setToXHeading(localizedTargetHeadings[hdx]).mult(weights[hdx]);
+                localizedTargetHeadings[hdx+1].set(localizedTargetHeadings[hdx]).mult(-1).add(localizedOrig);
+                localizedTargetHeadings[hdx].add(localizedOrig);
                 hdx += 2;
             }
             if (modeCode & TargetState.YDir) {
                 weights[hdx] = painScalar*baseWeights[hdx];
                 weights[hdx+1] = painScalar*baseWeights[hdx+1];
-                const yTarget = workingRay;
-                yTarget.set(targetAxes.yRay());
-                yTarget.scaleBy(weights[hdx]);
-                localizedTargetHeadings[hdx].set(yTarget.p2).sub(origin);
-                yTarget.setToInvertedTip(localizedTargetHeadings[hdx + 1]).sub(origin);
-                
+                targetAxes.setToYHeading(localizedTargetHeadings[hdx]).mult(weights[hdx]);
+                localizedTargetHeadings[hdx+1].set(localizedTargetHeadings[hdx]).mult(-1).add(localizedOrig);
+                localizedTargetHeadings[hdx].add(localizedOrig);
                 hdx += 2;
             }
             if (modeCode & TargetState.ZDir) {
                 weights[hdx] = painScalar*baseWeights[hdx];
                 weights[hdx+1] = painScalar*baseWeights[hdx+1];
-                const zTarget = workingRay;
-                zTarget.set(targetAxes.zRay());
-                zTarget.scaleBy(weights[hdx]);
-                localizedTargetHeadings[hdx].set(zTarget.p2).sub(origin);
-                zTarget.setToInvertedTip(localizedTargetHeadings[hdx + 1]).sub(origin);
+                targetAxes.setToZHeading(localizedTargetHeadings[hdx]).mult(weights[hdx]);
+                localizedTargetHeadings[hdx+1].set(localizedTargetHeadings[hdx]).mult(-1).add(localizedOrig);
+                localizedTargetHeadings[hdx].add(localizedOrig);
                 hdx += 2;
             }
         }
-        if(window.perfing) performance.mark("updateTargetHeadings end");
-        if(window.perfing) performance.measure("updateTargetHeadings", "updateTargetHeadings start", "updateTargetHeadings end");    
+        //if(window.perfing) performance.mark("updateTargetHeadings end");
+        //if(window.perfing) performance.measure("updateTargetHeadings", "updateTargetHeadings start", "updateTargetHeadings end");    
     }
     
     updateTipHeadings(localizedTipHeadings, scale) {
-        if(window.perfing) performance.mark("updateTipHeadings start");
+        //if(window.perfing) performance.mark("updateTipHeadings start");
         let hdx = 0;
         const myOrigin = this.simLocalAxes.origin();
         const workingRay = this.workingRay;
@@ -526,40 +533,35 @@ class WorkingBone {
             targetAxes.updateGlobal();
 
             localizedTipHeadings[hdx].set(tipOrigin).sub(myOrigin);
+            const localizedOrig = localizedTipHeadings[hdx];
             let scaleBy = scale ? 1+myOrigin.dist(tipOrigin) : 1;
             hdx++;
 
             if ((modeCode & TargetState.XDir) != 0) {
-                const xTip = workingRay;
-                xTip.set(tipAxes.xRay());
-                xTip.scaleBy(scaleBy);
-                localizedTipHeadings[hdx].set(xTip.p2).sub(myOrigin);
-                xTip.setToInvertedTip(localizedTipHeadings[hdx + 1]).sub(myOrigin);
+                tipAxes.setToXHeading(localizedTipHeadings[hdx]).mult(scaleBy);
+                localizedTipHeadings[hdx+1].set(localizedTipHeadings[hdx]).mult(-1).add(localizedOrig);
+                localizedTipHeadings[hdx].add(localizedOrig);
                 hdx += 2;
             }
             if ((modeCode & TargetState.YDir) != 0) {
-                const yTip = workingRay;
-                yTip.set(tipAxes.yRay());
-                yTip.scaleBy(scaleBy);
-                localizedTipHeadings[hdx].set(yTip.p2).sub(myOrigin);
-                yTip.setToInvertedTip(localizedTipHeadings[hdx + 1]).sub(myOrigin);
+                tipAxes.setToYHeading(localizedTipHeadings[hdx]).mult(scaleBy);
+                localizedTipHeadings[hdx+1].set(localizedTipHeadings[hdx]).mult(-1).add(localizedOrig);
+                localizedTipHeadings[hdx].add(localizedOrig);
                 hdx += 2;
             }
             if ((modeCode & TargetState.ZDir) != 0) {
-                const zTip = workingRay;
-                zTip.set(tipAxes.zRay());
-                zTip.scaleBy(scaleBy);
-                localizedTipHeadings[hdx].set(zTip.p2).sub(myOrigin);
-                zTip.setToInvertedTip(localizedTipHeadings[hdx + 1]).sub(myOrigin);
+                tipAxes.setToZHeading(localizedTipHeadings[hdx]).mult(scaleBy);
+                localizedTipHeadings[hdx+1].set(localizedTipHeadings[hdx]).mult(-1).add(localizedOrig);
+                localizedTipHeadings[hdx].add(localizedOrig);
                 hdx += 2;
             }
         }
-        if(window.perfing) performance.mark("updateTipHeadings end");
-        if(window.perfing) performance.measure("updateTipHeadings", "updateTipHeadings start", "updateTipHeadings end");   
+        //if(window.perfing) performance.mark("updateTipHeadings end");
+        //if(window.perfing) performance.measure("updateTipHeadings", "updateTipHeadings start", "updateTipHeadings end");   
     }
 
     updateDescendantsPain() {
-        if(window.perfing) performance.mark("updateDescendantsPain start");
+        //if(window.perfing) performance.mark("updateDescendantsPain start");
         let ownPain = this.getOwnPain();
         let distrOwnPain = ownPain / this.descendantCounts.length;
         this.justDescendantPainTotal = 0;
@@ -598,8 +600,8 @@ class WorkingBone {
             console.log("what")
         }
         this.descendantPainTotal = this.avgDescendantPain*this.descToPin
-        if(window.perfing) performance.mark("updateDescendantsPain end");
-        if(window.perfing) performance.measure("updateDescendantsPain", "updateDescendantsPain start", "updateDescendantsPain end");   
+        //if(window.perfing) performance.mark("updateDescendantsPain end");
+        //if(window.perfing) performance.measure("updateDescendantsPain", "updateDescendantsPain start", "updateDescendantsPain end");   
     }
 
 
@@ -626,7 +628,7 @@ class WorkingBone {
      }
  
      pullBackTowardAllowableRegion(iteration, callbacks) {
-        if(window.perfing) performance.mark("pullBackTowardAllowableRegion start");
+        //if(window.perfing) performance.mark("pullBackTowardAllowableRegion start");
          if (this.springy) {
             this.constraint.markDirty();
             //callbacks?.beforePullback(this.forBone.directRef, this.forBone.getFrameTransform(), this);
@@ -636,13 +638,13 @@ class WorkingBone {
             this.simLocalAxes.rotateByLocal(res.clampedRotation);
             //callbacks?.afterPullback(this.forBone.directRef, this.forBone.getFrameTransform(), this);
          }
-         if(window.perfing) performance.mark("pullBackTowardAllowableRegion end");
-         if(window.perfing) performance.measure("pullBackTowardAllowableRegion", "pullBackTowardAllowableRegion start", "pullBackTowardAllowableRegion end"); 
+         //if(window.perfing) performance.mark("pullBackTowardAllowableRegion end");
+         //if(window.perfing) performance.measure("pullBackTowardAllowableRegion", "pullBackTowardAllowableRegion start", "pullBackTowardAllowableRegion end"); 
      }
  
 
     updateReturnfullnessDamp(iterations) {
-        if(window.perfing) performance.mark("updateReturnfullnessDamp start");
+        //if(window.perfing) performance.mark("updateReturnfullnessDamp start");
         if(this.maybeSpringy()) {
             this.constraint.setPreferenceLeeway(this.stiffdampening);
             this.constraint.updatePerIterationLeewayCache(iterations);
@@ -653,13 +655,14 @@ class WorkingBone {
                 this.springy = true;
             }
         }
-        if(window.perfing) performance.mark("updateReturnfullnessDamp end");
-        if(window.perfing) performance.measure("updateReturnfullnessDamp", "updateReturnfullnessDamp start", "updateReturnfullnessDamp end"); 
+        //if(window.perfing) performance.mark("updateReturnfullnessDamp end");
+        //if(window.perfing) performance.measure("updateReturnfullnessDamp", "updateReturnfullnessDamp start", "updateReturnfullnessDamp end"); 
     }
     
 
     maybeSpringy() {
-        return (this.constraint != null && (this.constraint instanceof Returnful));
+        this.hasLimitingConstraint = this.constraint?.isLimiting();
+        return (this.constraint?.isReturnful());
     }
 
     applyRotToVecArray(rot, vecArr, storeIn = []) {
@@ -695,7 +698,7 @@ export default ArmatureSegment;
  * 
  * 
  * fast_updateTargetHeadings(localizedTargetHeadings, baseWeights, weights, hdxStart, sb, i, myOrigin) {
-        if(window.perfing) performance.mark("fast_updateTargetHeadings start");
+        //if(window.perfing) performance.mark("fast_updateTargetHeadings start");
         const modeCode = sb.targetState.getModeCode();
         const targetOrigin = localizedTargetHeadings[hdxStart];
         let updated = 0;
@@ -733,14 +736,14 @@ export default ArmatureSegment;
         }
 
         localizedTargetHeadings[hdxStart].set(combinedOffset);
-        if(window.perfing) performance.mark("fast_updateTargetHeadings end");
-        if(window.perfing) performance.measure("fast_updateTargetHeadings", "fast_updateTargetHeadings start", "fast_updateTargetHeadings end");
+        //if(window.perfing) performance.mark("fast_updateTargetHeadings end");
+        //if(window.perfing) performance.measure("fast_updateTargetHeadings", "fast_updateTargetHeadings start", "fast_updateTargetHeadings end");
             
         return updated;
     }
 
     fast_updateTipHeadings(localizedTipHeadings, scale, hdxStart, sb, myOrigin) {
-        if(window.perfing) performance.mark("fast_updateTipHeadings start");
+        //if(window.perfing) performance.mark("fast_updateTipHeadings start");
         const modeCode = sb.targetState.getModeCode();
         let updated = 0;
         let hdx = hdxStart;
@@ -769,8 +772,8 @@ export default ArmatureSegment;
         }
         localizedTipHeadings[hdxStart].set(combinedOffset);
 
-        if(window.perfing) performance.mark("fast_updateTipHeadings end");
-        if(window.perfing) performance.measure("fast_updateTipHeadings", "fast_updateTipHeadings start", "fast_updateTipHeadings end");   
+        //if(window.perfing) performance.mark("fast_updateTipHeadings end");
+        //if(window.perfing) performance.measure("fast_updateTipHeadings", "fast_updateTipHeadings start", "fast_updateTipHeadings end");   
         return updated;
     }
 
@@ -782,7 +785,7 @@ export default ArmatureSegment;
 
     /**
     post_UpdateTipHeadings(localizedTipHeadings, scale, applyRot) {
-        if(window.perfing) performance.mark("post_updateTipHeadings start");
+        //if(window.perfing) performance.mark("post_updateTipHeadings start");
         let hdx = 0;
         if(this.targetState != null) this.simBoneAxes.updateGlobal();
         const myOrigin = this.simLocalAxes.globalMBasis.translate;
@@ -817,12 +820,12 @@ export default ArmatureSegment;
             sb.chain.hasFastPass = true; 
         }
         this.chain.hasFastPass = true;
-        if(window.perfing) performance.mark("post_updateTipHeadings end");
-        if(window.perfing) performance.measure("post_updateTipHeadings", "post_updateTipHeadings start", "post_updateTipHeadings end");   
+        //if(window.perfing) performance.mark("post_updateTipHeadings end");
+        //if(window.perfing) performance.measure("post_updateTipHeadings", "post_updateTipHeadings start", "post_updateTipHeadings end");   
     }
 
     post_UpdateTargetHeadings(localizedTargetHeadings, weights, applyRot) {
-        if(window.perfing) performance.mark("post_UpdateTargetHeadings start");
+        //if(window.perfing) performance.mark("post_UpdateTargetHeadings start");
         let hdx = 0;
         if(this.targetState != null) this.simBoneAxes.updateGlobal();
         const workingRay = this.workingRay;
@@ -875,8 +878,8 @@ export default ArmatureSegment;
             localizedTargetHeadings[orighdx].add(myOrigin);
             sb.chain.hasFastPass = true;
         }
-        if(window.perfing) performance.mark("post_UpdateTargetHeadings end");
-        if(window.perfing) performance.measure("post_UpdateTargetHeadings", "post_UpdateTargetHeadings start", "post_UpdateTargetHeadings end");   
+        //if(window.perfing) performance.mark("post_UpdateTargetHeadings end");
+        //if(window.perfing) performance.measure("post_UpdateTargetHeadings", "post_UpdateTargetHeadings start", "post_UpdateTargetHeadings end");   
     }
 
  */

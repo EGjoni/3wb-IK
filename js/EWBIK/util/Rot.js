@@ -256,6 +256,53 @@ export class Rot {
             false);
     }
 
+
+
+    /**
+     * rotates the 3x3 matrix of the input column-major matrix by this rotation.
+     * 
+     * @param {(Matrix3|Matrix4)} inMat, the matrix to rotate
+     * @param {(Matrix3|Matrix4)} outMat, the matrix to write the values into
+     * @return {(Matrix3|Matrix4)} the input matrix, with the 3x3 elements representing its bases rotated by the amount
+     * specified by this rotation.
+     */
+    applyBeforeMatrix3(inMat, outMat) {
+        this.applyToVecArr(inMat, 0, outMat, 0);
+        this.applyToVecArr(inMat, 3, outMat, 3);
+        this.applyToVecArr(inMat, 6, outMat, 6);
+        return outMat;
+    }
+    /**
+     * rotates just the 3x3 portion of the input column-major matrix by this rotation.
+     * 
+     * @param {(Matrix4)} inMat, the matrix to rotate
+     * @param {(Matrix4)} outMat, the matrix to write the values into
+     * @return {(Matrix4)} the input matrix, with the 3x3 elements representing its bases rotated by the amount
+     * specified by this rotation.
+     */
+    applyBeforeMatrix4_rot(inMat, outMat) {
+        this.applyToVecArr(inMat, 0, outMat, 0);
+        this.applyToVecArr(inMat, 4, outMat, 4);
+        this.applyToVecArr(inMat, 8, outMat, 8);
+        return outMat;
+    }
+
+    /**
+     * rotates the entire 4x4 input column-major matrix by this rotation.
+     * 
+     * @param {(Matrix4)} inMat, the matrix to rotate
+     * @param {(Matrix4)} outMat, the matrix to write the values into
+     * @return {(Matrix4)} the input matrix, with the elements representing its bases and translation rotated by the amount
+     * specified by this rotation.
+     */
+    applyBeforeMatrix4(inMat, outMat) {
+        this.applyToVecArr(inMat, 0, outMat, 0);
+        this.applyToVecArr(inMat, 4, outMat, 4);
+        this.applyToVecArr(inMat, 8, outMat, 8);
+        this.applyToVecArr(inMat, 12, outMat, 12);
+        return outMat;
+    }
+
     /**
      * @return the rotation which, if applied to something, would give the same result
      * as first applying this rotation to that thing and then applying the input
@@ -380,7 +427,7 @@ export class Rot {
 			// the shortest possible rotation: axis orthogonal to this plane
 			this.w = Math.sqrt(0.5 * (1.0 + dot / normProduct));
 			let coeff = 1.0 / (2.0 * this.w * normProduct);
-			let q = v.crossClone(u);
+			let q = v.cross(u, this.workingInput);
 			this.x = coeff * q.x;
 			this.y = coeff * q.y;
 			this.z = coeff * q.z;
@@ -407,11 +454,18 @@ export class Rot {
 		return new Rot(this.w, this.x, this.y, this.z, normalize);
 	}
 
-    setComponents(w,x,y,z) {
+    setComponents(w,x,y,z, normalize = false) {
         this.w = w;
         this.x = x;
         this.y = y;
         this.z = z;
+        if(normalize) {
+            const invmag = 1/Math.sqrt(w*w + x*x + y*y + z*z);
+            this.w *= invmag;
+            this.x *= invmag;
+            this.y *= invmag;
+            this.z *= invmag;
+        }
         return this;
     }
 
@@ -600,18 +654,24 @@ export class Rot {
     }
 	
 	applyToVec(v, output = any_Vec3()) {        
-		this.applyToVector(v, output);
+		this.applyToVecArr(v.dataBuffer, v.baseIdx, output.dataBuffer, output.baseIdx);
 		return output;
 	}
 
-	applyToVector(inVec, outVec = any_Vec3()) {
-        const x = inVec.x, y = inVec.y, z = inVec.z;
+    /**applies this rotation to an input array presumed to represent a 3d vector with contiguous components
+     * @param {Array} inputVec the vector array input 
+     * @param {Number} idx the index to start reading from, where the input index represents the x component, the next index represents the y component, and the one after that represents the z component.
+     * @param {Array} outVec the output vector to write into
+     * @param {Number} outidx the index to start writing from
+     */
+	applyToVecArr(inVec, idx, outVec, outidx) {
+        const x = inVec[idx], y = inVec[idx+1], z = inVec[idx+2];
         const q0 = this.w, q1 = this.x, q2= this.y, q3 = this.z;
         const s = q1 * x + q2 * y + q3 * z;
         
-        outVec.x = 2 * (q0 * (x * q0 - (q2 * z - q3 * y)) + s * q1) - x;
-        outVec.y = 2 * (q0 * (y * q0 - (q3 * x - q1 * z)) + s * q2) - y,
-        outVec.z = 2 * (q0 * (z * q0 - (q1 * y - q2 * x)) + s * q3) - z
+        outVec[outidx] = 2 * (q0 * (x * q0 - (q2 * z - q3 * y)) + s * q1) - x;
+        outVec[outidx+1] = 2 * (q0 * (y * q0 - (q3 * x - q1 * z)) + s * q2) - y,
+        outVec[outidx+2] = 2 * (q0 * (z * q0 - (q1 * y - q2 * x)) + s * q3) - z
         return outVec;
     }
 
@@ -654,7 +714,7 @@ export class Rot {
 
 
 	static getNormalized(r) {
-		return new Rot(new MRotation(r.w, r.x, r.y, r.z, true));
+		return new Rot(r.w, r.x, r.y, r.z, true);
 	}
 
 	applyToRay(rIn, rOut = rIn.clone()) {
@@ -662,7 +722,7 @@ export class Rot {
 		this.workingInput.y = rIn.p2.y - rIn.p1.y; 
 		this.workingInput.z = rIn.p2.z - rIn.p1.z;
 		
-		this.applyToVector(this.workingInput, this.workingOutput);
+		this.applyToVec(this.workingInput, this.workingOutput);
         rOut.setP1(rIn.p1);
 		rOut.setHeading(this.workingOutput);
 		return rOut;
@@ -818,13 +878,12 @@ export class Rot {
 	getSwingTwist (axis, swingOut = new Rot(), twistOut=new Rot()) {
         this.workingInput.setComponents(this.x, this.y, this.z);
 		let d = this.workingInput.dot(axis);
-		twistOut.set(this.w, axis.x * d, axis.y * d, axis.z * d, true);
-		if (d < 0) twistOut.multiply(-1.0);
+		twistOut.setComponents(this.w, axis.x * d, axis.y * d, axis.z * d, true);
+		if (d < 0) twistOut.flip();
 		
-		swingOut.setComponents(twistOut);
-		swing.conjugate();
-		swing = Rot.multiply(swing, this, swing);
-		return resultRots;
+		swingOut.setFromRot(twistOut);
+		swingOut.conjugate();
+		swingOut = Rot.multiply(swingOut, this, swingOut);
 	}
 	
 	static nlerp(r1, r2, t) {

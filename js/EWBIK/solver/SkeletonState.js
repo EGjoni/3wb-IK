@@ -409,7 +409,24 @@ export class TransformState {
         this.translation = translation;
         //console.log(this.translation);
         this.rotation = rotation;
-        this.scale = scale;
+        this.scale = scale;//scale; myArray =
+        if(scale[0] == 0 || (scale[0] == undefined && scale[1] != undefined)) {
+            debugger;
+        }
+        new Proxy(this.scale, {
+            set: function(target, property, value, receiver) {
+              if (property === "0"){
+                console.log(`Setter called with value: ${value} for index ${property}`);                
+                // Custom logic for handling the assignment
+                if (value == undefined || value == 0) { 
+                  console.log("no no no no no no nooooo");
+                  debugger;
+                }
+              }
+              return Reflect.set(arget, property, value, receiver);
+            }
+          });
+        
         this.parent_id = parent_id;
         this.directReference = directReference;
         this.skeletonState = skeletonState; // Reference to the SkeletonState instance

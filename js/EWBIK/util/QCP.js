@@ -40,6 +40,7 @@ export class QCP {
 	Szx = 0;
 	Szy = 0;
 	Szz = 0;
+	resultRot = new Rot(1,0,0,0);
 	
 	/**
 	 * Constructor with option to set the precision values.
@@ -333,7 +334,7 @@ export class QCP {
 		// QCP doesn't handle single targets, so if we only have one point and one
 		// target, we just rotate by the angular distance between them
 		if (this.moved.length == 1) {
-			return Rot.fromVecs(this.moved[0], this.target[0]);
+			return this.resultRot.setFromVecs(this.moved[0], this.target[0]);
 		} else {
 			const {
 				mxEigenV,
@@ -417,7 +418,7 @@ export class QCP {
 				}
 			}
 			/**the normalization is important because QCP does not calculate a unit magnitude quaternion. */
-			return new Rot(q1, q2, q3, q4, true);
+			return this.resultRot.setComponents(q1, q2, q3, q4, true); //new Rot(q1, q2, q3, q4, true);
 		}
 	}
     /**

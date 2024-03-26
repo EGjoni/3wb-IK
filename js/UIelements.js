@@ -11,7 +11,7 @@ import { Vec3, any_Vec3 } from "./EWBIK/util/vecs.js";
 import { Rot } from "./EWBIK/util/Rot.js";
 import { ConvexGeometry } from "convexGeo";
 import { ChainRots, BoneRots, RayDrawer } from "./EWBIK/util/debugViz/debugViz.js";
-import { ConstraintStack, Returnful, Rest, Twist} from "./EWBIK/betterbones/Constraints/ConstraintStack.js";
+import { ConstraintStack, Returnful, Rest, Twist } from "./EWBIK/betterbones/Constraints/ConstraintStack.js";
 
 window.Vec3 = Vec3;
 window.Rot = Rot;
@@ -113,6 +113,57 @@ window.makeUI = function () {
             border-radius: 5px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             position: absolute;
+        }
+        .slider-container {
+            display: inline-grid;
+            /* place-items: flex-start; */
+            position: relative;
+            grid-template-columns: 100%;
+            width: 100%;
+            overflow: hidden;
+            justify-content: stretch;
+        }
+        .slider {
+            grid-row: 1;
+            width: 100%;
+            position: relative;
+            grid-column-start: 1;
+            display: block;
+            transform: scaleY(2.5);
+            margin: 0px;
+            border: none;
+            box-sizing: content-box;
+            padding: 0px;
+        }
+        .slider-value {
+            padding-left: 2px;
+            filter: drop-shadow(0px 0px 2px white);
+            grid-row: 1;
+            grid-column: 1;
+            text-align: right;
+            padding-right: 5px;
+            display: inline-block;
+            position: relative;
+            z-index: 2;
+            pointer-events: none;
+        }
+        .slider-label {
+            filter: drop-shadow(0px 0px 2px white);
+            grid-row: 1;
+            grid-column: 1;
+            display: inline-block;
+            position: relative;
+            z-index: 2;
+            pointer-events: none;
+        }
+        button.remove-constraint {
+            position: absolute;
+            /* text-align: right; */
+            right: 0px;
+            top: -9px;
+        }
+        .generic-constraint-row {
+            position:relative;
         }
         #control-panel button,
         #control-panel label {
@@ -392,7 +443,7 @@ ${bone.toString()}
     }
 
 
-    
+
 
 
     window.getArmatureGlobalized = (v, wb) => {
@@ -411,7 +462,7 @@ ${bone.toString()}
 
         let dirDraw = (rg, drawer) => {
             let bo = wb.simLocalAxes.origin();
-            let p = rg.correspondsTo;            
+            let p = rg.correspondsTo;
             let po = getArmatureGlobalized(p, wb);
             let go = getArmatureGlobalized(bo, wb);
             //console.log(go.y.toFixed(3) + ': ' + wb.forBone.ikd + ' (target)');
@@ -437,14 +488,14 @@ ${bone.toString()}
             wb.targetDrawer = new RayDrawer(wb, window.scene,
                 (drawer) => { return drawer.source.chain.boneCenteredTargetHeadings; },
                 dirDraw
-            );            
+            );
         }
-        if (wb.tipDrawer == null) {           
+        if (wb.tipDrawer == null) {
             wb.tipDrawer = new RayDrawer(wb, window.scene,
                 (drawer) => { return drawer.source.chain.boneCenteredTipHeadings; },
                 dirDraw
             );
-            if(wb.chain.rottrack == null) 
+            if (wb.chain.rottrack == null)
                 new ChainRots(wb.chain);
         }
     }
@@ -482,23 +533,23 @@ ${bone.toString()}
                 //if (bone == window.contextBone) {
                 initLines(wb);
                 wb.targetDrawer.draw(new THREE.Color('grey'),
-                    new THREE.Color(0.6, 0.2, 0.2 ),//red
-                    new THREE.Color(0.6, 0.2, 0.6 ),//magenta
-                    new THREE.Color(0.2, 0.6, 0.2 ),//green
-                    new THREE.Color(0.5, 0.5, 0.1 ),//yellow
-                    new THREE.Color(0.2, 0.2, 0.8 ),//blue
-                    new THREE.Color(0.2, 0.6, 0.6 )//cyan
+                    new THREE.Color(0.6, 0.2, 0.2),//red
+                    new THREE.Color(0.6, 0.2, 0.6),//magenta
+                    new THREE.Color(0.2, 0.6, 0.2),//green
+                    new THREE.Color(0.5, 0.5, 0.1),//yellow
+                    new THREE.Color(0.2, 0.2, 0.8),//blue
+                    new THREE.Color(0.2, 0.6, 0.6)//cyan
                 );
                 wb.tipDrawer.draw(new THREE.Color('white'),
-                    new THREE.Color(0.6, 0, 0 ),//red
-                    new THREE.Color(0.6, 0, 0.6 ),//magenta
-                    new THREE.Color(0, 0.6, 0 ),//green
-                    new THREE.Color(0.5, 0.5, 0 ),//yellow
-                    new THREE.Color(0, 0, 0.8 ),//blue
-                    new THREE.Color(0, 0.4, 0.6 )//cyan
+                    new THREE.Color(0.6, 0, 0),//red
+                    new THREE.Color(0.6, 0, 0.6),//magenta
+                    new THREE.Color(0, 0.6, 0),//green
+                    new THREE.Color(0.5, 0.5, 0),//yellow
+                    new THREE.Color(0, 0, 0.8),//blue
+                    new THREE.Color(0, 0.4, 0.6)//cyan
                 );
                 wb.rotDraw.visible = false;
-                wb.rotDraw.update((v, wb)=> {return wb.simLocalAxes.origin().clone().add(v)}); 
+                wb.rotDraw.update((v, wb) => { return wb.simLocalAxes.origin().clone().add(v) });
                 //console.log("before: ");
                 wb.rotDraw.visible = false;
                 //let solveString = getdbgstring(bone, ts, wb);
@@ -510,14 +561,14 @@ ${bone.toString()}
             afterIteration: (bone, ts, wb) => {
                 //if (bone == window.contextBone) {
                 wb.tipDrawer.draw(new THREE.Color('white'),
-                    new THREE.Color(1, 0, 0 ),//red
-                    new THREE.Color(1, 0, 1 ),//magenta
-                    new THREE.Color(0, 1, 0 ),//green
-                    new THREE.Color(1, 1, 0 ),//yellow
-                    new THREE.Color(0, 0, 1 ),//blue
-                    new THREE.Color(0, 1, 1 )//cyan
+                    new THREE.Color(1, 0, 0),//red
+                    new THREE.Color(1, 0, 1),//magenta
+                    new THREE.Color(0, 1, 0),//green
+                    new THREE.Color(1, 1, 0),//yellow
+                    new THREE.Color(0, 0, 1),//blue
+                    new THREE.Color(0, 1, 1)//cyan
                 );
-                wb.rotDraw.update((v, wb)=> {return wb.simLocalAxes.origin().clone().add(v)});
+                wb.rotDraw.update((v, wb) => { return wb.simLocalAxes.origin().clone().add(v) });
                 wb.rotDraw.makeVisible();// = true; 
                 //}
             }
@@ -605,7 +656,7 @@ ${bone.toString()}
     D.byid('pin-enabled').addEventListener("input", async (event) => {
         let state = event.target.checked;
         let diddisable = false;
-        
+
         if (state) {
             let newPin = null;
             if (window.contextPin != null) {
@@ -723,7 +774,7 @@ ${bone.toString()}
     })
 
     D.byid('show-mesh').addEventListener('change', function (e) {
-        if(rendlrs != null)
+        if (rendlrs != null)
             window.rendlrs?.layerState(window.meshLayer, e.target.checked);
     });
 
@@ -742,10 +793,10 @@ ${bone.toString()}
             }
         }
         if (e.target.checked == false && D.byid('show-nonik-bones').checked == false) {
-            if(rendlrs != null)
+            if (rendlrs != null)
                 rendlrs?.hide(boneLayer);
         } else {
-            if(rendlrs != null)
+            if (rendlrs != null)
                 rendlrs?.show(boneLayer);
         }
     });
@@ -765,10 +816,10 @@ ${bone.toString()}
             }
         }
         if (e.target.checked == false && D.byid('show-ik-bones').checked == false) {
-            if(rendlrs != null)
+            if (rendlrs != null)
                 rendlrs?.hide(boneLayer);
         } else {
-            if(rendlrs != null)
+            if (rendlrs != null)
                 rendlrs?.show(boneLayer);
         }
     });
@@ -781,14 +832,14 @@ ${bone.toString()}
     window.emptyConstraintNode = D.byid("default-stack").qs('.constraint-stack');
 
 
-    window.createConstraintStackDomElem = function(c) {
+    window.createConstraintStackDomElem = function (c) {
         let newStack = constraintStackControls.cloneNode(true);
-        let toReturn = newStack; 
+        let toReturn = newStack;
         /*if(c.parentConstraint != null) {
             toReturn = createGenericConstraintContainer(c);
             toReturn.qs(".subconstraint-controls").appendChild(newStack);
         }*/
-        
+
         newStack.qs(".add-constraint").addEventListener("click", (e) => {
             let val = newStack.parent.qs("constraint-select");
             let subcst = null;
@@ -796,19 +847,25 @@ ${bone.toString()}
             if (val == "twist") subcst = initTwist(c);
             if (val == "rest") subcst = initRest(c);
             if (val == "stack") subcst = initStack(c);
-            if(subcst != null)
+            if (subcst != null)
                 newStack.qs(".subconstraints").appendChild(subcst);
         });
 
         let allChildren = [...c.allconstraints];
         let subconstraintContainer = toReturn.qs(".subconstraints");
-        for(let subc of allChildren) {
+        for (let subc of allChildren) {
             let childDom = getMakeConstraint_DOMElem(subc);
-            if(childDom.parentNode != subconstraintContainer) {
+            if (childDom.parentNode != subconstraintContainer) {
                 subconstraintContainer.appendChild(childDom);
             }
         }
-        return toReturn; 
+
+        toReturn.refresh = () => {
+            for (let subc of allChildren) {
+                subc.domControls?.refresh();
+            }
+        }
+        return toReturn;
     }
 
     emptyConstraintNode.qs(".add-constraint").addEventListener("click", (e) => {
@@ -841,9 +898,9 @@ ${bone.toString()}
     window.createGenericConstraintContainer = function (c) {
         let result = genericConstraintRow.cloneNode(true);
         let text = "";
-        if(c instanceof Rest) text="Rest Constraint:";
-        if(c instanceof Twist) text = "Twist Constraint:"; 
-        if(c instanceof ConstraintStack) text= "Stack:";  
+        if (c instanceof Rest) text = "Rest Constraint:";
+        if (c instanceof Twist) text = "Twist Constraint:";
+        if (c instanceof ConstraintStack) text = "Stack:";
         result.qs("legend").innerText = text;
         let enabled = result.qs(".constraint-enabled");
         enabled.addEventListener("change", (e) => {
@@ -856,8 +913,14 @@ ${bone.toString()}
             c.remove();
             result.remove();
         });
-        if(c instanceof Returnful) {
-            result.appendChild(createGenericReturnfulConfig(c));
+        let contains = null;
+        if (c instanceof Returnful) {
+            contains = createGenericReturnfulConfig(c);
+            result.appendChild(contains);
+        }
+        result.refresh = () => {
+            enabled.checked = c.isEnabled();
+            contains?.refresh();
         }
         return result;
     }
@@ -867,31 +930,39 @@ ${bone.toString()}
     genericReturnfulControls.innerHTML = `
     <span class="current-discomfort"> </span>
     <fieldset class="returnful-fields"> 
-        <form class="painfulness-form">
-            <input name="painfulness" type="range" min="0.0" max="1" step="0.00001" value="0.1">
-            <label for="painfulness">Painfulness: </label>
-            <output name="painfulness-output" for="painfulness" class="painfulness-output">0.1</output>
+        <form class="painfulness-form slider-container">
+            <input class="slider" name="painfulness" type="range" min="0.0" max="1" step="0.00001" value="0.1">
+            <label class="slider-label" for="painfulness">Painfulness: </label>
+            <output class="slider-value painfulness-output" name="painfulness-output" for="painfulness" >0.1</output>
         </form>
-        <form class="stockholm-form">
-            <input name="stockholm" type="range" min="0.0" max="1" step="0.00001" value="0.1">
-            <label for="stockholm">Stockholm rate: </label>
-            <output name="stockholm-output" for="stockholm" class="stockholm-output">0.1</output>
+        <form class="stockholm-form slider-container">
+            <input class="slider" name="stockholm" type="range" min="0.0" max="1" step="0.00001" value="0.1">
+            <label class="slider-label" for="stockholm">Stockholm rate: </label>
+            <output class="slider-value stockholm-output" name="stockholm-output" for="stockholm" >0.1</output>
         </form>
     </fieldset>
     `;
     window.createGenericReturnfulConfig = function (c) {
         let result = genericReturnfulControls.cloneNode(true);
-        let range = result.qs(".painfulness-form");
-        range.addEventListener("input", (event) => {
+        let painfulness = result.qs(".painfulness-form");
+        let painfulnessOutput = result.qs(".painfulness-output");
+        painfulness.addEventListener("input", (event) => {
             c.setPainfulness(event.target.value);
-            result.value = event.target.value;
+            painfulnessOutput.value = c.getPainfulness();
         })
-        let base = result.qs(".stockholm-form");
-        base.addEventListener("input", (event)=> {
+        let stockholm = result.qs(".stockholm-form");
+        let stockholmoutput = stockholm.qs(".stockholm-output");
+        stockholm.addEventListener("input", (event) => {
             c.setStockholmRate(event.target.value);
-            result.value = event.target.value;
+            stockholmoutput.value = c.getStockholmRate();
         });
-        return result; 
+        result.refresh = () => {
+            painfulness.qs("input").value = c.getPainfulness();
+            stockholm.qs("input").value = c.getStockholmRate();
+            painfulnessOutput.value = c.getPainfulness();
+            stockholmoutput.value = c.getStockholmRate();
+        }
+        return result;
     }
 
     window.restConstraintControls = document.createElement("div");
@@ -901,7 +972,7 @@ ${bone.toString()}
 <span class="current-discomfort"> </span>
 `;
 
-    window.createRestDomElem = function(forRest) {
+    window.createRestDomElem = function (forRest) {
         let genericContainer = createGenericConstraintContainer(forRest);
         let newRest = restConstraintControls.cloneNode(true);
         newRest.qs(".set-current-pose-as-rest").addEventListener("click", (e) => {
@@ -915,34 +986,50 @@ ${bone.toString()}
     twistConstraintControls.classList.add("twist-constraint-controls");
     twistConstraintControls.innerHTML = `
     <button class="set-current-pose-as-reference">Pose as Reference</button>
+    <button class="enforce-immediately">Enforce</button>
     <span class="current-discomfort"> </span>
     <fieldset class="twist-fields"> 
-        <form class="range-form">
-            <input name="range" type="range" min="0.0" max="6.28318" step="0.00001" value="0.1">
-            <label for="range">Range: </label>
-            <output name="range-result" for="range" class="range-output">0.1</output>
+        <form class="slider-container range-form">
+            <input class="slider" name="range" type="range" min="0.0" max="6.28318" step="0.00001" value="0.1">
+            <label class="slider-label" for="range">Range: </label>
+            <output name="range-result" for="range" class="slider-value range-output">0.1</output>
         </form>
-        <form class="base-form">
-            <input name="base" type="range" min="0.0" max="6.28318" step="0.00001" value="0">
-            <label for="base">Base: </label>
-            <output name="base-result" for="base" class="base-output">0.1</output>
+        <form class="slider-container base-form">
+            <input class="slider" name="base" type="range" min="0.0" max="9.42477795" step="0.00001" value="0">
+            <label class="slider-label" for="base">Base: </label>
+            <output name="base-result" for="base" class="slider-value base-output">0.1</output>
         </form>
-    </fieldset>
+    </fieldset>'
     `;
 
-    window.createTwistDomElem = function(forTwist) {
+    window.createTwistDomElem = function (forTwist) {
         let wrapper = createGenericConstraintContainer(forTwist);
         let result = twistConstraintControls.cloneNode(true);
         wrapper.appendChild(result);
+        let enforce = result.qs(".enforce-immediately");
+        enforce.addEventListener('click', () => {
+            forTwist.forBone.wb.simLocalAxes.adoptLocalValuesFromObject3D(forTwist.forBone);
+            let resultRot = forTwist.getAcceptableRotation(
+                forTwist.forBone.wb.simLocalAxes,
+                forTwist.forBone.wb.simBoneAxes,
+                Rot.IDENTITY,
+                enforce);
+            forTwist.forBone.wb.simLocalAxes.rotateByLocal(resultRot);
+            TrackingNode.transferLocalToObj3d(forTwist.forBone.wb.simLocalAxes.localMBasis, forTwist.forBone);
+            forTwist.updateDisplay();
+        });
+
         let range = result.qs(".range-form");
+        let rangeOutput = range.querySelector(".range-output");
         range.addEventListener("input", (event) => {
             forTwist.setRange(event.target.value);
-            result.value = event.target.value;
+            rangeOutput.value = forTwist.getRange();
         })
         let base = result.qs(".base-form");
-        base.addEventListener("input", (event)=> {
-            forTwist.setBase(event.target.value);
-            result.value = event.target.value;
+        let baseResult = base.querySelector(".base-output");
+        base.addEventListener("input", (event) => {
+            forTwist.setBaseZ(event.target.value);
+            baseResult.value = forTwist.getBaseZ();
         });
         result.qs('.set-current-pose-as-reference').addEventListener('click', (e) => {
             forTwist.setCurrentAsReference();
@@ -985,16 +1072,17 @@ window.updateInfoPanel = async function (item) {
         armature = bone.parentArmature;
     } else {
         D.byid("armature-name").innerText = "None Selected";
-        
+
     }
 
     if (constraintStack != null) {
         let domConstraint = getMakeConstraint_DOMElem(constraintStack);
         let children = D.byid("default-stack").children;
-        for(let [key, node] of Object.entries(children)) {
+        for (let [key, node] of Object.entries(children)) {
             node.remove();
         }
         D.byid("default-stack").appendChild(domConstraint);
+        domConstraint.refresh();
     } else {
         D.byid("default-stack").appendChild(emptyConstraintNode);
     }
@@ -1043,15 +1131,15 @@ window.updateInfoPanel = async function (item) {
 
     const pinDom = D.byid("pin-options")
     const pinToggle = pinDom.parentNode.qs("#pin-enabled")
-    const label =  pinToggle.nextElementSibling;
-    const labelSpan =  pinToggle.nextElementSibling.querySelector('span');
+    const label = pinToggle.nextElementSibling;
+    const labelSpan = pinToggle.nextElementSibling.querySelector('span');
     if (window.contextPin == null) {
         pinDom.classList.add("hidden");
         pinToggle.checked = false;
         label.classList.add("pre-init");
         labelSpan.innerText = "Pin Bone";
     }
-    else if(window.contextPin.isEnabled() == false) {
+    else if (window.contextPin.isEnabled() == false) {
         pinDom.classList.add("hidden");
         pinToggle.checked = false;
         label.classList.remove("pre-init");
@@ -1062,14 +1150,14 @@ window.updateInfoPanel = async function (item) {
         label.classList.remove("pre-init");
         labelSpan.innerText = "Pinned";
         pinToggle.checked = true;
-        pinDom.qs("#weight").value = Math.log(window.contextPin.getPinWeight()+1);
-        pinDom.qs("#weight").parentNode.qs(".un-exp-output").value =  window.contextPin.getPinWeight().toFixed(4);
-        pinDom.qs("#x-priority").value = Math.log(window.contextPin.getXPriority()+1);
-        pinDom.qs("#x-priority").parentNode.qs(".un-exp-output").value =  window.contextPin.getXPriority().toFixed(4);
-        pinDom.qs("#y-priority").value = Math.log(window.contextPin.getYPriority()+1);
-        pinDom.qs("#y-priority").parentNode.qs(".un-exp-output").value =  window.contextPin.getYPriority().toFixed(4);
-        pinDom.qs("#z-priority").value = Math.log(window.contextPin.getZPriority()+1);
-        pinDom.qs("#z-priority").parentNode.qs(".un-exp-output").value =  window.contextPin.getZPriority().toFixed(4);
+        pinDom.qs("#weight").value = Math.log(window.contextPin.getPinWeight() + 1);
+        pinDom.qs("#weight").parentNode.qs(".un-exp-output").value = window.contextPin.getPinWeight().toFixed(4);
+        pinDom.qs("#x-priority").value = Math.log(window.contextPin.getXPriority() + 1);
+        pinDom.qs("#x-priority").parentNode.qs(".un-exp-output").value = window.contextPin.getXPriority().toFixed(4);
+        pinDom.qs("#y-priority").value = Math.log(window.contextPin.getYPriority() + 1);
+        pinDom.qs("#y-priority").parentNode.qs(".un-exp-output").value = window.contextPin.getYPriority().toFixed(4);
+        pinDom.qs("#z-priority").value = Math.log(window.contextPin.getZPriority() + 1);
+        pinDom.qs("#z-priority").parentNode.qs(".un-exp-output").value = window.contextPin.getZPriority().toFixed(4);
         if (window.contextPin?.targetNode?.toTrack?.parent) {
             pinDom.qs("#pin-parent-mode-hint").innerText = "Current parent: ";
             let obj3dParentobj3d = window.contextPin.targetNode.toTrack.parent;
@@ -1093,20 +1181,23 @@ window.updateInfoPanel = async function (item) {
 */
 window.getMakeConstraint_DOMElem = function (c) {
     let toReturn = c.domControls;
-    if(toReturn != null) return toReturn;
-   
+    if (toReturn != null) {
+        return toReturn;
+    }
+
     if (c instanceof Rest) {
         toReturn = createRestDomElem(c);
     }
-    else if(c instanceof Twist) {
+    else if (c instanceof Twist) {
         toReturn = createTwistDomElem(c);
     }
-    else if (c instanceof ConstraintStack) {        
+    else if (c instanceof ConstraintStack) {
         toReturn = createConstraintStackDomElem(c);
     }
-    
+
     toReturn.forConstraint = c;
     c.domControls = toReturn;
+    toReturn.refresh();
     return toReturn;
 }
 

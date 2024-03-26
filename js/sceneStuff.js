@@ -2,6 +2,7 @@
 //import { EWBIK } from "./EWBIK/EWBIK.js";
 
 
+
 const dbgContainer = document.createElement('div');
 dbgContainer.id = "info";
 document.querySelector("body").appendChild(dbgContainer);
@@ -98,7 +99,7 @@ async function select(item) {
         boneCtrls.attach(selectedBone);
         window.contextBone = selectedBone;
         window.contextPin = selectedBone.getIKPin() ?? null;
-        window.contextArmature = selectedBone.parentArmature; 
+        window.contextArmature = selectedBone.parentArmature;
         window.contextConstraint = selectedBone.getConstraint() ?? null;
         window.contextBone.add(boneAxesHelper);
         boneAxesHelper.layers.set(window.boneLayer);
@@ -114,19 +115,19 @@ async function select(item) {
         //pinTranslateCtrls.attach(targetsMeshList[selectedPinIdx]);
         boneCtrls.detach();
         boneCtrls.enabled = false;
-        pinOrientCtrls.enabled = true;        
+        pinOrientCtrls.enabled = true;
         window.contextPin = selectedPin;
         window.contextBone = window.selectedPin.forBone;
-        window.contextArmature = window.contextBone.parentArmature; 
+        window.contextArmature = window.contextBone.parentArmature;
         window.contextConstraint = window.contextBone.getConstraint() ?? null;
         window.contextBone.add(boneAxesHelper);
         boneAxesHelper.layers.set(window.boneLayer);
         window.contextPin.targetNode.toTrack.add(pinAxesHelper);
         pinAxesHelper.layers.set(window.boneLayer);
     }
-    if(contextBone != window.prevContextBone) {
+    if (contextBone != window.prevContextBone) {
         window.prevContextBone?.setTempIKOrientationLock(false);
-        if(contextBone != null)
+        if (contextBone != null)
             window.prevContextBone = contextBone;
     }
     updateInfoPanel(item);
@@ -181,7 +182,7 @@ function makePinsList(pinSize, into = scene, armature) {
                 //let boneHeight = b.height
                 const geometry = ikpin.forBone?.bonegeo?.geometry ?? new THREE.BoxGeometry(baseSize * pinSize / 2, b.height, baseSize * pinSize);
                 //const material = new THREE.MeshLambertMaterial({ color: 0xff0000, transparent: true, opacity: 0.6});
-                const material = new THREE.MeshBasicMaterial({ color: 0xff0000,  wireframe: true });
+                const material = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
                 const targMesh = new THREE.Mesh(geometry, material);
                 //targMesh.position.set(0, b.height/2, 0);
                 const meshWrapper = new THREE.Object3D();
@@ -194,7 +195,7 @@ function makePinsList(pinSize, into = scene, armature) {
                 targMesh.layers.set(boneLayer);
                 ikpin.targetNode.toTrack = meshWrapper;
                 ikpin.alignToBone();
-                
+
             }
             armature.pinsList.push(ikpin);
             armature.targetsMeshList.push(ikpin.targetNode.toTrack);
@@ -210,10 +211,10 @@ function defuckify(obj) {
     obj.traverse((child) => {
         if (child.scale.x != 1) {
             console.log("detected fuckery");
-            child.scale.set(1,1,1);
+            child.scale.set(1, 1, 1);
             return false;
         }
-        
+
     });
 }
 
@@ -226,14 +227,14 @@ async function doSolve(bone = null, interacted = false, preSolveCallback = null,
     for (let a of armatures) {
         if (a.ikReady) {
             if (autoSolve) {
-                 /*null indicates we're solving the whole armature*/
+                /*null indicates we're solving the whole armature*/
                 await a.solve(null, undefined, 0, null, window.frameCount);
             }
             else if (interacted && interactionSolve) {
                 await a.solve(bone, undefined, 0, null, window.frameCount);// callbacks);
             } else if (interacted && !interactionSolve) {
                 //this is just to display the amount of pain a bone is in when interacting without solving.
-               await a.noOp(bone);
+                await a.noOp(bone);
             }
         }
     }
@@ -245,24 +246,24 @@ async function doSolve(bone = null, interacted = false, preSolveCallback = null,
 
 /**fucks with the scene hard. Makes everything from the rootnode up orthonormal*/
 async function orthonormalize(startnode) {
-    if(startnode instanceof THREE.Mesh || startnode instanceof THREE.SkinnedMesh) {
+    if (startnode instanceof THREE.Mesh || startnode instanceof THREE.SkinnedMesh) {
         return;
-    } 
-    if(startnode.position != null && startnode.quaternion != null && startnode.children != null) {
+    }
+    if (startnode.position != null && startnode.quaternion != null && startnode.children != null) {
         let oldChildren = [...startnode.children];
-        for(let c of oldChildren) {
+        for (let c of oldChildren) {
             window.scene.attach(c);
             console.log(c.name + "  scene attach");
         }
-        startnode.scale.set(1,1,1);
-        for(let c of oldChildren) {
+        startnode.scale.set(1, 1, 1);
+        for (let c of oldChildren) {
             startnode.attach(c);
             console.log(c.name + "  par attach");
         }
-        for(let c of startnode.children) {
+        for (let c of startnode.children) {
             orthonormalize(c);
-        }        
-    } else if(startnode.scene != null) return orthonormalize(startnode.scene);
+        }
+    } else if (startnode.scene != null) return orthonormalize(startnode.scene);
 }
 
 
@@ -296,11 +297,22 @@ function initControls(THREE, renderer) {
 
         //console.log("Bone Dragging-Change");
         if (selectedBone?.parentArmature.ikReady) {
+            /*if (selectedBone.getConstraint() && selectedBone.wb) {
+                selectedBone?.wb?.simLocalAxes.adoptLocalValuesFromObject3D(selectedBone);
+                let resultRot = selectedBone?.getConstraint()?.getAcceptableRotation(
+                    selectedBone?.wb?.simLocalAxes,
+                    selectedBone?.wb?.simBoneAxes,
+                    Rot.IDENTITY,
+                    this);
+                selectedBone?.wb?.simLocalAxes.rotateByLocal(resultRot);
+                contextArmature.armatureNode.constructor.transferLocalToObj3d(selectedBone?.wb?.simLocalAxes.localMBasis, selectedBone);
+                selectedBone.updateMatrix();
+            }*/
             doSolve(selectedBone, true);//.parentArmature.solve();
-            
+
         }
-        if(selectedBone.getConstraint() != null)
-                selectedBone.getConstraint().updateDisplay();
+        if (selectedBone.getConstraint() != null)
+            selectedBone.getConstraint().updateDisplay();
 
     });
     boneCtrls.addEventListener('objectChange', function (event) {
@@ -308,6 +320,17 @@ function initControls(THREE, renderer) {
         pinOrientCtrls.enabled = !event.value;
         //pinTranslateCtrls.enabled = !event.value;
         select(boneList[selectedBoneIdx]);
+        /*if (selectedBone.getConstraint() && selectedBone.wb) {
+            selectedBone?.wb?.simLocalAxes.adoptLocalValuesFromObject3D(selectedBone);
+            let resultRot = selectedBone?.getConstraint()?.getAcceptableRotation(
+                selectedBone?.wb?.simLocalAxes,
+                selectedBone?.wb?.simBoneAxes,
+                Rot.IDENTITY,
+                this);
+            selectedBone?.wb?.simLocalAxes.rotateByLocal(resultRot);
+            contextArmature.armatureNode.constructor.transferLocalToObj3d(selectedBone?.wb?.simLocalAxes.localMBasis, selectedBone);
+            //selectedBone.updateMatrix();
+        }*/
         //console.log("Bone objectChange");
         if ((interactionSolve || autoSolve))
             selectedBone.setTempIKOrientationLock(true);
@@ -317,7 +340,7 @@ function initControls(THREE, renderer) {
         if (selectedBone?.parentArmature.ikReady) {
             doSolve(selectedBone, true);//.parentArmature.solve();
         }
-        if(selectedBone.getConstraint() != null)
+        if (selectedBone.getConstraint() != null)
             selectedBone.getConstraint().updateDisplay();
         bone_transformDragging = true;
 
@@ -348,7 +371,7 @@ function initControls(THREE, renderer) {
         if (selectedPin?.forBone.parentArmature.ikReady) {
             doSolve(contextBone, true);//.parentArmature.solve();
         }
-        if(contextBone.getConstraint() != null)
+        if (contextBone.getConstraint() != null)
             contextBone.getConstraint().updateDisplay();
         pinOrientCtrls.visible = false;
         //pinTranslateCtrls.visible = false;
@@ -421,7 +444,7 @@ function initControls(THREE, renderer) {
             }
             selectedPin = null;
         } else {
-            
+
             //pinTranslateCtrls.enabled = true;
             selectedPin = pinsList[selectedPinIdx];
             select(selectedPin);
@@ -433,7 +456,7 @@ function initControls(THREE, renderer) {
                 selectedBone = null;
             }
         }
-        if(selectedPinIdx == -1 && selectedBoneIdx == -1) {
+        if (selectedPinIdx == -1 && selectedBoneIdx == -1) {
             select(null);
         }
     });
@@ -509,7 +532,7 @@ function findBone(startNode) {
     if (startNode instanceof THREE.Bone)
         return startNode;
     for (let c of startNode.children) {
-        console.log(c.type +" " +c.name);
+        console.log(c.type + " " + c.name);
         let result = findBone(c);
         if (result instanceof THREE.Bone) {
             return result;
@@ -528,15 +551,15 @@ function printBoneNames(startNode, depth = 0) {
     }
 }
 
-function initPrettyBones(armature, mode, override, depth=999) {
+function initPrettyBones(armature, mode, override, depth = 999) {
     armature._maybeInferOrientation(armature.rootBone, mode, override, depth - 1);
     armature.showBones(0.1, true);
 }
 
 function initIK(armature) {
-    
+
     //armature.regenerateShadowSkeleton(true);
-    
+
     armature.regenerateShadowSkeleton(false);
     armature.ikReady = true;
 }
@@ -554,7 +577,7 @@ async function switchSelected(key) {
             select(selectedBone)
             break;
         case '2':
-            selectedBoneIdx = (selectedBoneIdx + (boneList.length-1)) % boneList.length
+            selectedBoneIdx = (selectedBoneIdx + (boneList.length - 1)) % boneList.length
             selectedBone = boneList[selectedBoneIdx];
             boneCtrls.attach(selectedBone);
             selectedBone.add(boneAxesHelper);
@@ -580,7 +603,7 @@ async function switchSelected(key) {
         case 'a': //radio select, always solve. 
             autoSolve = !autoSolve;
             break;
-        case 'b': 
+        case 'b':
             bonestepDebug();
             break
         case '+':
@@ -661,7 +684,7 @@ window.getTranslationColor = (position, range) => {
 };
 
 function toDebugColor(debugObj, groupedelem, range, vert = null, horiz = null) {
-    
+
 
     let titlefield = element.querySelector("name");
     let element = groupedelem.querySelector("debug-color-thingy");
@@ -707,7 +730,7 @@ function addDebugFuncs(THREE) {
         return groupedelem;
     };
 
-    THREE.Object3D.prototype.toStr = function (showscale = false ) {
+    THREE.Object3D.prototype.toStr = function (showscale = false) {
         // Helper function to convert quaternion to axis-angle
         function quaternionToAxisAngle(quaternion) {
             if (quaternion.w > 1) quaternion.normalize(); // if w > 1 acos and sqrt will produce errors, this cant happen if quaternion is normalised
@@ -743,7 +766,7 @@ function addDebugFuncs(THREE) {
         const worldAxisAngle = quaternionToAxisAngle(worldQuaternion);
         let globscalestr = showscale ? `Scale: ${worldScale.x.toFixed(3)}, ${worldScale.y.toFixed(3)}, ${worldScale.z.toFixed(3)}` : '';
         let localScalestr = showscale ? `Scale: ${localScale.x.toFixed(3)}, ${localScale.y.toFixed(3)}, ${localScale.z.toFixed(3)}` : '';
-        return`GLOBAL Space Info for object (${this.name}): 
+        return `GLOBAL Space Info for object (${this.name}): 
 Position: ${worldPosition.x.toFixed(3)}, ${worldPosition.y.toFixed(3)}, ${worldPosition.z.toFixed(3)}
 Rotation: Axis(${worldAxisAngle.axis.x.toFixed(3)}, ${worldAxisAngle.axis.y.toFixed(3)}, ${worldAxisAngle.axis.z.toFixed(3)}), Angle(${THREE.MathUtils.radToDeg(worldAxisAngle.angle).toFixed(3)}°)
 ${globscalestr}
@@ -754,5 +777,5 @@ Rotation : Axis(${localAxisAngle.axis.x.toFixed(3)}, ${localAxisAngle.axis.y.toF
 ${localScalestr}`;
     };
     THREE.Object3D.prototype.toString = THREE.Object3D.prototype.toStr;
-    THREE.Object3D.prototype.toConsole = function (showscale = false ) { console.log(this.toStr(showscale))}
+    THREE.Object3D.prototype.toConsole = function (showscale = false) { console.log(this.toStr(showscale)) }
 }

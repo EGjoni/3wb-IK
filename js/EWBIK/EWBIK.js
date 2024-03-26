@@ -337,7 +337,7 @@ export class EWBIK {
         if (this.dirtyRate)
             this._updateShadowSkelRateInfo(iterations);
         this.updateskelStates();
-        this.shadowSkel.noOp(fromBone, iterations, (bonestate, workingBone) => this.updateBoneColors(bonestate, workingBone), callbacks);
+        this.shadowSkel.noOp(fromBone, iterations, (bs, ts, wb) => this.alignBoneToSolverResult(bs, ts, wb), callbacks);
         this.pool.releaseAll();
     }
 
@@ -580,7 +580,7 @@ export class EWBIK {
             this.armatureNode.ikd,
             armatureTransform.translate.components,
             [armatureTransform.rotation.w, armatureTransform.rotation.x, armatureTransform.rotation.y, armatureTransform.rotation.z],
-            [this.armatureNode.getLocalMBasis().x, this.armatureNode.getLocalMBasis().scale.y, this.armatureNode.getLocalMBasis().scale.z],
+            [this.armatureNode.getLocalMBasis().scale.x, this.armatureNode.getLocalMBasis().scale.y, this.armatureNode.getLocalMBasis().scale.z],
             null, this.armatureNode);
 
         for (let bone of this.bones) {
@@ -935,11 +935,11 @@ export class EWBIK {
 
 
         let ds = this.shadowSkel.debugState;
-        if (ds.currentIteration == 0) {
-            this.updateskelStates();
-            this.shadowSkel.updateReturnfulnessDamps(iterations);
-            this.shadowSkel.alignSimAxesToBoneStates();
-        }
+        //if (ds.currentIteration == 0) {
+        this.updateskelStates();
+        this.shadowSkel.updateReturnfulnessDamps(iterations);
+        this.shadowSkel.alignSimAxesToBoneStates();
+        //}
         let i = 0;
         //let doNothing = ()=>{};
 

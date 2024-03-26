@@ -31,17 +31,26 @@ export class ShadowSkeleton {
         this.accumulatingPain = 0;
         this.maxPain = 0;
         for (let j = 0; j <= endOnIndex; j++) {
-            this.traversalArray[j].updatePain(0);
-            let bonepain = this.traversalArray[j].getOwnPain();
+            const wb = this.traversalArray[j];
+            wb.updatePain(0);
+            /*if(wb.hasLimitingConstraint) {
+                let clampBy = wb.constraint.getAcceptableRotation(
+                    wb.simLocalAxes,
+                    wb.simBoneAxes,
+                    Rot.IDENTITY,
+                    wb
+                );
+                wb.simLocalAxes.rotateByLocal(clampBy);
+            }*/
+            let bonepain = wb.getOwnPain();
             if (bonepain > this.maxPain) {
                 this.maxPain = bonepain;
-                this.maxpainbone = this.traversalArray[j].forBone.directRef;
+                this.maxpainbone = wb.forBone.directRef;
             }
             this.accumulatingPain += bonepain;
         }
         this.lastPainTotal = this.accumulatingPain;
         this.updateBoneStates(onComplete, callbacks)
-
     }
 
     /**
@@ -57,7 +66,7 @@ export class ShadowSkeleton {
       */
 
     solve(iterations, stabilizationPasses, solveFrom, onComplete, callbacks = null) {
-        if(window.perfing) performance.mark("shadowSkelSolve start");
+        //if(window.perfing) performance.mark("shadowSkelSolve start");
         this.alignSimAxesToBoneStates();
         const endOnIndex = this.getEndOnIndex(solveFrom)
         //this.pullBack(iterations, solveFrom, false, null);
@@ -67,8 +76,8 @@ export class ShadowSkeleton {
             this.solveToTargets(stabilizationPasses, endOnIndex, null, callbacks, i);
         }
 
-        if(window.perfing) performance.mark("shadowSkelSolve end");
-        if(window.perfing) performance.measure("shadowSkelSolve", "shadowSkelSolve start", "shadowSkelSolve end");   
+        //if(window.perfing) performance.mark("shadowSkelSolve end");
+        //if(window.perfing) performance.measure("shadowSkelSolve", "shadowSkelSolve start", "shadowSkelSolve end");   
         this.updateBoneStates(onComplete, callbacks);        
     }
 
@@ -107,21 +116,21 @@ export class ShadowSkeleton {
         ;
         let translate = endOnIndex === this.traversalArray.length - 1;
         let skipConstraints = stabilizationPasses < 0;
-        if(window.perfing) performance.mark("solveToTargetsp1 start");
+        //if(window.perfing) performance.mark("solveToTargetsp1 start");
         stabilizationPasses = Math.max(0, stabilizationPasses);
         if (translate) { //special case. translate and rotate the rootbone first to minimize deviation from innermost targets
-            this.traversalArray[endOnIndex].fastUpdateOptimalRotationToPinnedDescendants(0, translate, true, currentIteration);
+            this.traversalArray[endOnIndex].fastUpdateOptimalRotationToPinnedDescendants(translate, true, currentIteration);
         }
-        if(window.perfing) performance.mark("solveToTargetsp1 end");
-        if(window.perfing) performance.measure("solveToTargetsp1", "solveToTargetsp1 start", "solveToTargetsp1 end");  
+        //if(window.perfing) performance.mark("solveToTargetsp1 end");
+        //if(window.perfing) performance.measure("solveToTargetsp1", "solveToTargetsp1 start", "solveToTargetsp1 end");  
         this.accumulatingPain = 0;
         this.maxPain = 0;
-        if(window.perfing) performance.mark("solveToTargetsp2 start");
+        //if(window.perfing) performance.mark("solveToTargetsp2 start");
         for (let j = 0; j <= endOnIndex; j++) {
             const wb = this.traversalArray[j];
             //callbacks?.beforeIteration(wb.forBone.directRef, wb.forBone.getFrameTransform(), wb);
             wb.pullBackTowardAllowableRegion(currentIteration, callbacks);
-            wb.fastUpdateOptimalRotationToPinnedDescendants(stabilizationPasses, translate && j === endOnIndex, skipConstraints, currentIteration);
+            wb.fastUpdateOptimalRotationToPinnedDescendants(translate && j === endOnIndex, skipConstraints, currentIteration);
             let bonepain = wb.getOwnPain();
             if (bonepain > this.maxPain) {
                 this.maxPain = bonepain;
@@ -134,9 +143,9 @@ export class ShadowSkeleton {
 
         //this.updateBoneStates(onComplete, callbacks);
         this.pool.releaseAll();
-        if(window.perfing) performance.mark("solveToTargetsp2 end");
-        if(window.perfing) performance.measure("solveToTargetsp2", "solveToTargetsp2 start", "solveToTargetsp2 end");  
-        if(window.perfing) performance.measure("solveToTargets", "solveToTargetsp1 start", "solveToTargetsp2 end");  
+        //if(window.perfing) performance.mark("solveToTargetsp2 end");
+        //if(window.perfing) performance.measure("solveToTargetsp2", "solveToTargetsp2 start", "solveToTargetsp2 end");  
+        //if(window.perfing) performance.measure("solveToTargets", "solveToTargetsp1 start", "solveToTargetsp2 end");  
     }
 
     /**
@@ -394,7 +403,7 @@ export class ShadowSkeleton {
         let skipConstraints = stabilizationPasses < 0;
         stabilizationPasses = Math.max(0, stabilizationPasses);
         if (translate && ds.completedSolve) { //special case. translate and rotate the rootbone first to minimize deviation from innermost targets
-            wb.fastUpdateOptimalRotationToPinnedDescendants(0, translate, true, ds.currentIteration);
+            wb.fastUpdateOptimalRotationToPinnedDescendants(translate, true, ds.currentIteration);
         }
 
         if (ds.currentTraversalIndex <= endOnIndex) {
@@ -421,7 +430,7 @@ export class ShadowSkeleton {
             ds.currentStep++;
             return;
         } else if (ds.steps[ds.currentStep] == 'postTarget') {
-            wb.fastUpdateOptimalRotationToPinnedDescendants(stabilizationPasses, translate && ds.currentTraversalIndex == endOnIndex, false);
+            wb.fastUpdateOptimalRotationToPinnedDescendants(translate && ds.currentTraversalIndex == endOnIndex, false);
             wb.updateTargetHeadings(wb.chain.boneCenteredTargetHeadings, wb.chain.weights, wb.myWeights);
             wb.updateTipHeadings(wb.chain.boneCenteredTipHeadings, !translate);
             callbacks?.afterIteration(wb.forBone.directRef, wb.forBone.getFrameTransform(), wb);

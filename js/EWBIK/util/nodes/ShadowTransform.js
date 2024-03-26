@@ -72,7 +72,7 @@ class IKTransform {
             
             this.initializeBasisWithDirections(origin, x, y, z);
         }
-        this.refreshPrecomputed();
+        this.lazyRefresh();
     }
 
 
@@ -141,7 +141,7 @@ class IKTransform {
         this._yRay.setP2(input.yRay.p2);
         this._zRay.setP1(input.zRay.p1); 
         this._zRay.setP2(input.zRay.p2);
-        this.refreshPrecomputed();
+        this.lazyRefresh();
         return this;
     }
 
@@ -154,7 +154,7 @@ class IKTransform {
         this.xBase.setComponents(input.scale[0], 0, 0);
         this.yBase.setComponents(0, input.scale[1], 0,);
         this.zBase.setComponents(0, 0, input.scale[2]);
-        this.refreshPrecomputed();
+        this.lazyRefresh();
         return this;
     }
 
@@ -169,7 +169,7 @@ class IKTransform {
         this.yBase.setComponents(0, scale[1], 0);
         this.zBase.setComponents(0, 0, scale[2]);
         this.rotation.setComponents(rotation[0], rotation[1], rotation[2], rotation[3], normalize);
-        this.refreshPrecomputed();
+        this.lazyRefresh();
         return this;
     }
 
@@ -185,7 +185,7 @@ class IKTransform {
         //this.rotation.setComponents(quat.x, quat.y, quat.z, quat.w); // raw jpl input
         this.rotation.setComponents(quat.w, -quat.x, -quat.y, -quat.z); //convert to hamilton from jpl
         this.scale.setComponents(scale.x, scale.y, scale.z);
-        this.refreshPrecomputed();
+        this.lazyRefresh();
     }
 
     setFromObj3d(object3d) {
@@ -193,7 +193,7 @@ class IKTransform {
         //this.rotation.setComponents(object3d.quaternion.x, object3d.quaternion.y, object3d.quaternion.z, object3d.quaternion.w); //jpl
         this.rotation.setComponents(object3d.quaternion.w, -object3d.quaternion.x, -object3d.quaternion.y, -object3d.quaternion.z); //hamilton
         this.scale.setComponents(object3d.scale.x, object3d.scale.y, object3d.scale.z);
-        this.refreshPrecomputed();
+        this.lazyRefresh();
     }
 
     /**
@@ -206,7 +206,7 @@ class IKTransform {
         this.setVecToLocalOf(globalinput.translate, localoutput.translate);
         //globalinput.rotation.applyAfter(this.inverseRotation, localoutput.rotation); //jpl
         this.inverseRotation.applyAfter(globalinput.rotation, localoutput.rotation); //hamilton
-        localoutput.refreshPrecomputed();
+        localoutput.lazyRefresh();
         return localoutput;
     }
 
@@ -220,7 +220,7 @@ class IKTransform {
     setTransformToGlobalOf(localInput, globalOutput) {
 		this.rotation.applyAfter(localInput.rotation, globalOutput.rotation);
 		this.setVecToGlobalOf(localInput.translate, globalOutput.translate);		
-		globalOutput.refreshPrecomputed();
+		globalOutput.lazyRefresh();
         return globalOutput;
  	}
 
@@ -233,12 +233,12 @@ class IKTransform {
 
     rotateTo(newRotation) {				
 		this.rotation.setFromRot(newRotation); 
-		this.refreshPrecomputed();
+		this.lazyRefresh();
 	}
 
 	rotateBy(addRotation) {		
 		addRotation.applyAfter(this.rotation, this.rotation);
-		this.refreshPrecomputed();
+		this.lazyRefresh();
 	}
 
     getLocalOfVec(inVec) {
@@ -260,7 +260,7 @@ class IKTransform {
         this.translate.set(vec);
     }
 
-    refreshPrecomputed() {
+    lazyRefresh() {
         this.raysDirty = true;
         this.inverseDirty = true;
         //this.rotation.setToReversion(this._inverseRotation);

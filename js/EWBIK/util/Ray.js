@@ -50,9 +50,28 @@ export class Ray {
         return this;
     }
 
+    /**sets the provided vector to have the same magnitude and direction as this ray 
+     * @param {Vec3} storeIn
+     * @return {Vec3} the input vector after updating its values
+    */
     setToHeading(storeIn = this.workingVector) {
         storeIn.set(this.p2);
         storeIn.sub(this.p1);
+        return storeIn;
+    }
+
+    /**sets the provided array (starting at the provided index to the components of a vector with the same magnitude and direction 
+     * as the heading of this ray
+     * @param {Array} storeIn
+     * @param {Number} baseX the index to start iterating through the array from
+     * @return {Array} the input array after updating its values
+    */
+    setToHeadingArr(storeIn, baseX) {
+        const baseY = baseX+1;
+        const baseZ = baseX+2;
+        storeIn[baseX] = this.p2.x - this.p1.x;
+        storeIn[baseY] = this.p2.y - this.p1.y;
+        storeIn[baseZ] = this.p2.z - this.p1.z;
         return storeIn;
     }
     origin() {

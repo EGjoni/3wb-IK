@@ -20,6 +20,7 @@ export class IKNode {
     static X = 0;
     static Y = 1;
     static Z = 2;
+    dirty = false;
     /** @type {IKTransform} */
     localMBasis = null;
     /** @type {IKTransform} */
@@ -46,12 +47,11 @@ export class IKNode {
             this.localMBasis = globalMBasis.clone();
             this.globalMBasis = globalMBasis.clone();
         }
-        this.parent = parent;
         this.dirty = true;
         this.childNodes = new Set();
         this.workingVector = this.pool.new_Vec3();
         this.areGlobal = true;
-
+        
         this.tag = ikd;
         if (parent != null) {
             this.setParent(parent);
@@ -102,7 +102,14 @@ export class IKNode {
         return this;
     }
 
+    /**
+     * 
+     * @param {Object3D} object3d 
+     * @returns 
+     */
     adoptLocalValuesFromObject3D(object3d) {
+        //TODO: figure out some way to determine if the Matrix actually needs updating before calling updateMatrix()
+        object3d.updateMatrix();
         this.localMBasis.setFromObj3d(object3d);
         this.markDirty();
         return this;
@@ -172,21 +179,35 @@ export class IKNode {
             par.updateGlobal();
             par.getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
 
-            if (oldParent !== null) oldParent._disown(this);
-            this.parent = par;
-
-            this.getParentAxes().childNodes.add(this)
-            this.areGlobal = false;
+            if (oldParent != null) oldParent._disown(this);
+            par.addChild(this);
         } else {
-            if (oldParent !== null) oldParent._disown(this);
-            this.parent = null;
-            this.areGlobal = true;
+            if (oldParent != null) oldParent._disown(this);
         }
-        this.markDirty();
-        this.updateGlobal();
-
-        for (c of this.childNodes) ad.parentChangeCompletionNotice(this, oldParent, par, requestedBy);
+        //this.markDirty(); handled by addChild
+        
         return this;
+    }
+
+    /**
+     * registers the given node as a child of this one.
+     * @param {IKNode} node 
+     * @param {Number} safetyCheck 4 by default. traverses rootwards the given number of nodes to try to make sure the resulting graph has no loops.
+     */
+    addChild(node, safetyCheck = 4) {
+        let current = this;
+        while(safetyCheck > 0) {
+            if(current == node) {
+                throw new Error("A node cannot be its own ancestor");
+            }
+            if(current.parent == null) 
+                break;
+            safetyCheck--;
+        }
+        this.childNodes.add(node);
+        node.parent = this;
+        node.areGlobal = false;
+        node.markDirty();
     }
 
     alignGlobalsTo(inputGlobalMBasis) {
@@ -274,14 +295,11 @@ export class IKNode {
      * @param {IKNode} par 
      * @returns 
      */
-    setRelativeToParent(par) {
-        if (this.getParentAxes() !== null) {
+    setRelativeToParent(par) {        
+        if (par != null && par != this.parent && this.getParentAxes() != null) {
             this.getParentAxes()._disown(this);
-        }
-        this.parent = par;
-        this.areGlobal = false;
-        this.getParentAxes().childNodes.add(this)
-        this.markDirty();
+            par.addChild(this);
+        } else if(par != null) par.addChild(this);
         return this;
     }
 
@@ -416,6 +434,9 @@ export class IKNode {
 
     _disown(child) {
         this.childNodes.delete(child);
+        child.parent = null;
+        child.areGlobal = true;
+        child.markDirty();
     }
 
     getGlobalMBasis() {
@@ -439,12 +460,27 @@ export class IKNode {
     markDirty() {
         if (!this.dirty) {
             this.dirty = true;
+            this.globalMBasis.lazyRefresh();
             for (let c of this.childNodes) c.markDirty();
         }
     }
 
     _exclusiveMarkDirty() {
         this.dirty = true;
+        this.globalMBasis.lazyRefresh();
+    }
+
+    setToXHeading(vec) {
+        if(this.dirty) this.updateGlobal();
+        return this.globalMBasis.setToXHeading(vec);
+    }
+    setToYHeading(vec) {
+        if(this.dirty) this.updateGlobal();
+        return this.globalMBasis.setToYHeading(vec);
+    }
+    setToZHeading(vec) {
+        if(this.dirty) this.updateGlobal();
+        return this.globalMBasis.setToZHeading(vec);
     }
 
     xRay() {
@@ -500,14 +536,26 @@ export class IKNode {
         return copy;
     }
 
-    toString() {
+    toString(withlocal = true, withglobal = true, withLabel = true) {
         this.updateGlobal();
-        const global = `Global: ${this.getGlobalMBasis().toString()}\n`;
-        const local = `Local: ${this.getLocalMBasis().toString()}`;
-        return global + local;
+        const global = `${withLabel?'Global: ': ''} ${this.getGlobalMBasis().toString()}\n`;
+        const local = `${withLabel?'Lcal: ': ''} ${this.getLocalMBasis().toString()}`;
+        return withglobal? global :'' + withlocal?local:'';
     }
 
-    toCons(withString = false) {
+    toConsole(withString = true) {
+        console.group(this.ikd +' Node: ');
+            console.group('global: ');
+                console.log(this.toString(false, true, false)),
+            console.groupEnd('global: ');
+            console.group('local: ');
+                console.log(this.toString(true, false, false))
+            console.groupEnd('local: ');
+        console.groupEnd(this.ikd +' Node: ');
+        //return this.toCons(withString);
+    }
+
+    toPretty(withString = true) {
         console.log("local\t global");
         let colStyles = IKTransform._getCompareStyles(this.getLocalMBasis(), this.getLocalMBasis());
         console.log(`${colStyles.string}`, ...colStyles.styles)
@@ -536,16 +584,27 @@ export class IKNode {
         console.log(`%c      Global: \n${builtGlobal.string}\n%c      Local: \n${builtLocal.string}`, '', ...builtGlobal.styles , '',...builtLocal.styles);
     }
 
-    static obj3dToConsole(object3d) {
+    static obj3dToConsole(object3d) {        
+        console.group(object3d.name +' transform');
+            console.group('global: ');
+                console.log(IKNode.obj3dToString(object3d, false, true)),
+            console.groupEnd('global: ');
+            console.group('local: ');
+                console.log(IKNode.obj3dToString(object3d, true, false))
+            console.groupEnd('local: ');
+        console.groupEnd(object3d.name +' transform');
+    }
+
+    static obj3dToString(object3d, withlocal=true, withglobal=true) {
         let loc = IKTransform.newPooled(this.pool);
         loc.setFromObj3d(object3d);
         let glob = IKTransform.newPooled(this.pool);
         glob.setFromGlobalizedObj3d(object3d);
 
-        const global = `Global: ${glob.toString()}\n`;
-        const local = `Local: ${loc.toString()}`;
-        let out = global + local;
-        console.log(out);
+        const global = `${glob.toString()}`;
+        const local = `${loc.toString()}`;
+        let out = withglobal ? global : '' + withlocal ? local : '';
+        return out;
     }
 
     getDebug = function() {
@@ -598,7 +657,7 @@ export class TrackingNode extends IKNode {
         this.updateGlobal();
         const oldParent = this.getParentAxes();
 
-        if (par !== null && par !== this) {
+        if (par != null && par != this.parent) {
             par.updateGlobal();
             if (par instanceof TrackingNode && par.toTrack != null && this.toTrack != null) {
                 par.toTrack.attach(this.toTrack);
@@ -606,22 +665,13 @@ export class TrackingNode extends IKNode {
             }
             par.getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
 
-            if (oldParent !== null) oldParent._disown(this);
-            this.parent = par;
-
-            this.getParentAxes().childNodes.add(this)
+            if (oldParent != null) oldParent._disown(this);
+            par.addChild(this);
             this.areGlobal = false;
-        } else {
-            if (oldParent !== null) oldParent._disown(this);
-            this.parent = null;
+        } else if (par != this.parent || par == this) { //let's treat any attempt to set something as its own parent as an attempt to out and see the worldspace
+            if (oldParent != null) oldParent._disown(this);
             this.areGlobal = true;
         }
-
-        this.markDirty();
-        this.updateGlobal();       
-
-
-        for (c of this.childNodes) ad.parentChangeCompletionNotice(this, oldParent, par, requestedBy);
 
         return this;
     }

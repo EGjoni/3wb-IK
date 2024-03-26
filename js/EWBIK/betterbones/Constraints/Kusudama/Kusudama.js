@@ -138,7 +138,7 @@ export class Kusudama extends LimitingReturnful {
         decomposition[1].clampToCosHalfAngle(this.twistHalfRangeHalfCos);
         let recomposition = decomposition[0].applyTo(decomposition[1]);
         toSet.getParentAxes().getGlobalMBasis().inverseRotation.applyTo(globTwistCent.applyTo(recomposition), toSet.localMBasis.rotation);
-        toSet.localMBasis.refreshPrecomputed();
+        toSet.localMBasis.lazyRefresh();
         toSet.markDirty();
         return 0;
     }
@@ -193,7 +193,7 @@ export class Kusudama extends LimitingReturnful {
         decomposition[1] = achieved;
         let recomposition = decomposition[0].applyAfter(decomposition[1]);
         toSet.getParentAxes().getGlobalMBasis().inverseRotation.applyAfter(globTwistCent.applyAfter(recomposition), toSet.localMBasis.rotation);
-        toSet.localMBasis.refreshPrecomputed();
+        toSet.localMBasis.lazyRefresh();
         toSet.markDirty();
     }
 
@@ -247,7 +247,7 @@ export class Kusudama extends LimitingReturnful {
                 inBounds[0] = 1;
                 return inPoint;
             } else {
-                let axis = this.limitCones[0].getControlPoint().crossClone(point); 
+                let axis = this.limitCones[0].getControlPoint().cross(point, this.pool.any_Vec3()); 
                 let toLimit = Rot.fromAxisAngle(axis, this.limitCones[0].getRadius()); 
                 return toLimit.applyToVecClone(this.limitCones[0].getControlPoint()); 
             }

@@ -5,16 +5,19 @@ import { Vec3, any_Vec3 } from "../../../util/vecs.js";
 import { Ray } from "../../../util/Ray.js";
 import { IKNode, TrackingNode } from "../../../util/nodes/IKNodes.js";
 import { generateUUID } from "../../../util/uuid.js";
-import { Constraint, LimitingReturnful } from "../Constraint.js";
+import { Constraint, Limiting, LimitingReturnful } from "../Constraint.js";
 
 
-export class Twist extends LimitingReturnful {
+export class Twist extends Limiting {
     static TAU = Math.PI * 2;
     static PI = Math.PI;
     static totalTwists = 0;
     display = null// new TwistConstraintDisplay();
     zHint = null //line along the z-axis to visualize twist affordance;
     displayGroup = new Group();
+    swing = new Rot(1,0,0,0);
+    twist = new Rot(1,0,0,0); 
+    workingVec = new Vec3(0,0,0);
     
 
     /**
@@ -45,13 +48,15 @@ export class Twist extends LimitingReturnful {
         if(inBasis == null)
             basis = new IKNode(null, null, undefined, pool);
         super(forBone, basis, ikd, pool);
-        this.range = range;
+        
         this.tempNode2 = new IKNode(null, null, undefined, pool);
         if(this.forBone) {
             this.forBone.springy = true;
         }
         this.visibilityCondition = visibilityCondition;
         this.display = new TwistConstraintDisplay(range, 1, this);
+        this.range = range; 
+        this.coshalfhalfRange = Math.cos(0.25*range);
         if(visibilityCondition != null)
             this.display.setVisibilityCondition(this.visibilityCondition);
 
@@ -64,6 +69,10 @@ export class Twist extends LimitingReturnful {
         this.__frame_internal = this.tempNode1; 
         this.__bone_internal = this.tempNode2;
         this.__bone_internal.setParent(this.__frame_internal); 
+        this.__frame_calc_internal = new IKNode(undefined, undefined, undefined, this.pool);
+        this.__bone_calc_internal = new IKNode(undefined, undefined, undefined,  this.pool);
+        this.__bone_calc_internal.setRelativeToParent(this.__frame_calc_internal);
+        /**@type {IKNode} */
         this.frameCanonical = this.basisAxes;
         this.boneCanonical = this.basisAxes.freeClone();
         this.boneCanonical.setParent(this.frameCanonical);
@@ -89,18 +98,20 @@ export class Twist extends LimitingReturnful {
      * @return {Twist} this for chaining
     */
     setCurrentAsReference() {
-        this.frameCanonical.adoptLocalValuesFromObject3D(this.forBone);
+        //this.frameCanonical.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
         this.__frame_internal.emancipate();
-        this.__frame_internal.localMBasis.refreshPrecomputed();
-        this.__frame_internal.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
-        this.__frame_internal.setRelativeToParent(this.frameCanonical);
+        this.__frame_internal.localMBasis.lazyRefresh();
+        this.__bone_internal.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
+        this.__frame_internal.adoptLocalValuesFromObject3D(this.forBone);
+        //this.__frame_internal.setRelativeToParent(this.frameCanonical);
         
-        this.frameCanonical.localMBasis.adoptValues(this.tempNode1.getGlobalMBasis());
+        this.frameCanonical.localMBasis.adoptValues(this.__bone_internal.getGlobalMBasis());
         this.__frame_internal.emancipate();
-        this.__frame_internal.localMBasis.refreshPrecomputed();
-        this.basisAxes.localMBasis.refreshPrecomputed();
+        this.__frame_internal.localMBasis.lazyRefresh();
+        this.frameCanonical.localMBasis.lazyRefresh();
+        this.boneCanonical.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
         TrackingNode.transferLocalToObj3d(this.frameCanonical.localMBasis, this.displayGroup);
-        this.basisAxes.markDirty();
+        this.frameCanonical.markDirty();
         this.updateDisplay();
         return this;
     }
@@ -109,15 +120,16 @@ export class Twist extends LimitingReturnful {
      * 
      * @param {Number} baseZ the base angle against which range/2 on either side defines an allowable twist region
      */
-    setBase(baseZ) {
+    setBaseZ(baseZ) {
+        this.baseZ = baseZ;
         this.__frame_internal.emancipate();
         this.__frame_internal.reset();
         this.__frame_internal.localMBasis.rotation.setFromAxisAngle(this.pool.any_Vec3(0,1,0), baseZ);
         this.__frame_internal.markDirty();
-        this.__frame_internal.localMBasis.refreshPrecomputed();
+        this.__frame_internal.localMBasis.lazyRefresh();
         let yAlignRot = Rot.fromVecs(this.__frame_internal.localMBasis.getYHeading(), this.frameCanonical.localMBasis.getYHeading());
         yAlignRot.applyAfter(this.__frame_internal.localMBasis.rotation, this.frameCanonical.localMBasis.rotation);
-        this.frameCanonical.localMBasis.refreshPrecomputed();
+        this.frameCanonical.localMBasis.lazyRefresh();
         this.frameCanonical.markDirty();
         this.frameCanonical.updateGlobal();
         TrackingNode.transferLocalToObj3d(this.frameCanonical.getGlobalMBasis(), this.displayGroup);
@@ -128,13 +140,23 @@ export class Twist extends LimitingReturnful {
         this.updateDisplay();
     }
 
+
+    getBaseZ() {
+        return this.baseZ;
+    }
+
     /**
      * 
      * @param {Number} range total range of twist motion allowed through the base 
      */
     setRange(range) {
         this.range = range;
+        this.coshalfhalfRange = Math.cos(0.25*range); // set to a fourth, because the range is defined as being on either side of the reference orientation.
         this.updateDisplay();
+    }
+
+    getRange() {
+        return this.range;
     }
 
     updateDisplay() {        
@@ -155,8 +177,25 @@ export class Twist extends LimitingReturnful {
      * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring it to.
      */
     getAcceptableRotation (currentState, currentBoneOrientation, desiredRotation, calledBy = null) {
-        /**to be overriden by child classes */
-        return desiredRotation; 
+
+        //let correctAnswer = Rot.fromRot(currentState.localMBasis.rotation);
+        this.__frame_calc_internal.adoptLocalValuesFromIKNode(currentState);       
+        this.__bone_calc_internal.adoptLocalValuesFromIKNode(currentBoneOrientation);
+        this.__frame_calc_internal.rotateByLocal(desiredRotation);        
+        let desiredHeading = this.workingVec.set(this.__bone_calc_internal.getGlobalMBasis().getYHeading());
+        this.__bone_calc_internal.setParent(this.frameCanonical);
+        this.__frame_calc_internal.setParent(this.__bone_calc_internal); 
+        let yAlignRot = this.tempOutRot.setFromVecs(this.__bone_calc_internal.localMBasis.getYHeading(), this.pool.any_Vec3(0,1,0));
+        this.__bone_calc_internal.rotateByLocal(yAlignRot.shorten());
+        this.__bone_calc_internal.localMBasis.rotation.clampToCosHalfAngle(this.coshalfhalfRange);
+        this.__bone_calc_internal.markDirty(); 
+        let backWhence = this.tempOutRot.setFromVecs(this.__bone_calc_internal.getGlobalMBasis().getYHeading(), desiredHeading);
+        this.__bone_calc_internal.rotateByGlobal(backWhence.shorten());
+        this.__frame_calc_internal.updateGlobal();
+        this.__frame_calc_internal.emancipate(); 
+        this.__bone_calc_internal.setRelativeToParent(this.__frame_calc_internal);
+        //this.tempOutRot.setFromRot(this.__frame_calc_internal.localMBasis.rotation);
+        return currentState.localMBasis.rotation.getRotationTo(this.__frame_calc_internal.localMBasis.rotation, this.tempOutRot).shorten();
     }
 
     /**
@@ -186,17 +225,18 @@ export class Twist extends LimitingReturnful {
          * But the actual constraining algo is much more efficient and just amounts to a swing-twist decomposition.
          */
 
-        if(this.__bone_internal.parent != this.__frame_internal) {
+        //if(this.__bone_internal.parent != this.__frame_internal) {
             //sheer paranoia
             this.__bone_internal.emancipate();
             this.__bone_internal.reset();
-            this.__bone_internal.localMBasis.refreshPrecomputed();
+            this.__bone_internal.localMBasis.lazyRefresh();
             this.__frame_internal.emancipate();
             this.__frame_internal.reset();
-            this.__frame_internal.localMBasis.refreshPrecomputed();
-            this.__bone_internal.setParent(this.__frame_internal);
+            this.__frame_internal.localMBasis.lazyRefresh();
+            this.__frame_internal.markDirty()
+            this.__bone_internal.setRelativeToParent(this.__frame_internal);
             this.__bone_internal.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
-        }
+        //}
 
         this.__frame_internal.adoptLocalValuesFromObject3D(this.forBone);        
 
@@ -216,15 +256,16 @@ export class Twist extends LimitingReturnful {
         positions.array[5] = newZ.z;
         positions.needsUpdate = true;
 
-        if(this.__bone_internal.localMBasis.rotation.getAngle() > this.range/2) {
+        if(this.__bone_internal.localMBasis.rotation.shorten().getAngle() > this.range/2) {
             this.zhint.material = this.zhintmat_ouch;
         } else {
             this.zhint.material = this.zhintmat_safe;
         }
 
         //put everything back the way we found it.
-        this.__bone_internal.setParent(this.__frame_internal);
-        this.__bone_internal.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
+        this.__bone_internal.setRelativeToParent(this.__frame_internal);
+        this.__bone_internal.adoptLocalValuesFromIKNode(this.boneCanonical);
+        this.__frame_internal.adoptLocalValuesFromIKNode(this.frameCanonical);
     }
 
     /**a callback function to determine whether to display this constraint */
@@ -309,47 +350,3 @@ class TwistConstraintDisplay extends THREE.Mesh {
     }
 }
 
-
-
-/**
- * 
-class TwistConstraintDisplay extends THREE.Mesh {
-    forTwist = null;
-    mesh = null;
-    static material = new THREE.MeshBasicMaterial({ color: 0x00aa77, side: THREE.DoubleSide});
-    constructor(range = Math.PI*2-0.0001, displayRadius = 0.1, forTwist = null) {
-        let geo = new THREE.CircleGeometry(displayRadius, 100, (Math.PI / 2) - (range/2), range);
-        super(geo, TwistConstraintDisplay.material);
-        this.displayRadius = displayRadius;
-        this.rotation.x = Math.PI/2;
-        this.forTwist = forTwist;
-    }
-
-    updateGeo(range = this?.forTwist?.range ?? this.range, radius = this.displayRadius) {
-        if(range == null) 
-            throw new Error("needs a range");
-        this.displayRadius = radius;
-        this.geometry.dispose();
-        this.geometry = new THREE.CircleGeometry(this.displayRadius, 100, (Math.PI / 2) - (range/2), range);
-        this.rotation.x = Math.PI/2;
-    }
-
-    setVisibilityCondition(visibleCallback) {
-        if (visibleCallback ==null) 
-            this._visibilityCondition = (forConstraint, forBone) => true;
-        else { 
-            this._visibilityCondition = visibleCallback;
-        }
-    }
-    _visibilityCondition(forConstraint, forBone) {
-        return true;
-    }
-
-    set visible(val) {
-        this._visible = val; 
-    }
-    get visible() {
-        return this._visible && this._visibilityCondition(this.forTwist, this.forTwist.forBone);
-    }
-}
- */
