@@ -36,7 +36,7 @@ export class Vec3 {
     }
 
     /**returns the cross product of this vector and the input vector.**/
-    cross(input, storeIn) {        
+    cross(input, storeIn = new Vec3()) {        
         storeIn.setComponents(
             this.y * input.z - this.z * input.y,
             this.z * input.x - this.x * input.z,
@@ -66,7 +66,7 @@ export class Vec3 {
                 return result.setComponents(0, inverse * z, -inverse * y);
             } else if (Math.abs(y) <= threshold) {
                 let inverse = 1 / Math.sqrt(x * x + z * z);
-                return result.set(-inverse * z, 0, inverse * x);
+                return result.setComponents(-inverse * z, 0, inverse * x);
             }
             let inverse = 1 / Math.sqrt(x * x + y * y);
             return result.setComponents(inverse * y, -inverse * x, 0);
@@ -292,8 +292,8 @@ export class Vec3 {
         return this;
     }
 
-    divClone(scalar) {
-        let result = this.clone();
+    divClone(scalar, result = this.clone()) {
+        result.set(this);
         result.div(scalar);
         return result;
     }
@@ -306,8 +306,8 @@ export class Vec3 {
         return this;
     }
 
-    multClone(scalar) {
-        let result = this.clone();
+    multClone(scalar, result = this.clone()) {
+        result.set(this);
         result.mult(scalar);
         return result;
     }
@@ -358,8 +358,7 @@ export class Vec3 {
         return this;
     }
 
-    addClone(v) {
-        let result = this.clone();
+    addClone(v, result = this.clone()) {
         result.add(v);
         return result;
     }
@@ -373,8 +372,7 @@ export class Vec3 {
         return this;
     }
 
-    subClone(v) {
-        let result = this.clone();
+    subClone(v, result = this.clone()) {
         result.sub(v);
         return result;
     }
@@ -457,6 +455,14 @@ export class Vec3 {
     release() {
         this.amFree = true;
         return this;
+    }
+
+    toJSON() {
+        return [this.x, this.y, this.z];
+    }
+
+    static fromJSON(arr, pool) {
+        return pool.new_Vec3(arr[0], arr[1], arr[2]);
     }
 
     /** 
@@ -707,7 +713,7 @@ export class Vec3Pool {
     }
 }
 
-window.globalVecPool = new Vec3Pool(1000);
+window.globalVecPool = new Vec3Pool(10000);
 
 /**
  * ephemeral vector from components

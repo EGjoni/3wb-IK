@@ -5,20 +5,33 @@ import { Vec3, any_Vec3 } from "../../../util/vecs.js";
 import { Ray } from "../../../util/Ray.js";
 import { IKNode, TrackingNode } from "../../../util/nodes/IKNodes.js";
 import { generateUUID } from "../../../util/uuid.js";
-import { Constraint, Limiting, LimitingReturnful } from "../Constraint.js";
+const { Constraint, Limiting} = await import( "../Constraint.js");
+import { Saveable } from '../../../util/loader/saveable.js';
 
 
 export class Twist extends Limiting {
     static TAU = Math.PI * 2;
     static PI = Math.PI;
-    static totalTwists = 0;
+    static totalInstances = 0;
     display = null// new TwistConstraintDisplay();
     zHint = null //line along the z-axis to visualize twist affordance;
     displayGroup = new Group();
     swing = new Rot(1,0,0,0);
     twist = new Rot(1,0,0,0); 
     workingVec = new Vec3(0,0,0);
+    baseZ = 0;
     
+    static fromJSON(json, loader, pool, scene) {
+        let result = new Twist(null, json.range, null, null, json.ikd, pool);
+        return result;
+    }
+    async postPop(json, loader, pool) {
+        await super.postPop(json, loader, pool, scene);
+        this.initTwistNodes();
+        this.setBaseZ(parseFloat(json.baseZ));
+        this.setRange(parseFloat(json.range));
+        return this;
+    }
 
     /**
      * Defines "twist" like limits around an axis. The input expected is a reference frame in the space of the parent bone.
@@ -43,13 +56,13 @@ export class Twist extends Limiting {
      * @param {*} ikd optional  unique string identifier
      * @param {*} pool 
      */
-    constructor(forBone, range=2*Math.PI-0.0001, inBasis = undefined, visibilityCondition=undefined, ikd = 'Twist-'+(Twist.totalTwists++), pool=noPool) {
+    constructor(forBone, range=2*Math.PI-0.0001, inBasis = undefined, visibilityCondition=undefined, ikd = 'Twist-'+(Twist.totalInstances++), pool=noPool) {
         let basis = inBasis;
-        if(inBasis == null)
-            basis = new IKNode(null, null, undefined, pool);
+        if(inBasis == null && !Constraint.loadMode)
+            basis = new IKNode(null, null, undefined);
         super(forBone, basis, ikd, pool);
         
-        this.tempNode2 = new IKNode(null, null, undefined, pool);
+        
         if(this.forBone) {
             this.forBone.springy = true;
         }
@@ -65,23 +78,27 @@ export class Twist extends Limiting {
         this.zhintmat_ouch = new THREE.LineBasicMaterial({ color: new THREE.Color(0.9,0,0.3), linewidth: 3});
         this.zhint = new THREE.Line(this.zhintgeo, this.zhintmat_safe);
         this.displayGroup.add(this.zhint);
-        this.layers = new LayerGroup(this);
+        this.layers = new LayerGroup(this);      
+        
+        if(!Constraint.loadMode) {
+            this.initTwistNodes();
+            if(inBasis == undefined && this.forBone != null) {
+                this.setCurrentAsReference();
+            }            
+        }        
+    }
+
+    initTwistNodes() {
         this.__frame_internal = this.tempNode1; 
         this.__bone_internal = this.tempNode2;
         this.__bone_internal.setParent(this.__frame_internal); 
-        this.__frame_calc_internal = new IKNode(undefined, undefined, undefined, this.pool);
-        this.__bone_calc_internal = new IKNode(undefined, undefined, undefined,  this.pool);
+        this.__frame_calc_internal = new IKNode(undefined, undefined, undefined);
+        this.__bone_calc_internal = new IKNode(undefined, undefined, undefined);
         this.__bone_calc_internal.setRelativeToParent(this.__frame_calc_internal);
         /**@type {IKNode} */
         this.frameCanonical = this.basisAxes;
         this.boneCanonical = this.basisAxes.freeClone();
         this.boneCanonical.setParent(this.frameCanonical);
-
-
-        if(inBasis == undefined && this.forBone != null) {
-            this.setCurrentAsReference();
-        }
-        
         let me = this;
         this.displayGroup._visible = true;
         Object.defineProperty(this.displayGroup, 'visible', 
@@ -92,7 +109,6 @@ export class Twist extends Limiting {
 
         this.updateDisplay();
     }
-
 
     /**sets the reference basis of the bone this constraint is attached to as being whatever pose the bone is currently in
      * @return {Twist} this for chaining
@@ -110,6 +126,9 @@ export class Twist extends Limiting {
         this.__frame_internal.localMBasis.lazyRefresh();
         this.frameCanonical.localMBasis.lazyRefresh();
         this.boneCanonical.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
+        this.__frame_calc_internal.adoptLocalValuesFromIKNode(this.frameCanonical);
+        this.__bone_calc_internal.adoptLocalValuesFromIKNode(this.boneCanonical);
+        this.__bone_calc_internal.setRelativeToParent(this.__frame_calc_internal);
         TrackingNode.transferLocalToObj3d(this.frameCanonical.localMBasis, this.displayGroup);
         this.frameCanonical.markDirty();
         this.updateDisplay();
@@ -136,7 +155,8 @@ export class Twist extends Limiting {
         this.__frame_internal.emancipate();
         this.__frame_internal.reset();
         this.__frame_internal.markDirty();
-        this.__frame_internal.updateGlobal();        
+        this.__frame_internal.updateGlobal(); 
+               
         this.updateDisplay();
     }
 
@@ -159,6 +179,16 @@ export class Twist extends Limiting {
         return this.range;
     }
 
+    remove() {
+        this.displayGroup.remove();
+        this.zhint.remove();
+        this.zhintgeo.dispose();
+        if(this.parentConstraint != null) 
+            this.parentConstraint.remove(this);
+        else if(this.forBone != null)
+            this.forBone.constraint = null;
+    }
+
     updateDisplay() {        
         this.display.updateGeo(this.range, this.forBone.height);
         TrackingNode.transferLocalToObj3d(this.frameCanonical.localMBasis, this.displayGroup);
@@ -177,25 +207,24 @@ export class Twist extends Limiting {
      * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring it to.
      */
     getAcceptableRotation (currentState, currentBoneOrientation, desiredRotation, calledBy = null) {
-
-        //let correctAnswer = Rot.fromRot(currentState.localMBasis.rotation);
-        this.__frame_calc_internal.adoptLocalValuesFromIKNode(currentState);       
-        this.__bone_calc_internal.adoptLocalValuesFromIKNode(currentBoneOrientation);
-        this.__frame_calc_internal.rotateByLocal(desiredRotation);        
-        let desiredHeading = this.workingVec.set(this.__bone_calc_internal.getGlobalMBasis().getYHeading());
-        this.__bone_calc_internal.setParent(this.frameCanonical);
-        this.__frame_calc_internal.setParent(this.__bone_calc_internal); 
-        let yAlignRot = this.tempOutRot.setFromVecs(this.__bone_calc_internal.localMBasis.getYHeading(), this.pool.any_Vec3(0,1,0));
-        this.__bone_calc_internal.rotateByLocal(yAlignRot.shorten());
-        this.__bone_calc_internal.localMBasis.rotation.clampToCosHalfAngle(this.coshalfhalfRange);
-        this.__bone_calc_internal.markDirty(); 
-        let backWhence = this.tempOutRot.setFromVecs(this.__bone_calc_internal.getGlobalMBasis().getYHeading(), desiredHeading);
-        this.__bone_calc_internal.rotateByGlobal(backWhence.shorten());
-        this.__frame_calc_internal.updateGlobal();
-        this.__frame_calc_internal.emancipate(); 
-        this.__bone_calc_internal.setRelativeToParent(this.__frame_calc_internal);
-        //this.tempOutRot.setFromRot(this.__frame_calc_internal.localMBasis.rotation);
-        return currentState.localMBasis.rotation.getRotationTo(this.__frame_calc_internal.localMBasis.rotation, this.tempOutRot).shorten();
+        /**get the desired orientation in parentbone space from the composition of currentstate*currentboneorienteation*desiredrotatio
+         * get the rotation that brings that orientation to framecanonical.
+         * do a swingtwist decomposition.
+         * clamp the twist. invert the swing, recompose the two, then apply that to framecanonical's rotation to get back to the acceptable version of the desired orientation.
+         */
+        this.__frame_calc_internal.adoptLocalValuesFromIKNode(currentState); 
+        this.__frame_calc_internal.rotateByLocal(desiredRotation);
+        let currentOrientation = currentState.localMBasis.rotation.applyAfter(currentBoneOrientation.localMBasis.rotation, this.tempRot1);
+        let desiredOrientation = desiredRotation.applyAfter(currentOrientation, this.tempRot2);
+        let canonToDesired = this.frameCanonical.getGlobalMBasis().rotation.getRotationTo(desiredOrientation, this.tempRot2);
+        this.tempVec1.setComponents(0, 1, 0);
+        this.frameCanonical.localMBasis.rotation.applyToVec(this.tempVec1, this.tempVec1);
+        canonToDesired.getSwingTwist(this.tempVec1, this.swing, this.twist);
+        this.twist.clampToCosHalfAngle(this.coshalfhalfRange);
+        let clampedDesireTarget = this.swing.applyAfter(this.twist, this.tempOutRot)
+        let frameToClampedTarget = clampedDesireTarget.applyAfter(this.frameCanonical.localMBasis.rotation, this.tempOutRot);
+        let result_maybe = currentOrientation.getRotationTo(frameToClampedTarget);
+        return result_maybe;
     }
 
     /**
@@ -347,6 +376,11 @@ class TwistConstraintDisplay extends THREE.Mesh {
     }
     get visible() {
         return this._visible && this._visibilityCondition(this.forTwist, this.forTwist.forBone);
+    }
+
+    dispose() {
+        this.geometry.dispose();
+        this.remove();
     }
 }
 

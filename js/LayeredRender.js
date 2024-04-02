@@ -3,6 +3,7 @@ const THREE = await import('three');
 export class LayeredRender {
     constructor(renderer, width, height, ...callbacks) {
         this.renderer = renderer;
+        this.domElement = renderer.domElement;
         this.callbacks = [...callbacks];
         this.renderTargets = [];
         this.needClear = new Array(callbacks.length).fill(false);

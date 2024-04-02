@@ -6,8 +6,8 @@ import { Ray } from "./Ray.js";
 export class MRotation {
     static IDENTITY = new MRotation(1.0, 0.0, 0.0, 0.0, false);
 
-    constructor(q0=1.0, q1=0.0, q2=0.0, q3=0.0, needsNormalization = false) {
-        if(!(Number.isFinite(q0))) {
+    constructor(q0 = 1.0, q1 = 0.0, q2 = 0.0, q3 = 0.0, needsNormalization = false) {
+        if (!(Number.isFinite(q0))) {
             throw new Error("constructor only supports quaternion component inputs");
         }
         this.w = q0;
@@ -16,19 +16,19 @@ export class MRotation {
         this.z = q3;
 
         if (needsNormalization) {
-            this.setToNormalized();
+            this.normalize();
         }
     }
-    
+
 
     clone() {
         return new MRotation(this.w, this.x, this.y, this.z);
     }
 
- 
+
 
     static _maybeUnflattenMatrix(arr) {
-        if(arr.length == 9) {
+        if (arr.length == 9) {
             return [
                 [arr[0], arr[3], arr[6]],
                 [arr[1], arr[4], arr[7]],
@@ -39,45 +39,45 @@ export class MRotation {
     }
 
 
-  /**
-   *   SPICE Quaternion Multiplication Formula
-   ---------------------------------------
+    /**
+     *   SPICE Quaternion Multiplication Formula
+     ---------------------------------------
+  
+     Given a SPICE quaternion
+        Q = ( q0, q1, q2, q3 )
+     corresponding to rotation axis A and angle theta as above, we can
+     represent Q using "scalar + vector" notation as follows:
+        s =   q0           = cos(theta/2)
+        v = ( q1, q2, q3 ) = sin(theta/2) * A
+        Q = s + v
+     Let Q1 and Q2 be SPICE quaternions with respective scalar
+     and vector parts s1, s2 and v1, v2:
+        Q1 = s1 + v1
+        Q2 = s2 + v2
+     We represent the dot product of v1 and v2 by
+        <v1, v2>
+     and the cross product of v1 and v2 by
+        v1 x v2
+     Then the SPICE quaternion product is
+  
+        Q1*Q2 = s1*s2 - <v1,v2>  + s1*v2 + s2*v1 + (v1 x v2)
+      */
 
-   Given a SPICE quaternion
-      Q = ( q0, q1, q2, q3 )
-   corresponding to rotation axis A and angle theta as above, we can
-   represent Q using "scalar + vector" notation as follows:
-      s =   q0           = cos(theta/2)
-      v = ( q1, q2, q3 ) = sin(theta/2) * A
-      Q = s + v
-   Let Q1 and Q2 be SPICE quaternions with respective scalar
-   and vector parts s1, s2 and v1, v2:
-      Q1 = s1 + v1
-      Q2 = s2 + v2
-   We represent the dot product of v1 and v2 by
-      <v1, v2>
-   and the cross product of v1 and v2 by
-      v1 x v2
-   Then the SPICE quaternion product is
 
-      Q1*Q2 = s1*s2 - <v1,v2>  + s1*v2 + s2*v1 + (v1 x v2)
-    */
-
-    
 
     /**
-	 *  Get an array representing the 4X4 matrix corresponding to this rotation instance. 
-	 * Indices are in column major order. In other words 
-	 *<br/> 
-	 * 0,  4,  8,  12 <br/>  
-	 * 1,  5,  9,  13 <br/> 
-	 * 2,  6, 10, 14 <br/>
- 	 * 3,  7, 11, 15 <br/>
-	 * */
-	toMatrix4Val() {
-		result = new Array(16); 
-		return toMatrix4Val(result, false); 
-	}
+     *  Get an array representing the 4X4 matrix corresponding to this rotation instance. 
+     * Indices are in column major order. In other words 
+     *<br/> 
+     * 0,  4,  8,  12 <br/>  
+     * 1,  5,  9,  13 <br/> 
+     * 2,  6, 10, 14 <br/>
+       * 3,  7, 11, 15 <br/>
+     * */
+    toMatrix4Val() {
+        result = new Array(16);
+        return toMatrix4Val(result, false);
+    }
 
     toMatrix4Val(storeIn, zeroOut = true) {
         let twtw = this.w * this.w;
@@ -90,7 +90,7 @@ export class MRotation {
         let tyty = this.y * this.y;
         let tytz = this.y * this.z;
         let tztz = this.z * this.z;
-    
+
         storeIn[0] = 2.0 * (twtw + txtx) - 1.0;
         storeIn[1] = 2.0 * (txty - twtz);
         storeIn[2] = 2.0 * (txtz + twty);
@@ -101,7 +101,7 @@ export class MRotation {
         storeIn[9] = 2.0 * (tytz + twtx);
         storeIn[10] = 2.0 * (twtw + tztz) - 1.0;
         storeIn[15] = 1.0;
-    
+
         if (zeroOut) {
             storeIn[3] = 0.0;
             storeIn[7] = 0.0;
@@ -110,7 +110,7 @@ export class MRotation {
             storeIn[13] = 0.0;
             storeIn[14] = 0.0;
         }
-    
+
         return storeIn;
     }
 
@@ -151,47 +151,46 @@ export class MRotation {
             }
         }
         return quat;
-    }   
-    
+    }
+
 }
 
 // Helper function to convert radians to degrees, as JavaScript's Math object works in radians
-Math.toDegrees = function(radians) {
+Math.toDegrees = function (radians) {
     return radians * (180 / Math.PI);
 };
 
 
 export class Rot {
     workingInput = new Vec3();
-	workingOutput = new Vec3();
-	constructor(w, x, y, z, needsNormalization = false) {
-        if((x == 1 && w == 0) || isNaN(w) || isNaN(x) || !(y instanceof Number || Number.isFinite(y))) {
-			throw new Error("I call bullshit");
-		}
-		this.w = w;
+    workingOutput = new Vec3();
+    constructor(w, x, y, z, needsNormalization = false) {
+        if ((x == 1 && w == 0) || isNaN(w) || isNaN(x) || !(y instanceof Number || Number.isFinite(y))) {
+            throw new Error("I call bullshit");
+        }
+        this.w = w;
         this.x = x;
         this.y = y;
         this.z = z;
-        if(needsNormalization) this.normalize();
-        
-	};
+        if (needsNormalization) this.normalize();
+    };
 
-	static fromVecs(v1, v2) {
-		let result = new Rot(1,0,0,0)
-		result.setFromVecs(v1, v2);
-		return result;
-	}
-
-	static fromRot(r) {
-		return new Rot(r.w, r.x, r.y, r.z);
-	}
-
-    static fromAxisAngle(axis, angle) {
-        return new Rot(1,0,0,0).setFromAxisAngle(axis, angle);
+    static fromVecs(v1, v2) {
+        let result = new Rot(1, 0, 0, 0)
+        result.setFromVecs(v1, v2);
+        return result;
     }
 
-    static fromMatrix3Val(storeIn = new Rot(1,0,0,0)) {
-        const {tw, tx, ty, tz} = this;
+    static fromRot(r) {
+        return new Rot(r.w, r.x, r.y, r.z);
+    }
+
+    static fromAxisAngle(axis, angle) {
+        return new Rot(1, 0, 0, 0).setFromAxisAngle(axis, angle);
+    }
+
+    static fromMatrix3Val(storeIn = new Rot(1, 0, 0, 0)) {
+        const { tw, tx, ty, tz } = this;
 
         const twtw = tw * tw;
         const twtx = tw * tx;
@@ -218,41 +217,49 @@ export class Rot {
         return storeIn;
     }
 
+    toJSON() {
+        return {w: this.w, x: this.x, y: this.y, z: this.z};
+    }
 
-	/**
-	 * returns a new Rotation that is the Hamilton quaternion multiplication of the input Rotations
-	 * @param {Rot} a 
-	 * @param {Rot} b 
-	 * @returns 
-	 */
-	
+    static fromJSON(obj) {
+        return new Rot(obj.w, obj.x, obj.y, obj.z);
+    }
+
+
+    /**
+     * returns a new Rotation that is the Hamilton quaternion multiplication of the input Rotations
+     * @param {Rot} a 
+     * @param {Rot} b 
+     * @returns 
+     */
+
     static multiply(a, b, out = new Rot()) {
-		const aw = a.w, ax = a.x, ay = a.y, az = a.z; 
-		const bw = b.w, bx = b.x, by = b.y, bz = b.z; 
+        const aw = a.w, ax = a.x, ay = a.y, az = a.z;
+        const bw = b.w, bx = b.x, by = b.y, bz = b.z;
         out.w = aw * bw - ax * bx - ay * by - az * bz;
         out.x = aw * bx + ax * bw + ay * bz - az * by;
         out.y = aw * by - ax * bz + ay * bw + az * bx;
         out.z = aw * bz + ax * by - ay * bx + az * bw;
         return out;
-    }   
+    }
 
     static pre_multiply(a, b) {
         this.multiply(b, a);
     }
-    
+
 
     /**
      * @return the rotation which, if applied to something, would give the same result
      * as first applying the input rotation @param {Rot} r to that thing and then applying
      * this rotation to that thing afterward.*/
     applyAfter(r, storeIn = new Rot(1, 0, 0, 0)) {
-        const aw = this.w, ax = this.x, ay=this.y, az = this.z;
-		const bw = r.w, bx = r.x, by = r.y, bz = r.z;
+        const aw = this.w, ax = this.x, ay = this.y, az = this.z;
+        const bw = r.w, bx = r.x, by = r.y, bz = r.z;
         return storeIn.setComponents( //equivalent to pre_multiply
             aw * bw - (bx * ax + by * ay + bz * az),
             aw * bx + bw * ax + (by * az - bz * ay),
             aw * by + bw * ay + (bz * ax - bx * az),
-            aw * bz + bw * az + (bx * ay - by * ax), 
+            aw * bz + bw * az + (bx * ay - by * ax),
             false);
     }
 
@@ -309,56 +316,56 @@ export class Rot {
      * @param {Rot} r rotation to that thing afterward.*/
     applyBefore(r, storeIn = new Rot(1, 0, 0, 0)) {
         const aw = r.w, bx = r.x, by = r.y, bz = r.z;
-        const bw = this.w, ax = this.x, ay=this.y, az = this.z;
+        const bw = this.w, ax = this.x, ay = this.y, az = this.z;
         return storeIn.setComponents( //equivalent to pre_multiply
             aw * bw - (bx * ax + by * ay + bz * az),
             aw * bx + bw * ax + (by * az - bz * ay),
             aw * by + bw * ay + (bz * ax - bx * az),
-            aw * bz + bw * az + (bx * ay - by * ax), 
+            aw * bz + bw * az + (bx * ay - by * ax),
             false);
     }
 
 
-    
-    applyInverseToRot(r, storeIn = new Rot(1,0,0,0)) {
-        const {w,x,y,z} = this; 
-        let nmsr = -1/(w*w + x*x + y*y + z*z);
-        const tw = -w*nmsr, tx = x*nmsr, ty= y*nmsr, tz = z*nmsr;        
-		const rw = r.w, rx = r.x, ry = r.y, rz = r.z;
+
+    applyInverseToRot(r, storeIn = new Rot(1, 0, 0, 0)) {
+        const { w, x, y, z } = this;
+        let nmsr = -1 / (w * w + x * x + y * y + z * z);
+        const tw = -w * nmsr, tx = x * nmsr, ty = y * nmsr, tz = z * nmsr;
+        const rw = r.w, rx = r.x, ry = r.y, rz = r.z;
 
         return storeIn.setComponents(
             rw * tw - (rx * tx + ry * ty + rz * tz),
             rx * tw + rw * tx + (ry * tz - rz * ty),
             ry * tw + rw * ty + (rz * tx - rx * tz),
-            rz * tw + rw * tz + (rx * ty - ry * tx), 
+            rz * tw + rw * tz + (rx * ty - ry * tx),
             false
         );
     }
 
     /**applies the conjugate of this rotation to the input rotation.
      * faster than applyInverseToRot, but presumes normalization */
-    applyConjugateToRot(r, storeIn = new Rot(1,0,0,0)) {
-        const tw = this.w, tx = -this.x, ty= -this.y, tz = -this.z;
-		const rw = r.w, rx = r.x, ry = r.y, rz = r.z;
+    applyConjugateToRot(r, storeIn = new Rot(1, 0, 0, 0)) {
+        const tw = this.w, tx = -this.x, ty = -this.y, tz = -this.z;
+        const rw = r.w, rx = r.x, ry = r.y, rz = r.z;
         return storeIn.setComponents(
             rw * tw - (rx * tx + ry * ty + rz * tz),
             rx * tw + rw * tx + (ry * tz - rz * ty),
             ry * tw + rw * ty + (rz * tx - rx * tz),
-            rz * tw + rw * tz + (rx * ty - ry * tx), 
+            rz * tw + rw * tz + (rx * ty - ry * tx),
             false
         );
     }
 
     /**applies this rotation to the conjugate of the input rotation.
      * presumes normalization */
-    applyToConjugateOfRot(r, storeIn = new Rot(1,0,0,0)) {
-        const tw = this.w, tx = this.x, ty= this.y, tz = this.z;
-		const rw = r.w, rx = -r.x, ry = -r.y, rz = -r.z;
+    applyToConjugateOfRot(r, storeIn = new Rot(1, 0, 0, 0)) {
+        const tw = this.w, tx = this.x, ty = this.y, tz = this.z;
+        const rw = r.w, rx = -r.x, ry = -r.y, rz = -r.z;
         return storeIn.setComponents(
             rw * tw - (rx * tx + ry * ty + rz * tz),
             rx * tw + rw * tx + (ry * tz - rz * ty),
             ry * tw + rw * ty + (rz * tx - rx * tz),
-            rz * tw + rw * tz + (rx * ty - ry * tx), 
+            rz * tw + rw * tz + (rx * ty - ry * tx),
             false
         );
     }
@@ -372,13 +379,13 @@ export class Rot {
     getRotationTo(target, storeIn = Rot.IDENTITY.clone()) {
         const qaw = this.w, qax = -this.x, qay = -this.y, qaz = -this.z // conjugate of this quaternion
         const qbw = target.w, qbx = target.x, qby = target.y, qbz = target.z;
-		
+
 
         storeIn.w = qaw * qbw - qax * qbx - qay * qby - qaz * qbz;
-		storeIn.x = qax * qbw + qaw * qbx + qay * qbz - qaz * qby;
-		storeIn.y = qay * qbw + qaw * qby + qaz * qbx - qax * qbz;
-		storeIn.z = qaz * qbw + qaw * qbz + qax * qby - qay * qbx;
-
+        storeIn.x = qax * qbw + qaw * qbx + qay * qbz - qaz * qby;
+        storeIn.y = qay * qbw + qaw * qby + qaz * qbx - qax * qbz;
+        storeIn.z = qaz * qbw + qaw * qbz + qax * qby - qay * qbx;
+        storeIn.shorten();
         //inlined the math to avoid the object instantiation required by target.multiply(this.conjugate())
         return storeIn;
     }
@@ -396,71 +403,63 @@ export class Rot {
      * @param {Rot} storeIn an optional Rot instance to store the result in
      * @returns 
      */
-    applyWithin(r, storeIn = new Rot(1,0,0,0)) {
+    applyWithin(r, storeIn = new Rot(1, 0, 0, 0)) {
         return this.applyToConjugateOfRot(r, storeIn);
     }
-	
 
-	setFromVecs(u, v) {
+
+    setFromVecs(u, v) {
         let normProduct = u.mag() * v.mag();
-        
-		if (normProduct == 0) {
-			this.w = 1;
-			this.x = 0;
-			this.y = 0;
-			this.z = 0;
-			return;
-		}
 
-		let dot = u.dot(v);
+        if (normProduct == 0) {
+            this.w = 1;
+            this.x = 0;
+            this.y = 0;
+            this.z = 0;
+            return this;
+        }
 
-		if (dot < ((2.0e-15 - 1.0) * normProduct)) {
-			// special case u = -v: we select a PI angle rotation around
-			// an arbitrary vector orthogonal to u
-			let w = u.getOrthogonal();
-			this.w = 0.0;
-			this.x = -w.x;
-			this.y = -w.y;
-			this.z = -w.z;
-		} else {
-			// general case: (u, v) defines a plane, we select
-			// the shortest possible rotation: axis orthogonal to this plane
-			this.w = Math.sqrt(0.5 * (1.0 + dot / normProduct));
-			let coeff = 1.0 / (2.0 * this.w * normProduct);
-			let q = v.cross(u, this.workingInput);
-			this.x = coeff * q.x;
-			this.y = coeff * q.y;
-			this.z = coeff * q.z;
-		}
+        let dot = u.dot(v);
+
+        if (dot < ((2.0e-15 - 1.0) * normProduct)) {
+            // special case u = -v: we select a PI angle rotation around
+            // an arbitrary vector orthogonal to u
+            let w = u.getOrthogonal();
+            this.w = 0.0;
+            this.x = -w.x;
+            this.y = -w.y;
+            this.z = -w.z;
+        } else {
+            // general case: (u, v) defines a plane, we select
+            // the shortest possible rotation: axis orthogonal to this plane
+            this.w = Math.sqrt(0.5 * (1.0 + dot / normProduct));
+            let coeff = 1.0 / (2.0 * this.w * normProduct);
+            let q = v.cross(u, this.workingInput);
+            this.x = coeff * q.x;
+            this.y = coeff * q.y;
+            this.z = coeff * q.z;
+        }
         return this;
     }
 
-	/**
-	 * @param updates container to have values representing this rotation as an array of 4 numbers corresponding to the W (aka scalar), X, Y, and Z values in that order.
-	 */
-	setFromArray(container) {
-		this.setComponents(container[0], container[1], container[2], container[3], container[4]);
-	}
-
-    setToNormalized() {
-        const norm = Math.sqrt(this.w * this.w + this.x * this.x + this.y * this.y + this.z * this.z);
-        this.w /= norm;
-        this.x /= norm;
-        this.y /= norm;
-        this.z /= norm;
+    /**
+     * @param updates container to have values representing this rotation as an array of 4 numbers corresponding to the W (aka scalar), X, Y, and Z values in that order.
+     */
+    setFromArray(container) {
+        this.setComponents(container[0], container[1], container[2], container[3], container[4]);
     }
 
-	clone(normalize = false) {
-		return new Rot(this.w, this.x, this.y, this.z, normalize);
-	}
+    clone(normalize = false) {
+        return new Rot(this.w, this.x, this.y, this.z, normalize);
+    }
 
-    setComponents(w,x,y,z, normalize = false) {
+    setComponents(w, x, y, z, normalize = false) {
         this.w = w;
         this.x = x;
         this.y = y;
         this.z = z;
-        if(normalize) {
-            const invmag = 1/Math.sqrt(w*w + x*x + y*y + z*z);
+        if (normalize) {
+            const invmag = 1 / Math.sqrt(w * w + x * x + y * y + z * z);
             this.w *= invmag;
             this.x *= invmag;
             this.y *= invmag;
@@ -472,26 +471,26 @@ export class Rot {
     setFromRot(inR) {
         this.w = inR.w;
         this.x = inR.x;
-        this.y = inR.y; 
+        this.y = inR.y;
         this.z = inR.z;
         return this;
     }
 
 
-	setFromAxisAngle(axis, angle) {
+    setFromAxisAngle(axis, angle) {
         const norm = Math.sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
         if (norm === 0) throw new Error("Zero Norm for Rotation defining vector");
 
-        const halfAngle = 0.5 * angle;
+        const halfAngle = -0.5 * angle;
         const coeff = Math.sin(halfAngle) / norm;
 
         this.w = Math.cos(halfAngle);
-        this.x = coeff * axis.x; 
-        this.y = coeff * axis.y; 
+        this.x = coeff * axis.x;
+        this.y = coeff * axis.y;
         this.z = coeff * axis.z;
         return this;
     }
-    
+
     /**clamps as efficiently as I could come up with contingent on user 
      * having cached the cosine half value. 
      * 
@@ -505,49 +504,49 @@ export class Rot {
     */
     clampToCosHalfAngle(cosHalfAngle) {
         /*let newCoeff = 1-(cosHalfAngle*Math.abs(cosHalfAngle));
-		let currentCoeff = this.q1 * this.q1 + this.q2 * this.q2 + this.q3 * this.q3;
-		if(newCoeff >= currentCoeff) 
-			return;
-		else {
-			this.q0 = this.q0 < 0 ? -cosHalfAngle : cosHalfAngle;
-			let compositeCoeff = Math.sqrt(newCoeff / currentCoeff); 
-			this.q1*= compositeCoeff;
-			this.q2*= compositeCoeff;
-			this.q3*= compositeCoeff;
-		}*/
-        this.shorten();
-        let prevCoeff = (1-(this.q0*this.q0));
-        if(cosHalfAngle <= this.q0 || prevCoeff == 0) {
-            return this;
-        }
+        let currentCoeff = this.q1 * this.q1 + this.q2 * this.q2 + this.q3 * this.q3;
+        if(newCoeff >= currentCoeff) 
+            return;
         else {
-            let compositeCoeff = Math.sqrt((1-(cosHalfAngle * cosHalfAngle)) / prevCoeff)
-            this.q0 = cosHalfAngle;
+            this.q0 = this.q0 < 0 ? -cosHalfAngle : cosHalfAngle;
+            let compositeCoeff = Math.sqrt(newCoeff / currentCoeff); 
             this.q1*= compositeCoeff;
             this.q2*= compositeCoeff;
             this.q3*= compositeCoeff;
+        }*/
+        this.shorten();
+        let prevCoeff = (1 - (this.q0 * this.q0));
+        if (cosHalfAngle <= this.q0 || prevCoeff == 0) {
+            return this;
+        }
+        else {
+            let compositeCoeff = Math.sqrt((1 - (cosHalfAngle * cosHalfAngle)) / prevCoeff)
+            this.q0 = cosHalfAngle;
+            this.q1 *= compositeCoeff;
+            this.q2 *= compositeCoeff;
+            this.q3 *= compositeCoeff;
         }
         return this;
-	}
+    }
 
     clampToAngle(angle) {
-		let cosHalfAngle = Math.cos(0.5*angle);
-		this.clampToCosHalfAngle(cosHalfAngle);
-	}
+        let cosHalfAngle = Math.cos(0.5 * angle);
+        this.clampToCosHalfAngle(cosHalfAngle);
+    }
 
 
 
-	/**returns a clone of the conjugate (as distinguished from inverse in that this presumes unitarity) of this rotation
+    /**returns a clone of the conjugate (as distinguished from inverse in that this presumes unitarity) of this rotation
      * @param storein an optional Rot to hold the result
      * @return a clone of this rotation representing its inverse / conjugate
      */
-	conjugated(storein = new Rot(1,0,0,0)) {
-		storein.w = this.w;
+    conjugated(storein = new Rot(1, 0, 0, 0)) {
+        storein.w = this.w;
         storein.x = -this.x;
-        storein.y = -this.y; 
+        storein.y = -this.y;
         storein.z = -this.z;
         return storein;
-	}
+    }
 
     /**
      * in-place conjugate (as distinguished from inverse in that this presumes unitarity) of this rotation. If you want a clone instead, use the past tense "conjugated".
@@ -557,17 +556,17 @@ export class Rot {
         this.x *= -1;
         this.y *= -1;
         this.z *= -1;
-		return this;
-	}
+        return this;
+    }
 
     /**
      * sets the values of the given Rot to the true inverse of this rot (as distinguished from the conjugate, which assumes unit quaternion)
      * @param {Rot} storeIn the Rot to store the inverse in
      * @return the provides Rot, with the values set to the inverse of this Rot.
      */
-    invertInto(storeIn = new Rot(1,0,0,0)) {
-        const {w, x, y, z} = this;
-        let negMagSqrecip = -1/(w*w + x*x + y*y + z*z);
+    invertInto(storeIn = new Rot(1, 0, 0, 0)) {
+        const { w, x, y, z } = this;
+        let negMagSqrecip = -1 / (w * w + x * x + y * y + z * z);
         storeIn.w = w * -negMagSqrecip; //note, this is only negated to undeo the previous negation of the reciprocal, not to take advantage of double-cover
         storeIn.x = x * negMagSqrecip;
         storeIn.y = y * negMagSqrecip;
@@ -579,7 +578,7 @@ export class Rot {
      * @return returns a new Rot which is the inverse of this Rot. 
      */
     inverted() {
-        return this.invertInto(new Rot(1,0,0,0));
+        return this.invertInto(new Rot(1, 0, 0, 0));
     }
 
     /**
@@ -587,8 +586,8 @@ export class Rot {
      * @return this rotation for chaining.
      */
     invert() {
-        const {w, x, y, z} = this;
-        let negMagSqrecip = -1/(w*w + x*x + y*y + z*z);
+        const { w, x, y, z } = this;
+        let negMagSqrecip = -1 / (w * w + x * x + y * y + z * z);
         this.w *= -negMagSqrecip; //note, this is only negated to undeo the previous negation of the reciprocal, not to take advantage of double-cover
         this.x *= negMagSqrecip;
         this.y *= negMagSqrecip;
@@ -613,7 +612,7 @@ export class Rot {
      * (Where shortest is defined as whicheve of this rotation or its conjugate have a positive dot product with the identity quaternion)
      */
     shorten() {
-        if(this.w < 0) {
+        if (this.w < 0) {
             return this.flip();
         } else return this;
     }
@@ -624,39 +623,39 @@ export class Rot {
         return this.w * r.w + this.x * r.x + this.y * r.y + this.z * r.z;
     }
 
-	/** 
-	 * sets the values of the given rotation equal to the inverse of this rotation
-	 * @param r the rotation object the reversion will be stored into
+    /** 
+     * sets the values of the given rotation equal to the inverse of this rotation
+     * @param r the rotation object the reversion will be stored into
      * @return r
-	 */
-	setToInversion(r) {
-		this.invertInto(r);
+     */
+    setToInversion(r) {
+        this.invertInto(r);
         return r;
-	}
-	
+    }
+
 
     /**return the squared magnitude for a quick normality check*/
     magSq() {
-        return this.w*this.w + this.x*this.x + this.y*this.y + this.z*this.z;
+        return this.w * this.w + this.x * this.x + this.y * this.y + this.z * this.z;
     }
 
     applyTo(v, output) {
         console.warn("Deprecated overloadable function. Use applyToVec, applyToRay, applyAfter instead")
-        if(output == null) {
+        if (output == null) {
             output = copy;
         }
-        if(v instanceof Vec3) {
+        if (v instanceof Vec3) {
             return this.applyToVec(v, output);
-        } else if(v instanceof Ray) {
+        } else if (v instanceof Ray) {
             return this.applytoRay()
         }
         return output;
     }
-	
-	applyToVec(v, output = any_Vec3()) {        
-		this.applyToVecArr(v.dataBuffer, v.baseIdx, output.dataBuffer, output.baseIdx);
-		return output;
-	}
+
+    applyToVec(v, output = any_Vec3()) {
+        this.applyToVecArr(v.dataBuffer, v.baseIdx, output.dataBuffer, output.baseIdx);
+        return output;
+    }
 
     /**applies this rotation to an input array presumed to represent a 3d vector with contiguous components
      * @param {Array} inputVec the vector array input 
@@ -664,44 +663,44 @@ export class Rot {
      * @param {Array} outVec the output vector to write into
      * @param {Number} outidx the index to start writing from
      */
-	applyToVecArr(inVec, idx, outVec, outidx) {
-        const x = inVec[idx], y = inVec[idx+1], z = inVec[idx+2];
-        const q0 = this.w, q1 = this.x, q2= this.y, q3 = this.z;
+    applyToVecArr(inVec, idx, outVec, outidx) {
+        const x = inVec[idx], y = inVec[idx + 1], z = inVec[idx + 2];
+        const q0 = this.w, q1 = this.x, q2 = this.y, q3 = this.z;
         const s = q1 * x + q2 * y + q3 * z;
-        
+
         outVec[outidx] = 2 * (q0 * (x * q0 - (q2 * z - q3 * y)) + s * q1) - x;
-        outVec[outidx+1] = 2 * (q0 * (y * q0 - (q3 * x - q1 * z)) + s * q2) - y,
-        outVec[outidx+2] = 2 * (q0 * (z * q0 - (q1 * y - q2 * x)) + s * q3) - z
+        outVec[outidx + 1] = 2 * (q0 * (y * q0 - (q3 * x - q1 * z)) + s * q2) - y,
+        outVec[outidx + 2] = 2 * (q0 * (z * q0 - (q1 * y - q2 * x)) + s * q3) - z
         return outVec;
     }
 
-	/**
-	 * applies this rotation to a copy of the input vector.the returned copy is an ephemenral one if you do not manually provide the outvec argument.
-	 * @param v
-	 * @return
-	 */
-	
-	applyToVecClone(inVec, outVec = any_Vec3()) {
-		const x = inVec.x, y = inVec.y, z = inVec.z;
-        const q0 = this.w, q1 = this.x, q2= this.y, q3 = this.z;
+    /**
+     * applies this rotation to a copy of the input vector.the returned copy is an ephemenral one if you do not manually provide the outvec argument.
+     * @param v
+     * @return
+     */
+
+    applyToVecClone(inVec, outVec = any_Vec3()) {
+        const x = inVec.x, y = inVec.y, z = inVec.z;
+        const q0 = this.w, q1 = this.x, q2 = this.y, q3 = this.z;
         const s = q1 * x + q2 * y + q3 * z;
-        
+
         outVec.x = 2 * (q0 * (x * q0 - (q2 * z - q3 * y)) + s * q1) - x;
         outVec.y = 2 * (q0 * (y * q0 - (q3 * x - q1 * z)) + s * q2) - y,
         outVec.z = 2 * (q0 * (z * q0 - (q1 * y - q2 * x)) + s * q3) - z
         return outVec;
-	}
+    }
 
     /**
-	 * applies the inverse of this rotation to a copy of the input vector.the returned copy is an ephemenral one if you do not manually provide the outvec argument.
-	 * @param {(Vec3|Vector3)} u
+     * applies the inverse of this rotation to a copy of the input vector.the returned copy is an ephemenral one if you do not manually provide the outvec argument.
+     * @param {(Vec3|Vector3)} u
      * @param {(Vec3|Vector3)} output vector to store the result of rotaating you
-	 * @return
-	 */
+     * @return
+     */
 
-	applyInverseToVecClone(u, output = any_Vec3()) {
+    applyInverseToVecClone(u, output = any_Vec3()) {
         const x = u.x, y = u.y, z = u.z;
-        const m0 = -this.w, q1 = this.x, q2= this.y, q3 = this.z;
+        const m0 = this.w, q1 = -this.x, q2 = -this.y, q3 = -this.z;
         const s = q1 * x + q2 * y + q3 * z;
 
         output.setComponents(
@@ -709,37 +708,37 @@ export class Rot {
             2 * (m0 * (y * m0 - (q3 * x - q1 * z)) + s * q2) - y,
             2 * (m0 * (z * m0 - (q1 * y - q2 * x)) + s * q3) - z);
         return output;
-	}
+    }
 
 
 
-	static getNormalized(r) {
-		return new Rot(r.w, r.x, r.y, r.z, true);
-	}
+    static getNormalized(r) {
+        return new Rot(r.w, r.x, r.y, r.z, true);
+    }
 
-	applyToRay(rIn, rOut = rIn.clone()) {
-		this.workingInput.x = rIn.p2.x - rIn.p1.x;
-		this.workingInput.y = rIn.p2.y - rIn.p1.y; 
-		this.workingInput.z = rIn.p2.z - rIn.p1.z;
-		
-		this.applyToVec(this.workingInput, this.workingOutput);
+    applyToRay(rIn, rOut = rIn.clone()) {
+        this.workingInput.x = rIn.p2.x - rIn.p1.x;
+        this.workingInput.y = rIn.p2.y - rIn.p1.y;
+        this.workingInput.z = rIn.p2.z - rIn.p1.z;
+
+        this.applyToVec(this.workingInput, this.workingOutput);
         rOut.setP1(rIn.p1);
-		rOut.setHeading(this.workingOutput);
-		return rOut;
-	}
+        rOut.setHeading(this.workingOutput);
+        return rOut;
+    }
 
-	applyInverseToRay(rIn, rOut = rIn.clone()) {
-		this.workingInput.x = rIn.p2.x - rIn.p1.x;
-		this.workingInput.y = rIn.p2.y - rIn.p1.y; 
-		this.workingInput.z = rIn.p2.z - rIn.p1.z;		
+    applyInverseToRay(rIn, rOut = rIn.clone()) {
+        this.workingInput.x = rIn.p2.x - rIn.p1.x;
+        this.workingInput.y = rIn.p2.y - rIn.p1.y;
+        this.workingInput.z = rIn.p2.z - rIn.p1.z;
 
-		this.applyInverseToVector(this.workingInput, this.workingOutput);
-		rOut.setP1(rIn.p1);
-		rOut.setHeading(this.workingOutput);
-		return rOut;
-	}
+        this.applyInverseToVector(this.workingInput, this.workingOutput);
+        rOut.setP1(rIn.p1);
+        rOut.setHeading(this.workingOutput);
+        return rOut;
+    }
 
-    toArray(into = [1,0,0,0]) {
+    toArray(into = [1, 0, 0, 0]) {
         into[0] = this.w;
         into[1] = this.x;
         into[2] = this.y;
@@ -748,14 +747,14 @@ export class Rot {
     }
 
     /**same as toArray. creates an array to return if not provided one to write into*/
-    intoArray(into = [1,0,0,0]) {
+    intoArray(into = [1, 0, 0, 0]) {
         into[0] = this.w;
         into[1] = this.x;
         into[2] = this.y;
         into[3] = this.z;
         return into;
     }
-    
+
 
     get q0() {
         return this.w;
@@ -769,124 +768,122 @@ export class Rot {
     get q3() {
         return this.z;
     }
-	   
-	set q3(val) {
-		this.z = val;
-	}
 
-	set q2(val) {
-		this.y = val;
-	}
+    set q3(val) {
+        this.z = val;
+    }
 
-	set q1(val) {
-		this.x = val;
-	}
+    set q2(val) {
+        this.y = val;
+    }
 
-	set q0(val) {
-		this.w = val
-	}
-	
-	getAngle() {
-		return 2 * Math.acos(Math.max(Math.min(this.w, 1), -1));
+    set q1(val) {
+        this.x = val;
+    }
+
+    set q0(val) {
+        this.w = val
+    }
+
+    getAngle() {
+        return 2 * Math.acos(Math.max(Math.min(this.w, 1), -1));
     }
 
     getAxis(into = any_Vec3()) {
         //this.normalize(); 
-        const squaredSine = 1-(this.w * this.w);
+        const squaredSine = 1 - (this.w * this.w);
         if (squaredSine == 0)
-            return into.setComponents(1,0,0);
-       
+            return into.setComponents(1, 0, 0);
+
         const recip = 1 / Math.sqrt(squaredSine);
-        into.setComponents(this.x*recip, this.y*recip, this.z*recip);
+        into.setComponents(this.x * recip, this.y * recip, this.z * recip);
         return into;
     }
 
-    normalizedClone() {        
+    normalizedClone() {
         return new Rot(this.w, this.x, this.y, this.z, true);
     }
 
     /**normalizes the quaternion representing this rotation and returns it.*/
     normalize() {
-        const norm = 1/Math.sqrt(this.w * this.w + this.x * this.x + this.y * this.y + this.z * this.z);
+        const norm = 1 / Math.sqrt(this.w * this.w + this.x * this.x + this.y * this.y + this.z * this.z);
         if (norm < 1e-15) {
             throw new Error("Zero Norm");
         }
-        this.w *= norm; 
-        this.x *= norm; 
+        this.w *= norm;
+        this.x *= norm;
         this.y *= norm;
         this.z *= norm;
-        return this; 
+        return this;
     }
 
-	
 
-	/*
-	 * interpolate between two rotations (SLERP)
-	 * 
-	 */
-	static fromSlerp(value1, value2, amount)
-	{
-		
-		if(isNaN(amount)) {
-			return new Rot(value1.w, value1.x, value1.y, value1.z);
-		}
-		if (amount < 0.0)
-			return value1;
-		else if (amount > 1.0)
-			return value2;
 
-		let dot = value1.dotProduct(value2);
-		
-		let x2 = value2.x;
-		let y2 = value2.y;
-		let z2 = value2.z;
-		let w2 = value2.w;
+    /*
+     * interpolate between two rotations (SLERP)
+     * 
+     */
+    static fromSlerp(value1, value2, amount) {
 
-		let t1, t2;
+        if (isNaN(amount)) {
+            return new Rot(value1.w, value1.x, value1.y, value1.z);
+        }
+        if (amount < 0.0)
+            return value1;
+        else if (amount > 1.0)
+            return value2;
 
-		let EPSILON = 0.0001;
-		if ((1.0 - dot) > EPSILON)
-		{
-			let angle = Math.acos(dot);
-			let sinAngle = Math.sin(angle);
-			t1 = Math.sin((1.0 - amount) * angle) / sinAngle;
-			t2 = Math.sin(amount * angle) / sinAngle;
-		}
-		else // just lerp
-		{
-			t1 = 1.0 - amount;
-			t2 = amount;
-		}
+        let dot = value1.dotProduct(value2);
 
-		return new Rot(
-				(value1.w * t1) + (w2 * t2),
-				(value1.x * t1) + (x2 * t2),
-				(value1.y * t1) + (y2 * t2),
-				(value1.z * t1) + (z2 * t2));
-	}
+        let x2 = value2.x;
+        let y2 = value2.y;
+        let z2 = value2.z;
+        let w2 = value2.w;
 
-	/** Get the swing rotation and twist rotation for the specified axis. The twist rotation represents the rotation around the
-	 * specified axis. The swing rotation represents the rotation of the specified axis itself, which is the rotation around an
-	 * axis perpendicular to the specified axis. The swing and twist rotation can be used to reconstruct the original
-	 * quaternion: this = swing * twist
-	 * 
-	 * @param axisX the X component of the normalized axis for which to get the swing and twist rotation
-	 * @param axisY the Y component of the normalized axis for which to get the swing and twist rotation
-	 * @param axisZ the Z component of the normalized axis for which to get the swing and twist rotation
-	 * @return an Array of Rot objects. With the first element representing the swing, and the second representing the twist
-	 * @see <a href="http://www.euclideanspace.com/maths/geometry/rotations/for/decomposition">calculation</a> */
-	getSwingTwist (axis, swingOut = new Rot(), twistOut=new Rot()) {
+        let t1, t2;
+
+        let EPSILON = 0.0001;
+        if ((1.0 - dot) > EPSILON) {
+            let angle = Math.acos(dot);
+            let sinAngle = Math.sin(angle);
+            t1 = Math.sin((1.0 - amount) * angle) / sinAngle;
+            t2 = Math.sin(amount * angle) / sinAngle;
+        }
+        else // just lerp
+        {
+            t1 = 1.0 - amount;
+            t2 = amount;
+        }
+
+        return new Rot(
+            (value1.w * t1) + (w2 * t2),
+            (value1.x * t1) + (x2 * t2),
+            (value1.y * t1) + (y2 * t2),
+            (value1.z * t1) + (z2 * t2));
+    }
+
+    /** Get the swing rotation and twist rotation for the specified axis. The twist rotation represents the rotation around the
+     * specified axis. The swing rotation represents the rotation of the specified axis itself, which is the rotation around an
+     * axis perpendicular to the specified axis. The swing and twist rotation can be used to reconstruct the original
+     * quaternion: this = swing * twist
+     * 
+     * @param axisX the X component of the normalized axis for which to get the swing and twist rotation
+     * @param axisY the Y component of the normalized axis for which to get the swing and twist rotation
+     * @param axisZ the Z component of the normalized axis for which to get the swing and twist rotation
+     * @return an Array of Rot objects. With the first element representing the swing, and the second representing the twist
+     * @see <a href="http://www.euclideanspace.com/maths/geometry/rotations/for/decomposition">calculation</a> */
+    getSwingTwist(axis, swingOut = new Rot(), twistOut = new Rot()) {
         this.workingInput.setComponents(this.x, this.y, this.z);
-		let d = this.workingInput.dot(axis);
-		twistOut.setComponents(this.w, axis.x * d, axis.y * d, axis.z * d, true);
-		if (d < 0) twistOut.flip();
-		
-		swingOut.setFromRot(twistOut);
-		swingOut.conjugate();
-		swingOut = Rot.multiply(swingOut, this, swingOut);
-	}
-	
-	static nlerp(r1, r2, t) {
+        let d = this.workingInput.dot(axis);
+        twistOut.setComponents(this.w, axis.x * d, axis.y * d, axis.z * d, true);
+        if (d < 0) twistOut.flip();
+
+        swingOut.setFromRot(twistOut);
+        swingOut.conjugate();
+        swingOut = Rot.multiply(swingOut, this, swingOut);
+    }
+
+    static nlerp(r1, r2, t) {
         return new Rot(
             ((r1.w - r2.w) * t) + r2.w,
             ((r1.x - r2.x) * t) + r2.x,
@@ -896,78 +893,78 @@ export class Rot {
         )
     }
 
-	static orthogonalizeMatrix(m, threshold) {
-		const m0 = m[0], m1 = m[1], m2 = m[2], x00 = m0[0], x01 = m0[1], x02 = m0[2], x10 = m1[0], x11 = m1[1], x12 = m1[2], x20 = m2[0], x21 = m2[1], x22 = m2[2];
-		let fn = 0;
-		let fn1;
+    static orthogonalizeMatrix(m, threshold) {
+        const m0 = m[0], m1 = m[1], m2 = m[2], x00 = m0[0], x01 = m0[1], x02 = m0[2], x10 = m1[0], x11 = m1[1], x12 = m1[2], x20 = m2[0], x21 = m2[1], x22 = m2[2];
+        let fn = 0;
+        let fn1;
 
-		let o = [[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]];
-		let o0 = o[0];
-		let o1 = o[1];
-		let o2 = o[2];
+        let o = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
+        let o0 = o[0];
+        let o1 = o[1];
+        let o2 = o[2];
 
-		// iterative correction: Xn+1 = Xn - 0.5 * (Xn.Mt.Xn - M)
-		let i = 0;
+        // iterative correction: Xn+1 = Xn - 0.5 * (Xn.Mt.Xn - M)
+        let i = 0;
         let mx00, mx10, mx20, mx01, mx11, mx21, mx02, mx12, mx22, corr00, corr01, corr02, corr10, corr11, corr12, corr20, corr21, corr22;
-		while (++i < 11) {
+        while (++i < 11) {
 
-			// Mt.Xn
-			mx00 = m0[0] * x00 + m1[0] * x10 + m2[0] * x20;
-			mx10 = m0[1] * x00 + m1[1] * x10 + m2[1] * x20;
-			mx20 = m0[2] * x00 + m1[2] * x10 + m2[2] * x20;
-			mx01 = m0[0] * x01 + m1[0] * x11 + m2[0] * x21;
-			mx11 = m0[1] * x01 + m1[1] * x11 + m2[1] * x21;
-			mx21 = m0[2] * x01 + m1[2] * x11 + m2[2] * x21;
-			mx02 = m0[0] * x02 + m1[0] * x12 + m2[0] * x22;
-			mx12 = m0[1] * x02 + m1[1] * x12 + m2[1] * x22;
-			mx22 = m0[2] * x02 + m1[2] * x12 + m2[2] * x22;
+            // Mt.Xn
+            mx00 = m0[0] * x00 + m1[0] * x10 + m2[0] * x20;
+            mx10 = m0[1] * x00 + m1[1] * x10 + m2[1] * x20;
+            mx20 = m0[2] * x00 + m1[2] * x10 + m2[2] * x20;
+            mx01 = m0[0] * x01 + m1[0] * x11 + m2[0] * x21;
+            mx11 = m0[1] * x01 + m1[1] * x11 + m2[1] * x21;
+            mx21 = m0[2] * x01 + m1[2] * x11 + m2[2] * x21;
+            mx02 = m0[0] * x02 + m1[0] * x12 + m2[0] * x22;
+            mx12 = m0[1] * x02 + m1[1] * x12 + m2[1] * x22;
+            mx22 = m0[2] * x02 + m1[2] * x12 + m2[2] * x22;
 
-			// Xn+1
-			o0[0] = x00 - 0.5 * (x00 * mx00 + x01 * mx10 + x02 * mx20 - m0[0]);
-			o0[1] = x01 - 0.5 * (x00 * mx01 + x01 * mx11 + x02 * mx21 - m0[1]);
-			o0[2] = x02 - 0.5 * (x00 * mx02 + x01 * mx12 + x02 * mx22 - m0[2]);
-			o1[0] = x10 - 0.5 * (x10 * mx00 + x11 * mx10 + x12 * mx20 - m1[0]);
-			o1[1] = x11 - 0.5 * (x10 * mx01 + x11 * mx11 + x12 * mx21 - m1[1]);
-			o1[2] = x12 - 0.5 * (x10 * mx02 + x11 * mx12 + x12 * mx22 - m1[2]);
-			o2[0] = x20 - 0.5 * (x20 * mx00 + x21 * mx10 + x22 * mx20 - m2[0]);
-			o2[1] = x21 - 0.5 * (x20 * mx01 + x21 * mx11 + x22 * mx21 - m2[1]);
-			o2[2] = x22 - 0.5 * (x20 * mx02 + x21 * mx12 + x22 * mx22 - m2[2]);
+            // Xn+1
+            o0[0] = x00 - 0.5 * (x00 * mx00 + x01 * mx10 + x02 * mx20 - m0[0]);
+            o0[1] = x01 - 0.5 * (x00 * mx01 + x01 * mx11 + x02 * mx21 - m0[1]);
+            o0[2] = x02 - 0.5 * (x00 * mx02 + x01 * mx12 + x02 * mx22 - m0[2]);
+            o1[0] = x10 - 0.5 * (x10 * mx00 + x11 * mx10 + x12 * mx20 - m1[0]);
+            o1[1] = x11 - 0.5 * (x10 * mx01 + x11 * mx11 + x12 * mx21 - m1[1]);
+            o1[2] = x12 - 0.5 * (x10 * mx02 + x11 * mx12 + x12 * mx22 - m1[2]);
+            o2[0] = x20 - 0.5 * (x20 * mx00 + x21 * mx10 + x22 * mx20 - m2[0]);
+            o2[1] = x21 - 0.5 * (x20 * mx01 + x21 * mx11 + x22 * mx21 - m2[1]);
+            o2[2] = x22 - 0.5 * (x20 * mx02 + x21 * mx12 + x22 * mx22 - m2[2]);
 
-			// correction on each elements
-			corr00 = o0[0] - m0[0];
-			corr01 = o0[1] - m0[1];
-			corr02 = o0[2] - m0[2];
-			corr10 = o1[0] - m1[0];
-			corr11 = o1[1] - m1[1];
-			corr12 = o1[2] - m1[2];
-			corr20 = o2[0] - m2[0];
-			corr21 = o2[1] - m2[1];
-			corr22 = o2[2] - m2[2];
+            // correction on each elements
+            corr00 = o0[0] - m0[0];
+            corr01 = o0[1] - m0[1];
+            corr02 = o0[2] - m0[2];
+            corr10 = o1[0] - m1[0];
+            corr11 = o1[1] - m1[1];
+            corr12 = o1[2] - m1[2];
+            corr20 = o2[0] - m2[0];
+            corr21 = o2[1] - m2[1];
+            corr22 = o2[2] - m2[2];
 
-			// Frobenius norm of the correction
-			fn1 = corr00 * corr00 + corr01 * corr01 + corr02 * corr02 +
-					corr10 * corr10 + corr11 * corr11 + corr12 * corr12 +
-					corr20 * corr20 + corr21 * corr21 + corr22 * corr22;
+            // Frobenius norm of the correction
+            fn1 = corr00 * corr00 + corr01 * corr01 + corr02 * corr02 +
+                corr10 * corr10 + corr11 * corr11 + corr12 * corr12 +
+                corr20 * corr20 + corr21 * corr21 + corr22 * corr22;
 
-			// convergence test
-			if (Math.abs(fn1 - fn) <= threshold) {
-				return o;
-			}
+            // convergence test
+            if (Math.abs(fn1 - fn) <= threshold) {
+                return o;
+            }
 
-			// prepare next iteration
-			x00 = o0[0];
-			x01 = o0[1];
-			x02 = o0[2];
-			x10 = o1[0];
-			x11 = o1[1];
-			x12 = o1[2];
-			x20 = o2[0];
-			x21 = o2[1];
-			x22 = o2[2];
-			fn  = fn1;
-		}
-		throw new Exception("Failed to converge on orthogonal matrix after 10 iterations");
-	}
+            // prepare next iteration
+            x00 = o0[0];
+            x01 = o0[1];
+            x02 = o0[2];
+            x10 = o1[0];
+            x11 = o1[1];
+            x12 = o1[2];
+            x20 = o2[0];
+            x21 = o2[1];
+            x22 = o2[2];
+            fn = fn1;
+        }
+        throw new Exception("Failed to converge on orthogonal matrix after 10 iterations");
+    }
 
     toString(asQ = Rot.showQ, showAxAng = Rot.showAxAng) {
         const axis = this.getAxis();
@@ -1013,65 +1010,68 @@ export class Rot {
         }
     }
 
-    toCons(asQ = Rot.showQ, showAxAng = Rot.showAxAng) {
-        console.log(this.toString(asQ, showAxAng));
+    toCons() {
+        console.log(this.toString(true, true));
     }
 
-    static distance(r1, r2, tempRot = new Rot(1,0,0,0)) {
+    static distance(r1, r2, tempRot = new Rot(1, 0, 0, 0)) {
         return r1.applyInverseToRot(r2, tempRot).shorten().getAngle();
     }
 
-	equalTo(m) {
-		return this.applyConjugateToRot(m).getAngle() < 1e-7;
-	}
+    equalTo(m) {
+        return this.applyConjugateToRot(m).getAngle() < 1e-7;
+    }
 }
 
 
 class RotIdentity extends Rot {
     static final = false;
-    constructor() {super(1,0,0,0); RotIdentity.final=true;}
-    
-    clone() {return new Rot(1,0,0,0);}
-    get w() { return 1;}
-    get x() {return 0;}
-    get y() {return 0;}
-    get z() {return 0;}
-    get _w() { return 1;}
-    get _x() {return 0;}
-    get _y() {return 0;}
-    get _z() {return 0;}
+    constructor() { super(1, 0, 0, 0); RotIdentity.final = true; }
+
+    clone() { return new Rot(1, 0, 0, 0); }
+    toJSON() {
+        return {w: 1, x: 0, y: 0, z:0};
+    }
+    get w() { return 1; }
+    get x() { return 0; }
+    get y() { return 0; }
+    get z() { return 0; }
+    get _w() { return 1; }
+    get _x() { return 0; }
+    get _y() { return 0; }
+    get _z() { return 0; }
     /**
      * @param {number} val
      */
-    set x(val) {if(RotIdentity.final)throw new Error("Don't touch me.");};
+    set x(val) { if (RotIdentity.final) throw new Error("Don't touch me."); };
     /**
      * @param {number} val
      */
-    set y(val) {if(RotIdentity.final)throw new Error("Don't touch me.");};
+    set y(val) { if (RotIdentity.final) throw new Error("Don't touch me."); };
     /**
      * @param {number} val
      */
-    set z(val) {if(RotIdentity.final)throw new Error("Don't touch me.");};
+    set z(val) { if (RotIdentity.final) throw new Error("Don't touch me."); };
     /**
      * @param {number} val
      */
-    set w(val) {if(RotIdentity.final)throw new Error("Don't touch me.");};
+    set w(val) { if (RotIdentity.final) throw new Error("Don't touch me."); };
     /**
      * @param {number} val
      */
-    set _x(val) {if(RotIdentity.final)throw new Error("I said don't fn touch me!");};
+    set _x(val) { if (RotIdentity.final) throw new Error("I said don't fn touch me!"); };
     /**
      * @param {number} val
      */
-    set _y(val) {if(RotIdentity.final)throw new Error("I said don't fn touch me!");};
+    set _y(val) { if (RotIdentity.final) throw new Error("I said don't fn touch me!"); };
     /**
      * @param {number} val
      */
-    set _z(val) {if(RotIdentity.final)throw new Error("I said don't fn touch me!");};
+    set _z(val) { if (RotIdentity.final) throw new Error("I said don't fn touch me!"); };
     /**
      * @param {number} val
      */
-    set _w(val) {if(RotIdentity.final)throw new Error("I said don't fn touch me!");};
+    set _w(val) { if (RotIdentity.final) throw new Error("I said don't fn touch me!"); };
 }
 Rot.IDENTITY = new RotIdentity(1, 0, 0, 0);
 Rot.IDENTITY.final = true;

@@ -4,8 +4,9 @@ import { IKNode } from "./IKNodes.js";
 const THREE = await import('three');
 import { Quaternion, Vector3, Object3D, Matrix4 } from "three";
 import { Rot } from "./../Rot.js";
+import { Saveable } from "../loader/saveable.js";
 
-export class IKTransform {
+export class IKTransform extends Saveable {
     static totalTransforms = 0;
     static LEFT = -1;
     static RIGHT = 1;
@@ -79,7 +80,29 @@ export class IKTransform {
     tempScaleVector3 = new THREE.Vector3();
     tempWhateverVector3 = new THREE.Vector3();
 
-    
+    toJSON() {
+        let result = super.toJSON();
+        let r = result;
+        r.translate = this.translate.toJSON();
+        r.scale = this.scale.toJSON();
+        r.skewMatrix = this.skewMatrix_e;
+        r.rotation = this.rotation.toJSON();
+        r.forceOrthonormality = this.forceOrthonormality;
+        return r;
+    }
+    getRequiredRefs(){
+        return {};
+    }
+
+    static fromJSON(json, loader, pool, scene) {
+        let result = new IKTransform(null, null, null, null, json.ikd);
+        result.rotation = Rot.fromJSON(json.rotation);
+        result.scale = Vec3.fromJSON(json.scale, pool, scene);
+        result.skewMatrix.elements = json.skewMatrix;
+        result.instanceNumber = json.instanceNumber;
+        result.state = IKTransform.allDirty;
+        return result;
+    }
 
     /**
      * 
@@ -88,10 +111,8 @@ export class IKTransform {
      * @param {Ray or Vec3} y y direction heading or ray
      * @param {Ray or Vec3} z z direction heading or ray
      */
-    constructor(origin=null, x = null, y = null, z = null, ikd = 'IKNode-'+(IKTransform.totalTransforms+1), pool= noPool) {
-        this.ikd = 'IKTransform'-IKTransform.totalTransforms+1;
-        IKTransform.totalNodes += 1; 
-        this.pool = pool;
+    constructor(origin=null, x = null, y = null, z = null, ikd = 'IKTransform-'+(IKTransform.totalTransforms++), pool= noPool) {
+        super(ikd, 'IKTransform', IKTransform.totalTransforms, pool);
         this.translate = this.pool.new_Vec3(0,0,0);
         this.scale = this.pool.new_Vec3(1,1,1);
         this.xScaled_only = this.pool.new_Vec3fv(IKTransform.xBase);
@@ -149,7 +170,7 @@ export class IKTransform {
         this.translate.setComponents(pos.x, pos.y, pos.z);
         this.rotation.setComponents(quat.w, -quat.x, -quat.y, -quat.z);
         this.scale.setComponents(scale.x, scale.y, scale.z);
-        
+        this.rotation.normalize();
         this.scaleMatrix.makeScale(scale.x, scale.y, scale.z);
 
         this.state |= IKTransform.allDirty;
@@ -383,7 +404,7 @@ export class IKTransform {
         return vec.set(this._yHeading);
     }
 
-    setToYHeading(vec) {
+    setToZHeading(vec) {
         if(this.state & IKTransform.headingsDirty) this.updateHeadings();
         return vec.set(this._zHeading);
     }    
@@ -410,13 +431,14 @@ export class IKTransform {
             this.setVecToLocalOf(globalinput.translate, localoutput.translate);
             //globalinput.rotation.applyAfter(this.inverseRotation, localoutput.rotation); //jpl
             this.inverseRotation.applyAfter(globalinput.rotation, localoutput.rotation); //hamilton
+            localoutput.rotation.normalize();
             const sRecip = 1/this.scale.x;
             //we can only get away with the next 4 lines by the grace of orthonormality
             localoutput.translate.mult(sRecip);
             localoutput.scale.set(globalinput.scale).mult(sRecip);
             localoutput.scaleMatrix.copy(globalinput.scaleMatrix).multiplyScalar(sRecip);
             localoutput.skewMatrix.copy(globalinput.skewMatrix).multiplyScalar(sRecip);
-            //and in the end, was it even worth it?
+            //and in the end, was it even worth it? Only the profiler knows.
         }
         localoutput.lazyRefresh();
         return localoutput;
@@ -442,6 +464,7 @@ export class IKTransform {
             globalOutput.translate.set(localInput.translate).compMult(this.scale);
             globalOutput.scale.compMult(this.scale); //only works if orthonormal, which we are. We checked. It's fine. Relax.
 		    this.rotation.applyAfter(localInput.rotation, globalOutput.rotation);
+            globalOutput.rotation.normalize();
 		    this.setVecToGlobalOf(localInput.translate, globalOutput.translate);
             globalOutput.scaleMatrix.makeScale(globalOutput.scale.x, globalOutput.scale.y, globalOutput.scale.z);		
 		    globalOutput.lazyRefresh();
@@ -456,6 +479,7 @@ export class IKTransform {
 
     setVecToGlobalOf(localInput, globalOutput) {
         if(this.isOrthogonal) {
+            globalOutput.set(localInput);
             globalOutput.compMult(this.scale);
             this.rotation.applyToVec(globalOutput, globalOutput);
             globalOutput.add(this.translate);
@@ -471,11 +495,13 @@ export class IKTransform {
 
     rotateTo(newRotation) {				
 		this.rotation.setFromRot(newRotation); 
+        this.rotation.normalize();
 		this.lazyRefresh();
 	}
 
 	rotateBy(addRotation) {		
 		addRotation.applyAfter(this.rotation, this.rotation);
+        this.rotation.normalize();
 		this.lazyRefresh();
 	}
 
@@ -487,8 +513,9 @@ export class IKTransform {
 
     getLocalOfRotation(inRot, outRot) {		
         let resultNew = this.inverseRotation.applyAfter(inRot, outRot).applyAfter(this.rotation, outRot);
+        outRot.normalize();
         //let resultNew =  inRot.applyWithin(this.rotation).applyAfter(this.rotation); //hamilton
-        return resultNew;			
+        return resultNew;		
     }
 
     translateBy(vec) {

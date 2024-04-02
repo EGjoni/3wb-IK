@@ -19,6 +19,7 @@ import {
     // SphereGeometry,
     TorusGeometry,
     Vector3,
+    Vector2
 } from 'three';
 
 const _raycaster = new Raycaster();
@@ -214,6 +215,23 @@ class TransformControls extends Object3D {
 
     }
 
+    tempVec = new Vector3();
+    toNormalizedScreenPosition(worldVec, storeIn) {
+        this.tempVec.copy(worldVec);
+        this.tempVec.project(this.camera);
+        storeIn.x = this.tempVec.x;
+        storeIn.y = this.tempVec.y;
+        storeIn.z = 0;
+        //const aspect = rect.height / rect.width;
+        //if (rect.width > rect.height) {
+        //    storeIn.y /= aspect;
+        //} else {
+        //    storeIn.x *= aspect;
+        //}    
+        return storeIn;
+    }
+
+
     pointerHover(pointer) {
 
         if (this.object === undefined || this.dragging === true) return;
@@ -234,6 +252,13 @@ class TransformControls extends Object3D {
 
     }
 
+    screenPointerDown = new Vector3();
+    pointerWorldPos = new Vector3();
+    gizmoWorldPos = new Vector3();
+    screenGizmoCoords = new Vector3();
+    worldGizmoCoord = new Vector3();
+    pointerDownDir = new Vector3();
+    pointerDragDir = new Vector3();
     pointerDown(pointer) {
 
         if (this.object === undefined || this.dragging === true || pointer.button !== 0) return;
@@ -245,6 +270,12 @@ class TransformControls extends Object3D {
             const planeIntersect = intersectObjectWithRay(this._plane, _raycaster, true);
 
             if (planeIntersect) {
+                this.pointerWorldPos.copy(planeIntersect.point);
+                this.worldGizmoCoord.copy(this._gizmo.gizmo.rotate.children[0].position);
+                //this._gizmo.gizmo.rotate.children[0].localToWorld(this.worldGizmoCoord);
+                this.screenPointerDown = this.toNormalizedScreenPosition(this.pointerWorldPos, this.screenPointerDown);
+                this.screenGizmoCoords = this.toNormalizedScreenPosition(this.worldPosition, this.screenGizmoCoords);
+                this.pointerDownDir.copy(this.screenPointerDown).sub(this.screenGizmoCoords);
 
                 let space = this.space;
 
@@ -288,6 +319,8 @@ class TransformControls extends Object3D {
         }
 
     }
+
+    interactQuat = new Quaternion();
 
     pointerMove(pointer) {
 
@@ -345,7 +378,12 @@ class TransformControls extends Object3D {
 
         const planeIntersect = intersectObjectWithRay(this._plane, _raycaster, true);
 
+
         if (!planeIntersect) return;
+
+        this.pointerWorldPos.copy(planeIntersect.point);
+        this.screenPointerDown = this.toNormalizedScreenPosition(this.pointerWorldPos, this.screenPointerDown);
+        this.pointerDragDir.copy(this.screenPointerDown).sub(this.screenGizmoCoords);
 
         this.pointEnd.copy(planeIntersect.point).sub(this.worldPositionStart);
 
@@ -541,9 +579,11 @@ class TransformControls extends Object3D {
                     _tempVector.applyQuaternion(this.worldQuaternion);
 
                 }
-
-                this.rotationAngle = this._offset.dot(_tempVector.cross(this.eye).normalize()) * ROTATION_SPEED;
-
+                this.tempVec.copy(this.pointerDragDir);
+                let cross = this.tempVec.normalize().cross(this.pointerDownDir.normalize()).z;
+                let dot = this.pointerDragDir.normalize().dot(this.pointerDownDir.normalize());
+                let viewSide = this.eye.clone().normalize().dot(this.rotationAxis) < 0 ? 1 : -1;
+                this.rotationAngle = 0 + viewSide * (cross > 0 ? 1 : -1) *  Math.acos(Math.min(Math.max(-1, dot)), 1);
             }
 
             // Apply rotation snap
@@ -563,6 +603,7 @@ class TransformControls extends Object3D {
                 object.quaternion.multiply(this._quaternionStart).normalize();
 
             }
+
 
         }
 
@@ -887,7 +928,7 @@ class TransformControlsGizmo extends Object3D {
         lineGeometry2.translate(0, 0.25, 0);
 
         function CircleGeometry(radius) {
-            const geometry = new RingGeometry(radius + 0.01 , radius -0.01, 24, 24, 0.2, Math.PI / 2);            
+            const geometry = new TorusGeometry(0.5, 0.005, 5, 50, 3 * Math.PI / 4);//new RingGeometry(radius + 0.01 , radius -0.01, 24, 24, 0.2, Math.PI / 2);            
             geometry.rotateY(-Math.PI / 2);
             geometry.rotateX(Math.PI / 2);
             //geometry.rotateY(Math.PI / 2);
@@ -910,17 +951,17 @@ class TransformControlsGizmo extends Object3D {
 
         const gizmoTranslate = {
             X: [
-                [new Mesh(arrowGeometry, matRed), [0.5, 0, 0], [0, 0, - Math.PI / 2]],
+                [new Mesh(arrowGeometry, matRed), [1, 0, 0], [0, 0, - Math.PI / 2]],
                 // [new Mesh(arrowGeometry, matRed), [- 0.5, 0, 0], [0, 0, Math.PI / 2]],
                 // [new Mesh(lineGeometry2, matRed), [0, 0, 0], [0, 0, - Math.PI / 2]]
             ],
             Y: [
-                [new Mesh(arrowGeometry, matGreen), [0, 0.5, 0]],
+                [new Mesh(arrowGeometry, matGreen), [0, 1, 0]],
                 // [new Mesh(arrowGeometry, matGreen), [0, - 0.5, 0], [Math.PI, 0, 0]],
                 // [new Mesh(lineGeometry2, matGreen)]
             ],
             Z: [
-                [new Mesh(arrowGeometry, matBlue), [0, 0, 0.5], [Math.PI / 2, 0, 0]],
+                [new Mesh(arrowGeometry, matBlue), [0, 0, 1], [Math.PI / 2, 0, 0]],
                 // [new Mesh(arrowGeometry, matBlue), [0, 0, - 0.5], [- Math.PI / 2, 0, 0]],
                 // [new Mesh(lineGeometry2, matBlue), null, [Math.PI / 2, 0, 0]]
             ],
@@ -1015,13 +1056,13 @@ class TransformControlsGizmo extends Object3D {
             //     [new Mesh(new SphereGeometry(0.25, 10, 8), matInvisible)]
             // ],
             X: [
-                [new Mesh(new TorusGeometry(0.5, 0.1, 4, 24), matInvisible), [0, 0, 0], [0, - Math.PI / 2, - Math.PI / 2]],
+                [new Mesh(new TorusGeometry(0.5, 0.025, 4, 24), matInvisible), [0, 0, 0], [0, - Math.PI / 2, - Math.PI / 2]],
             ],
             Y: [
-                [new Mesh(new TorusGeometry(0.5, 0.1, 4, 24), matInvisible), [0, 0, 0], [Math.PI / 2, 0, 0]],
+                [new Mesh(new TorusGeometry(0.5, 0.025, 4, 24), matInvisible), [0, 0, 0], [Math.PI / 2, 0, 0]],
             ],
             Z: [
-                [new Mesh(new TorusGeometry(0.5, 0.1, 4, 24), matInvisible), [0, 0, 0], [0, 0, - Math.PI / 2]],
+                [new Mesh(new TorusGeometry(0.5, 0.025, 4, 24), matInvisible), [0, 0, 0], [0, 0, - Math.PI / 2]],
             ],
             // E: [
             //     [new Mesh(new TorusGeometry(0.75, 0.1, 2, 24), matInvisible)]

@@ -3,27 +3,68 @@ import { Bone, Object3D } from 'three';
 import { IKNode } from '../../util/nodes/IKNodes.js';
 import { Rot } from '../../util/Rot.js';
 import { IKTransform } from '../../util/nodes/IKTransform.js';
+import { Vec3 } from '../../util/vecs.js';
+import { Saveable } from '../../util/loader/saveable.js';
 Math.TAU = Math.PI*2;
 
-export class Constraint {
+export class Constraint extends Saveable {
     static HALF_PI_RECIP = 1/(Math.PI/2);
     static PI_RECIP = 1/Math.PI;
     static TAU_RECIP = 1/(2*Math.PI);
-    static totalConstraints = 0;
+    static totalInstances = 0;
     /**
-     * @typedef {IKTransform}
+     * @type {IKTransform}
      */
-    boneOrientationBasis = null;
+    boneOrientationBasis = new IKTransform(null, null, null, null, null);
     forBone = null;
 
     /**
-     * 
-     * @typedef {IKNode}
+     * @type {IKNode}
      */
     basisAxes = null;
     parentConstraint = null; 
     tempOutRot = Rot.IDENTITY.clone();
     enabled = true;
+
+    /**@return {JSON} a json object by which this constraint may later be loaded*/
+    toJSON() {
+        let result = super.toJSON(); 
+        result.enabled = this.enabled;
+        return result;
+    }
+
+    getRequiredRefs() {
+        let req = {};
+        req.basisAxes = this.basisAxes;
+        req.forBone = this.forBone;
+        req.forArmature = this.forBone.parentArmature;
+        req.boneOrientationAxes = this.boneOrientationAxes;
+        
+        if(this.parentConstraint != null) {
+            req.parentConstraint = this?.parentConstraint; 
+        }
+        return req; 
+    }
+
+    async postPop(json, loader, pool, scene)  {
+        let p = await Saveable.prepop(json.requires, loader, pool, scene);
+        if(p.forBone != null) {
+            this.forBone = p.forBone;
+            if(!(this.forBone instanceof THREE.Bone) && p.forArmature != null) {
+                this.forBone = p.forArmature.bonetags[json.forBone];
+            } 
+            if(this.forBone == null) {
+                throw new Error(`Could not find bone to which ${this.constructor.name} ${this.ikd} purportedly belongs`);
+            }
+        }
+        if(p.parentConstraint != null)
+            this.parentConstraint = p.parentConstraint;
+        this.basisAxes = p.basisAxes;
+        this.enabled = json.enabled;
+        this.boneOrientationAxes = p.boneOrientationAxes;
+        this.initNodes();
+        return this;
+    }
 
     /**
     * @param {(Bone|ConstraintStack)} forBoneOrConstraint bone or constraint stack to attach this constraint to
@@ -33,43 +74,72 @@ export class Constraint {
      * this doesn't need to be explicitly parented to anything, but will always be interpreted as being parented
      * to whatever the bone is parent to. If one isn't provide, it's taken to mean one isn't needed
     * */    
-    constructor(forBoneOrConstraint, basis=null, ikd = 'Constraint-'(Constraint.totalConstraints++), pool=noPool) {
+    constructor(forBoneOrConstraint, basis=null, ikd = `Constraint-${Constraint.totalInstances++}`, pool=noPool) {
+        super(ikd, new.target.name, new.target.totalInstances, pool);
         let bone = forBoneOrConstraint;
-        if(forBoneOrConstraint instanceof ConstraintStack) {
-            bone = forBoneOrConstraint.forBone;
-            this.parentConstraint = forBoneOrConstraint;
-            this.forBone = bone;
-            this.parentConstraint.add(this);             
-        } else if (forBoneOrConstraint instanceof Bone){
-            this.forBone = forBoneOrConstraint;
-            if(this.forBone.getConstraint() != null && !(this.forBone.getConstraint() instanceof ConstraintStack)) {
-                throw new Error(`Bone already has a constraint. And it's not of the ConstraintStack type. 
-                Having multiple constraints on the same bone is 100% supported and is exactly the thing ConstraintStacks are supposed to let you do
-                and there's even a bunch of code to wrap any attempt at a sole constraint up in a ConstraintStack before applying it to a bone
-                so quite frankly I don't understand how you got yourself into this situation, but you absolutely deserve getting this error thrown at you.`);
-            } else if (this.forBone.getConstraint() != null) {
-                this.parentConstraint = this.forBone.getConstraint();
-                this.parentConstraint.add(this);
-            } else if(!(this instanceof ConstraintStack)) {
-                this.parentConstraint = new ConstraintStack(this.forBone, "Constraint-stack-for-"+this.forBone.ikd, pool);
-                this.parentConstraint.add(this)
-            }            
+        this.inBasis = basis;
+        this.tempHeading = new Vec3(0, 1, 0);
+        this.tempVec1 = new Vec3(0, 1, 0);
+        this.tempVec2 = new Vec3(0, 1, 0);
+        this.tempVec3 = new Vec3(0, 1, 0);
+        this.constraintResult = new ConstraintResult(this, this.pool);        
+        if(!Saveable.loadMode) {
+            if(forBoneOrConstraint instanceof ConstraintStack) {
+                bone = forBoneOrConstraint.forBone;
+                this.parentConstraint = forBoneOrConstraint;
+                this.forBone = bone;
+                this.parentConstraint.add(this);             
+            } else if (forBoneOrConstraint instanceof Bone){
+                this.forBone = forBoneOrConstraint;
+                if(this.forBone.getConstraint() != null && !(this.forBone.getConstraint() instanceof ConstraintStack)) {
+                    throw new Error(`Bone already has a constraint. And it's not of the ConstraintStack type. 
+                    Having multiple constraints on the same bone is 100% supported and is exactly the thing ConstraintStacks are supposed to let you do
+                    and there's even a bunch of code to wrap any attempt at a sole constraint up in a ConstraintStack before applying it to a bone
+                    so quite frankly I don't understand how you got yourself into this situation, but you absolutely deserve getting this error thrown at you.`);
+                } else if (this.forBone.getConstraint() != null) {
+                    this.parentConstraint = this.forBone.getConstraint();
+                    this.parentConstraint.add(this);
+                } else if(!(this instanceof ConstraintStack)) {
+                    this.parentConstraint = new ConstraintStack(this.forBone, "Constraint-stack-for-"+this.forBone.ikd, pool);
+                    this.parentConstraint.add(this)
+                }            
+            }
+        
+            this.initNodes();
+            if(!this.forBone?.parent instanceof THREE.Bone) { 
+                console.warn("Root bones should not specify a constraint. Add this bone to a parent before attempting to register a constraint on it.");        
+            }
         }
+    }
+
+    initNodes() {
+        if(this.tempNode1.localMBasis == null) {
+            //I made a poor decision with the save/load logic and this is the shameful hack to get around the consequences.
+            this.tempNode1.localMBasis = new IKTransform(); this.tempNode1.globalMBasis = new IKTransform();
+            this.tempNode2.localMBasis = new IKTransform(); this.tempNode2.globalMBasis = new IKTransform();
+        }
+        let basis = this.inBasis; 
         if(this.parentConstraint == null) {
-            this.boneOrientationBasis = new IKTransform(null, null, null, null, null, this.pool);
             this.boneOrientationBasis.setFromObj3d(this.forBone.getIKBoneOrientation());
         } else {
             this.boneOrientationBasis = this.parentConstraint.boneOrientationBasis;
         }
-        this.ikd = ikd;
-        this.pool = pool;    
-        if(basis != null) {
-            this.basisAxes = basis ?? new IKNode(null,null,undefined,this.pool);
-            this.boneOrientationAxes = new IKNode(null,null,undefined,this.pool);
-            this.boneOrientationAxes.setRelativeToParent(this.basisAxes); 
+        this.boneOrientationAxes = new IKNode(null,null,undefined);   
+        this.basisAxes = new IKNode(null,null,undefined);
+        this.boneOrientationAxes.setRelativeToParent(this.basisAxes); 
+        if(basis != null) {          
             this.boneOrientationAxes.localMBasis.adoptValues(this.boneOrientationBasis);
         }
-        this.constraintResult = new ConstraintResult(this, this.pool);
+        this.inBasis = null;
+    }
+
+    
+
+    remove() {
+        if(this.parentConstraint != null) 
+            this.parentConstraint.remove(this);
+        else if(this.forBone != null)
+            this.forBone.constraint = null;
     }
 
     isEnabled() {
@@ -84,14 +154,16 @@ export class Constraint {
     enable() {
         this.enabled = true;
         if (this.parentConstraint != null) this.parentConstraint.childEnabled(); 
+        if(this.parentConstraint == null) this.forBone.parentArmature.updateShadowSkelRateInfo();
         this.forBone?.parentArmature?.noOp(); //just to give anything watching the armature truer info if its trying to update the pain display
     }
 
     disable() {
         this.enabled = false;
         if (this.parentConstraint != null) this.parentConstraint.childDisabled();  
-        this.constraintResult.raw_postCallDiscomfort = null;
-        this.constraintResult.raw_preCallDiscomfort = null;
+        this.constraintResult.__raw_postCallDiscomfort = null;
+        this.constraintResult.__raw_preCallDiscomfort = null;
+        if(this.parentConstraint == null) this.forBone.parentArmature.updateShadowSkelRateInfo();
         this.forBone?.parentArmature?.noOp(); //just to give anything watching the armature truer info if its trying to update the pain display
     }
     
@@ -145,16 +217,16 @@ export class Constraint {
     }
 
     invalidatePain() {
-        this.constraintResult.raw_postCallDiscomfort = null;
-        this.constraintResult.raw_preCallDiscomfort = null;
+        this.constraintResult.__raw_postCallDiscomfort = null;
+        this.constraintResult.__raw_preCallDiscomfort = null;
     }
 
     updateDisplay() {
 
     }
-
-
     tempNode1 = new IKNode();
+    tempNode2 = new IKNode();
+    
 }
 
 
@@ -165,6 +237,17 @@ export class Limiting extends Constraint {
         if(!this.forBone?.parent instanceof THREE.Bone) { 
             console.warn("Root bones should not specify a constraint. Add this bone to a parent before attempting to register a constrain on it.");
         }
+    }
+
+    toJSON(...params) {
+        return super.toJSON(...params);
+    }
+    async postPop(...params) {
+        return await super.postPop(...params);
+    }
+
+    getRequiredRefs(...params) {
+        return super.getRequiredRefs(...params);
     }
 
     /**
@@ -190,6 +273,8 @@ export class Limiting extends Constraint {
     isReturnful() {
         return false;
     }
+
+
 }
 
 
@@ -207,6 +292,20 @@ export class Returnful extends Constraint {
         super(...params);
     } 
     
+    toJSON() {
+        let result = super.toJSON();
+        result.painfulness = this.painfulness;
+        result.stockholmRate = this.stockholmRate;
+        return result;
+    }
+
+    async postPop(json, loader, pool, scene)  {
+        await super.postPop(json, loader, pool, scene);
+        this.painfulness = json.painfulness;
+        this.stockholmRate = json.stockholmRate;
+        this.baseRadians = json.baseRadians;
+
+    }
 
      /**
      * @param {IKNode} currentState the state the node is currently in. should be a sibling of @param previousState.
@@ -356,6 +455,13 @@ export class Returnful extends Constraint {
 
 
 export class LimitingReturnful extends Returnful {
+    toJSON() {
+        let result = super.toJSON();
+        result.limitingActive = this.limitingActive;
+        result.returnfulActive = this.returnfulActive;
+        return result;
+    }
+
     constructor(...params) {
         super(...params);
     }
@@ -396,13 +502,62 @@ export class LimitingReturnful extends Returnful {
 }
 
 
-
 export class ConstraintStack extends LimitingReturnful {
-    static totalConstraints = -1;
+    static totalInstances = -1;
     allconstraints = new Set(); //all constraints
     returnfulled = new Set(); //only the constraints that extend Returnful
     limiting = new Set(); //only the constraints that orientation
     giveup = 9999;
+
+
+
+    static fromJSON(json, loader, pool, scene) {
+        let result = new ConstraintStack(undefined, json.ikd, pool);
+        return result;
+    }
+    toJSON() {
+        let result = super.toJSON();
+        result.stockholmRate = this.stockholmRate;
+        result.preferenceLeeway = this.preferenceLeeway;
+        return result;
+    }
+    getRequiredRefs() {
+        let req = super.getRequiredRefs();
+        req.allconstraints = [];
+        req.limiting = [];
+        req.returnfulled = [];
+        for(let ac of this.allconstraints) {
+            req.allconstraints.push(ac);
+        }
+        for(let l of this.limiting) {
+            req.limiting.push(l);
+        }
+        for(let r of this.returnfulled) {
+            req.returnfulled.push(r);
+        }
+        return req;
+    }
+
+    async postPop(json, loader, pool, scene)  {
+        await super.postPop(json, loader, pool, scene);
+        if(this.parentConstraint == null && this.forBone != null)
+            this.forBone.constraint = this;
+        let p = await Saveable.prepop(json.requires, loader, pool, scene);
+        this.initNodes();
+        for(let ac of p.allconstraints) {
+            this.allconstraints.add(ac); 
+        }
+        for(let r of p.returnfulled) {
+            if(r.isEnabled()) {
+                this.returnfulled.add(r); 
+            }
+        }
+        for(let l of p.limiting) {
+            if(l.isEnabled()) {
+                this.limiting.add(l); 
+            }
+        }
+    }
     
     /**
      * 
@@ -410,18 +565,26 @@ export class ConstraintStack extends LimitingReturnful {
      * @param {*} ikd 
      * @param {*} pool 
      */
-    constructor(forBoneOrConstraint, ikd='ConstraintStack-'+ConstraintStack.totalConstraints++, pool=noPool) {
+    constructor(forBoneOrConstraint, ikd='ConstraintStack-'+ConstraintStack.totalInstances++, pool=noPool) {
         super(forBoneOrConstraint, null, ikd, pool);
         if(this.forBone != null && this.parentConstraint == null) {
             this.forBone.setConstraint(this); 
         }
         this.stockholmRate = null;
         this.preferenceLeeway = Math.PI*2;
-        this.lastPrefState = new IKNode(null, null, undefined, this.pool);
-        this.lastBoneOrientation = new IKNode(null, null, undefined, this.pool);
+        if(!Saveable.loadMode)
+            this.initNodes();
+    }
+
+    initNodes() {
+        this.lastPrefState = new IKNode(null, null, undefined);
+        this.lastBoneOrientation = new IKNode(null, null, undefined);
         this.lastBoneOrientation.setParent(this.lastPrefState); 
         this.lastBoneOrientation.adoptLocalValuesFromObject3D(this.forBone?.getIKBoneOrientation());
-        this.lastLimitState = new IKNode(null, null, undefined, this.pool);
+        this.lastLimitState = new IKNode(null, null, undefined);
+        this.lastLimitBoneOrientation = new IKNode(null, null, undefined);
+        this.lastLimitBoneOrientation.setParent(this.lastLimitState); 
+        this.lastLimitBoneOrientation.adoptLocalValuesFromObject3D(this.forBone?.getIKBoneOrientation());
     }
 
     add(...subconstraints) {
@@ -445,8 +608,8 @@ export class ConstraintStack extends LimitingReturnful {
         this.returnfulled = new Set();
         for(let c of this.allconstraints) {     
             if(c instanceof Returnful) {
-                c.isEnabled();
-                this.returnfulled.add(c);
+                if(c.isEnabled())
+                    this.returnfulled.add(c);
             }
         }
     }
@@ -455,8 +618,8 @@ export class ConstraintStack extends LimitingReturnful {
         this.limiting = new Set();
         for(let c of this.allconstraints) {            
             if(c instanceof Limiting || c instanceof LimitingReturnful) {
-                c.isEnabled();
-                this.limiting.add(c);
+               if(c.isEnabled())
+                    this.limiting.add(c);
             }
         }
     }
@@ -480,6 +643,8 @@ export class ConstraintStack extends LimitingReturnful {
         this.setPreferenceLeeway();
         if(this.parentConstraint != null)
             this.parentConstraint.childDisabled();
+        if(this.parentConstraint == null)
+            this.forBone.parentArmature.updateShadowSkelRateInfo();
     }
     childEnabled() {
         this.invalidatePain();
@@ -488,6 +653,7 @@ export class ConstraintStack extends LimitingReturnful {
         this.setPreferenceLeeway();
         if(this.parentConstraint != null)
             this.parentConstraint.childEnabled();
+        this.forBone.parentArmature.updateShadowSkelRateInfo();
     }
 
 
@@ -536,13 +702,12 @@ export class ConstraintStack extends LimitingReturnful {
             for(let c of this.limiting) return c.getAcceptableRotation(currentState, currentBoneOrientation, desiredRotation, calledBy, cosHalfReturnfullness, angleReturnfullness);
         } else {
             this.lastLimitState.localMBasis.adoptValues(currentState.localMBasis);
-            this.boneOrientationAxes.localMBasis.adoptValues(currentBoneOrientation);
+            this.lastLimitBoneOrientation.localMBasis.adoptValues(currentBoneOrientation.localMBasis);
             
-            accumulatedRot = this.tempOutRot.setFromRot(calledBy);
+            let accumulatedRot = this.tempOutRot.setFromRot(desiredRotation);
             for(let c of this.limiting) {
-                let rotBy = c.getAcceptableRotation(this.lastLimitState, this.currentBoneOrientationAxes, accumulatedRot, calledBy);
-                this.lastLimitState.rotateByLocal(rotBy);
-                rotBy.applyAfter(accumulatedRot, accumulatedRot);
+                let allowableRot = c.getAcceptableRotation(this.lastLimitState, this.lastLimitBoneOrientation, accumulatedRot, calledBy);
+                accumulatedRot.setFromRot(allowableRot);
             }
             return accumulatedRot;
         }
@@ -613,8 +778,8 @@ export class ConstraintStack extends LimitingReturnful {
         for(let c of this.allconstraints) {
             c.invalidatePain();
         }
-        this.constraintResult.raw_postCallDiscomfort = null;
-        this.constraintResult.raw_preCallDiscomfort = null;
+        this.constraintResult.__raw_postCallDiscomfort = null;
+        this.constraintResult.__raw_preCallDiscomfort = null;
         //this.constraintResult.preCallDiscomfort = null;
     }
  
@@ -656,9 +821,9 @@ export class ConstraintStack extends LimitingReturnful {
     }
 
     tempOutRot = Rot.IDENTITY.clone();
+    tempRot2 = Rot.IDENTITY.clone();
 
 }
-
 
 export class ConstraintResult {
     _fullRotation = Rot.IDENTITY.clone();

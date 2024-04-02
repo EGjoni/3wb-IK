@@ -20,7 +20,7 @@ export function pcaOrientation(vecs, startBasis, onFail) {
     try{
         inferredAxes = getEigenVectors(points);
     } catch(e) {
-        return onFail();
+        return onFail(vecs, startBasis);
     }
     if(inferredAxes[0].eigenvalue == 0 || inferredAxes[1].eigenvalue == 0) return onFail(vecs, startBasis);
     else { //we have the Y and X axes, now we just need to make sure the determinant matches

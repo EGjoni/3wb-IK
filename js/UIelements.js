@@ -2,16 +2,19 @@
 import { Kusudama } from "./EWBIK/betterbones/Constraints/Kusudama/Kusudama.js";
 import { Rest } from "./EWBIK/betterbones/Constraints/Rest/Rest.js";
 import { Twist } from "./EWBIK/betterbones/Constraints/Twist/Twist.js";*/
+console.log("hmmm?");
 
 import { IKPin } from "./EWBIK/betterbones/IKpin.js";
 import { CallbacksSequence } from "./EWBIK/CallbacksSequence.js"
 import { Bone, Vector3 } from "three";
 import { TransformState } from "./EWBIK/solver/SkeletonState.js";
-import { Vec3, any_Vec3 } from "./EWBIK/util/vecs.js";
+import { NoPool, Vec3, Vec3Pool, any_Vec3 } from "./EWBIK/util/vecs.js";
 import { Rot } from "./EWBIK/util/Rot.js";
 import { ConvexGeometry } from "convexGeo";
 import { ChainRots, BoneRots, RayDrawer } from "./EWBIK/util/debugViz/debugViz.js";
-import { ConstraintStack, Returnful, Rest, Twist } from "./EWBIK/betterbones/Constraints/ConstraintStack.js";
+import { Constraint, ConstraintStack, Returnful, Rest, Twist, Kusudama } from "./EWBIK/betterbones/Constraints/ConstraintStack.js";
+import { IKNode } from "./EWBIK/util/nodes/IKNodes.js";
+import { Saveable, Loader } from "./EWBIK/util/loader/saveable.js";
 
 window.Vec3 = Vec3;
 window.Rot = Rot;
@@ -102,6 +105,18 @@ window.makeUI = function () {
             padding: 8px;
             user-select: none;
             pointer-events: none;
+        }
+        button.add-cone-before {
+            top: -1.5em;
+            position: absolute;
+            text-align: center;
+            left: 10em;
+        }
+        fieldset.limit-cone-control {
+            position: relative;
+        }
+        input.vec-component {
+            width: 4em;
         }
         #control-panel {
             z-index: 10; /* Ensure it's above other scene elements */
@@ -350,8 +365,9 @@ window.makeUI = function () {
         <label for="show-nonik-bones">Irrelevant bones</label>
     </fieldset>
     <div> 
-        <button id="save">Save IK setup</button>
-        <button id="load">Load/Apply setup to rig</button>
+        <button id="save">Save Constraints</button>
+        <button id="load-cstrt-button">Load Constraints</button>
+        <input class="hidden" type="file" id="load-constraints-input" name="load-constraints-input" accept=".json,.ewb">
     </div>
 </div>
 </div>
@@ -761,6 +777,22 @@ ${bone.toString()}
         window.awaitingSelect = window.doNothing;
     }
 
+    D.byid('save').addEventListener('click', (e)=>{
+        Saveable.initSave(window.armatures);
+    });
+
+    D.byid('load-cstrt-button').addEventListener('click', (e) => {
+        D.byid('load-constraints-input').click();
+    });
+
+    D.byid('load-constraints-input').addEventListener('change', async (e) => {
+        let result = event.target.files[0];
+        if(result != null) {
+            let newLoader = new Loader();
+            window.armatures = await newLoader.fromFile(result, scene, new Vec3Pool(10000));
+        }
+    });
+
     D.byid("change-pin-parent").addEventListener('click', (e) => {
         if (window.contextPin != null) {
             window.toInterstitial("Click a bone or target to attach to. Or hit Esc to cancel",
@@ -824,9 +856,6 @@ ${bone.toString()}
         }
     });
 
-    D.byid('save').addEventListener('click', () => {
-        serializeInstance(window.contextBone.parentArmature)
-    })
 
 
     window.emptyConstraintNode = D.byid("default-stack").qs('.constraint-stack');
@@ -841,7 +870,7 @@ ${bone.toString()}
         }*/
 
         newStack.qs(".add-constraint").addEventListener("click", (e) => {
-            let val = newStack.parent.qs("constraint-select");
+            let val = newStack.parentNode.qs(".constraint-select").value;
             let subcst = null;
             if (val == "kusudama") subcst = initKusudama(c);
             if (val == "twist") subcst = initTwist(c);
@@ -901,10 +930,11 @@ ${bone.toString()}
         if (c instanceof Rest) text = "Rest Constraint:";
         if (c instanceof Twist) text = "Twist Constraint:";
         if (c instanceof ConstraintStack) text = "Stack:";
+        if (c instanceof Kusudama) text = "Kusudama:";
         result.qs("legend").innerText = text;
         let enabled = result.qs(".constraint-enabled");
         enabled.addEventListener("change", (e) => {
-            if (e.checked) c.enable();
+            if (enabled.checked) c.enable();
             else c.disable();
         });
 
@@ -965,6 +995,101 @@ ${bone.toString()}
         return result;
     }
 
+    window.kusuConstraintControls = document.createElement("div");
+    kusuConstraintControls.classList.add("rest-constraint-controls");
+    kusuConstraintControls.innerHTML = `
+<span class="cone-list"> </span>
+<button class="add-limit-cone">Add Limit Cone</button>
+<button class="enforce kusudama-enforce">Enforce</button>
+`;
+    window.limitConeControl = document.createElement("fieldset");
+    limitConeControl.classList.add("limit-cone-control");
+    limitConeControl.innerHTML = `
+    <legend>Limit Cone</legend>
+<button class='remove-constraint'>X</button>
+<button class='add-cone-before'>Add Limit Cone</button>
+<label class="vec-comp-label" for="x">X:</label>
+<input class="vec-component comp-x" name="x" type="number" step="0.001" val=0>
+<label class="vec-comp-label" for="y">Y:</label>
+<input class="vec-component comp-y" name="y" type="number" step="0.001" val=1>
+<label class="vec-comp-label" for="z">Z:</label>
+<input class="vec-component comp-z" name="z" type="number" step="0.001" val=0>
+
+<form class="slider-container cone-radius-form">
+    <input class="slider lc-radius" name="radius" type="range" min="0.0" max="3.1415926" step="0.00001" value="0.1">
+    <label class="slider-label" for="radius">Radius: </label>
+    <output name="radius-result" for="radius" class="slider-value lc-radius-output">0.1</output>
+</form>
+`
+    window.createLimitConeDomElem = function (lc, forKusudama) {
+        let cp = lc.getControlPoint();
+        let rad = lc.getRadius();
+        let lcc = window.limitConeControl.cloneNode(true);
+        lcc.forKusudama = forKusudama;
+        lcc.forLimitCone = lc;
+        let lccx = lcc.qs(".comp-x");
+        let lccy = lcc.qs(".comp-y");
+        let lccz = lcc.qs(".comp-z"); 
+        lccx.value = cp.x;
+        lccy.value = cp.y;
+        lccz.value = cp.z;
+        let lccr = lcc.qs("input.lc-radius");
+        lccr.value = rad;
+        let lccro = lcc.qs(".lc-radius-output");
+        lccro.value = rad;
+        let coneBefore = lcc.qs(".add-cone-before");
+        lc.domControls = lcc;
+        coneBefore.addEventListener("click", (event) => {
+            let newLc = forKusudama.addLimitConeBefore(lc);
+            let newLcDom = window.createLimitConeDomElem(newLc, forKusudama);
+            lc.domControls.parentNode.insertBefore(newLcDom, lc.domControls);
+        });
+        lccx.addEventListener("input", (event) => {
+            lc.setControlPoint((new Vec3(lccx.value, lccy.value, lccz.value)).normalize());
+            forKusudama.updateTangentRadii();
+            forKusudama.updateDisplay();
+        });
+        lccy.addEventListener("input", (event) => {
+            lc.setControlPoint((new Vec3(lccx.value, lccy.value, lccz.value)).normalize());
+            forKusudama.updateTangentRadii();
+            forKusudama.updateDisplay();
+        });
+        lccz.addEventListener("input", (event) => {
+            lc.setControlPoint((new Vec3(lccx.value, lccy.value, lccz.value)).normalize());
+            forKusudama.updateTangentRadii();
+            forKusudama.updateDisplay();
+        });
+        lccr.addEventListener("input", (event) => {
+            lc.setRadius(lccr.value);
+            lccro.value = lccr.value;
+            forKusudama.updateTangentRadii();
+            forKusudama.updateDisplay();
+        });
+        return lcc;
+    }
+    window.createKusudamaDomElem = function (forKusudama) {
+        let genericContainer = createGenericConstraintContainer(forKusudama);
+        let newKusu = kusuConstraintControls.cloneNode(true);
+        genericContainer.appendChild(newKusu);
+        let coneList = newKusu.qs(".cone-list");
+        for(let lc of forKusudama.limitCones) {
+            let lcc = window.createLimitConeDomElem(lc, forKusudama);
+            coneList.appendChild(lcc);
+        }
+        let coneAfter = newKusu.qs(".add-limit-cone");
+        coneAfter.addEventListener("click", (event)=>{
+            let lastCone = forKusudama.limitCones.length > 0 ? forKusudama.limitCones[forKusudama.limitCones.length-1] : null;
+            let newCone = forKusudama.addLimitCone(lastCone, null, null, null);
+            coneList.appendChild(window.createLimitConeDomElem(newCone, forKusudama));
+        });
+        let enforce = newKusu.qs(".kusudama-enforce");
+        enforce.addEventListener("click", (event)=>{
+            window.enforceConstraint(forKusudama.forBone, forKusudama);
+            forKusudama.updateDisplay();
+        })
+        return genericContainer;
+    }
+
     window.restConstraintControls = document.createElement("div");
     restConstraintControls.classList.add("rest-constraint-controls");
     restConstraintControls.innerHTML = `
@@ -1008,14 +1133,7 @@ ${bone.toString()}
         wrapper.appendChild(result);
         let enforce = result.qs(".enforce-immediately");
         enforce.addEventListener('click', () => {
-            forTwist.forBone.wb.simLocalAxes.adoptLocalValuesFromObject3D(forTwist.forBone);
-            let resultRot = forTwist.getAcceptableRotation(
-                forTwist.forBone.wb.simLocalAxes,
-                forTwist.forBone.wb.simBoneAxes,
-                Rot.IDENTITY,
-                enforce);
-            forTwist.forBone.wb.simLocalAxes.rotateByLocal(resultRot);
-            TrackingNode.transferLocalToObj3d(forTwist.forBone.wb.simLocalAxes.localMBasis, forTwist.forBone);
+            window.enforceConstraint(forTwist.forBone, forTwist);
             forTwist.updateDisplay();
         });
 
@@ -1185,6 +1303,9 @@ window.getMakeConstraint_DOMElem = function (c) {
         return toReturn;
     }
 
+    if (c instanceof Kusudama) {
+        toReturn = createKusudamaDomElem(c);
+    }
     if (c instanceof Rest) {
         toReturn = createRestDomElem(c);
     }
@@ -1260,7 +1381,7 @@ function determineConstraintName(corb) {
 function initStack(corb) {
     let ident = determineConstraintName(corb)
     let newC = new ConstraintStack(corb, null, ident);
-    resultConst = getMakeConstraint_DOMElem(newC);
+    let resultConst = getMakeConstraint_DOMElem(newC);
     return resultConst;
 }
 
@@ -1270,8 +1391,8 @@ function initStack(corb) {
  */
 function initTwist(corb) {
     let ident = determineConstraintName(corb)
-    let newC = new Twist(corb, null, ident);
-    resultConst = getMakeConstraint_DOMElem(newC);
+    let newC = new Twist(corb, 0.1, contextBone, (cnstrt, bone) => bone == contextBone, ident);
+    let resultConst = getMakeConstraint_DOMElem(newC);
     return resultConst;
 }
 
@@ -1281,8 +1402,8 @@ function initTwist(corb) {
  */
 function initKusudama(corb) {
     let ident = determineConstraintName(corb)
-    let newC = new Kusudama(corb, null, ident);
-    resultConst = getMakeConstraint_DOMElem(newC);
+    let newC = new Kusudama(corb, ident);
+    let resultConst = getMakeConstraint_DOMElem(newC);
     return resultConst;
 }
 
@@ -1293,8 +1414,38 @@ function initKusudama(corb) {
 function initRest(corb) {
     let ident = determineConstraintName(corb)
     let newC = new Rest(corb, null, ident);
-    resultConst = getMakeConstraint_DOMElem(newC);
+    let resultConst = getMakeConstraint_DOMElem(newC);
     return resultConst;
 }
 
+
+const constraintEffectPreviewer1 = new IKNode(null,null,null, window.globalVecPool);
+const constraintEffectPreviewer2 = new IKNode(null,null, null, window.globalVecPool); 
+constraintEffectPreviewer2.setParent(constraintEffectPreviewer1);
+
+/**constrains the bone on user input
+ * This just wraps enorceConstraint for easier debugging, as the UI uses 
+ * enforceConstraint directly when the enforce button is clicked,
+ * but we can comment out the call here on interaction solve while still allowing manual enforcement.
+ */
+window.FKConstrain = function (bone, cstr) {
+    //window.enforceConstraint(bone, cstr);
+}
+
+window.enforceConstraint = function (bone, cstr) {
+    if(cstr.isLimiting()) {    
+        let boneFrameAx = constraintEffectPreviewer1;
+        let bonePhysicalAx =constraintEffectPreviewer2; 
+        boneFrameAx.adoptLocalValuesFromObject3D(bone);
+        bonePhysicalAx.adoptLocalValuesFromObject3D(bone.getIKBoneOrientation());
+    
+        let resultRot = cstr.getAcceptableRotation(
+            boneFrameAx,
+            bonePhysicalAx,
+            Rot.IDENTITY,
+            this);
+        boneFrameAx.rotateByLocal(resultRot);
+        TrackingNode.transferLocalToObj3d(boneFrameAx.localMBasis, bone);
+    }
+}
 makeUI();

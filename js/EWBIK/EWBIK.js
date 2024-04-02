@@ -1,4 +1,5 @@
 import { BoneState, SkeletonState } from "./solver/SkeletonState.js"
+const THREE = await import('three');
 import { ShadowSkeleton } from "./solver/ShadowSkeleton.js"
 import { IKTransform } from "./util/nodes/IKTransform.js";
 import { Vec3, any_Vec3, Vec3Pool, NoPool } from "./util/vecs.js";
@@ -8,8 +9,9 @@ import { IKNode, TrackingNode } from "./util/nodes/IKNodes.js";
 import { convexBlob, pcaOrientation } from "./util/mathdump/mathdump.js";
 import { IKPin } from "./betterbones/IKpin.js";
 import { Kusudama } from "./betterbones/Constraints/Kusudama/Kusudama.js";
-const THREE = await import('three');
 import { Bone } from "three";
+import { Saveable } from "./util/loader/saveable.js";
+import { Object3D } from "../three/three.module.js";
 //import * as THREE from 'three';
 //import { LineSegments, Bone } from "three";
 
@@ -91,9 +93,10 @@ const regularBoneLayer = 4;
  *     
  */
 
-export class EWBIK {
+export class EWBIK extends Saveable {
     static __default_dampening = 0.1;
-    static totalEWBIKs = 0;
+    static dfitr = 15;
+    static totalInstances = 0;
     static XDIR = new Vec3(1, 0, 0);
     static YDIR = new Vec3(0, 1, 0);
     static ZDIR = new Vec3(0, 0, 1);
@@ -116,13 +119,65 @@ export class EWBIK {
     dirtySkelState = true;
     dirtyRate = true;
     armatureNodeUpdated = false;
-    tempNode = new IKNode(); //temporary IKNode object for getting armature relative transform info on change of basis.
+    tempNode = null; //temporary IKNode object for getting armature relative transform info on change of basis.
     static known_ids = {};
 
     /**@type {Promise} prevents calling the solver before it's done*/
     activeSolve = null;
     pendingSolve = null;
     lastFrameNumber = 0;
+
+    static async fromJSON(json, loader, pool, scene) {
+        let foundBone = loader.findSceneObject(json.requires.rootBone, scene);
+        let result = new EWBIK(
+            foundBone, 
+            json.insertedAsNode, 
+            json.defaultIterations, 
+            json.ikd, 
+            pool);
+        result.armatureObj3d.ikd = 'EWBIK_root-' + json.instanceNumber;
+        return result;
+    }
+
+    toJSON() {
+        let result = super.toJSON();
+        result.defaultIterations = this.defaultIterations;
+        result.dampening = this.dampening;
+        result.insertedAsNode = this.insertedAsNode;
+        result.bonetags = [];
+        for(let [ikd, b] of Object.entries(this.bonetags)) {
+            result.bonetags.push(b.toIKSaveJSON());
+        }
+        return result;
+    }
+
+    getRequiredRefs () {
+        let req = {}
+        req.rootBone = this.rootBone;
+        req.armatureNode = this.armatureNode;
+        req.armatureObj3d = this.armatureObj3d;
+        req.bones = [];        
+        for(let [ikd, b] of Object.entries(this.bonetags)) {
+            b['toIKSaveJSON'] = b['toIKSaveJSON'].bind(b);
+            req.bones.push(b);
+            //req.boneinfo.push(b.toIKSaveJSON());
+        }
+        return req;
+    }
+
+    async postPop(json, loader, pool, scene)  {
+        let p = await Saveable.prepop(json.requires, loader, pool, scene);
+        this.insertedAsNode = json.insertedAsNode;
+        this.armatureNode = p.armatureNode;
+        this.defaultIterations = json.defaultIterations;
+        this.defaultStabilizingPassCount = json.defaultStabilizingPassCount; 
+        this.initNodes(this.rootBone, this.insertedAsNode, this.armatureNode, pool);
+        for(let b of json.bonetags) {
+            this.bonetags[b.ikd].loadIKInfoFromJSON(b, loader, pool, scene);
+        }
+        return this;
+    }
+
 
     /**
      * 
@@ -137,31 +192,41 @@ export class EWBIK {
      * @param {*} defaultIterations 
      * @param {*} ikd 
      */
-    constructor(root, asNode = true, defaultIterations = this.defaultIterations, ikd = 'EWBIKArmature-' + EWBIK.totalEWBIKs, pool = new Vec3Pool(10000)) {
-        this.ikd = ikd;
+    constructor(root, asNode = true, defaultIterations = EWBIK.__dfitr, ikd = `EWBIK-${EWBIK.totalInstances++}`, pool = new Vec3Pool(10000)) {
+        super(ikd, 'EWBIK', EWBIK.totalInstances, pool);
+        this.rootBone = EWBIK.findRootBoneIn(root);
         this.armatureObj3d = asNode ? new THREE.Object3D() : root.parent;
-        this.armatureObj3d.ikd = 'EWBIK_root-' + EWBIK.totalEWBIKs;
-        this.pool = pool;
-        EWBIK.totalEWBIKs += 1;
-        let rootBone = EWBIK.findRootBoneIn(root);
+        this.armatureObj3d.ikd = 'EWBIK_root-' + this.instanceNumber;
+        this.insertedAsNode = asNode;
         if (asNode) {
             this.armatureObj3d.name = 'armature';
             let armpar = rootBone.parent;
             if (armpar != null) armpar.add(this.armatureObj3d);
             this.armatureObj3d.attach(rootBone);
+            this.armatureObj3d.symlink = true;
+            this.armatureObj3d.par_link = armpar;
+            this.armatureObj3d.child_link = rootBone;
         }
-        if (!rootBone.isIKType) {
-            Needles.injectInto(rootBone);
-        }
-        this.armatureNode = new TrackingNode(this.armatureObj3d, this.armatureObj3d.ikd, false, this.pool);
-        if (this.armatureObj3d != null) {
-            this.armatureNode.adoptTrackedGlobal();
-        }
-        this.tempNode.setParent(this.armatureNode);
-        this.rootBone = rootBone;
+        if(!Saveable.loadMode) {
+            this.initNodes(root, asNode, null, pool);
+        }        
         this.rootBone.registerToArmature(this);
         this.defaultIterations = defaultIterations;
         this.recreateBoneList();
+    }
+
+    initNodes(root, asNode, armatureNode, pool) {
+        
+        if(this.armatureNode == null) {
+            this.armatureNode = new TrackingNode(this.armatureObj3d, this.armatureObj3d.ikd, false, noPool); //wouldn't wanna lose this guy.
+        } else {
+            this.armatureNode = armatureNode
+        }
+        if (this.armatureObj3d != null) {
+            this.armatureNode.adoptTrackedGlobal();
+        }
+        this.tempNode = new IKNode();
+        this.tempNode.setParent(this.armatureNode);        
     }
     /**
      * Specifies the default number of iterations per solver pass, if you don't want to manually provide it each time you call solver. 
@@ -465,7 +530,10 @@ export class EWBIK {
         currBoneAx.quaternion.y = -ts.rotation[2];
         currBoneAx.quaternion.z = -ts.rotation[3];
         currBoneAx.quaternion.w = ts.rotation[0];
-        this.updateBoneColors(bs);
+        if(currBoneAx.getConstraint() != null) {
+            this.updateBoneColors(bs);
+            currBoneAx.getConstraint().updateDisplay();
+        }
         currBoneAx.IKUpdateNotification();
     }
 
@@ -551,12 +619,16 @@ export class EWBIK {
                     fromBone.height = minChild;
             }
 
-            //let rotTo = pcaOrientation(childPoints, fromBone, 
-            //  (vecs, refBasis) => {                    
-            let rotTo = Rot.fromVecs(EWBIK.YDIR, normeddir);
-            //    return rotTo; 
-            // }
-            //);
+            let rotTo = pcaOrientation(childPoints, fromBone, 
+              (vecs, refBasis) => {
+                if(normeddir.magSq() == 0 || vecs.length == 0) {
+                    return new Rot(1,0,0,0);
+                }                    
+                let result = Rot.fromVecs(EWBIK.YDIR, normeddir);
+                if(isNaN(result.w)) return new Rot(1,0,0,0);
+                return result;
+              }
+            );
 
             orientation.quaternion.set(-rotTo.x, -rotTo.y, -rotTo.z, rotTo.w);
 
@@ -675,7 +747,7 @@ export class EWBIK {
 
     updateShadowSkelRateInfo(force = false, iterations = this.previousIterations) {
         this.dirtyRate = true;
-        this.previousIterations = iterations;
+        this.previousIterations = parseInt(iterations);
         this.pendingSolve = null; //invalidate any pending solve
         if (force) this._updateShadowSkelRateInfo(iterations);
     }
@@ -702,9 +774,6 @@ export class EWBIK {
 
 
     registerBoneWithShadowSkeleton(bone) {
-        if (!bone.isIKType) {
-            Needles.injectInto(bone);
-        }
         let parBoneId = (bone.getParentBone() == null) ? null : bone.getParentBone().ikd;
         let constraint = bone.getConstraint();
         let constraintId = (constraint == null) ? null : constraint.ikd;
@@ -1097,7 +1166,6 @@ let betterbones = {
      * @param {Object3d} newOrientation 
      */
     setIKBoneOrientation(newOrientation) {
-        /** @type {IKTransform} */
         if (this.orientation == null)
             this.orientation = newOrientation
         else if (newOrientation != this.orientations) {
@@ -1157,7 +1225,53 @@ let betterbones = {
             return true;
         }
     },
-
+    ikSaveNotification(saveList) {
+        if(this.getIKBoneOrientation()) 
+            saveList.add(this.toIKSaveJSON);
+        //TODO: make saving targets less painful. Currently difficult because of UI code.
+        //if(this.getIKPin())
+        //  this.getIKPin().ikSaveNotification(saveList);
+        if(this.getConstraint()) 
+            this.getConstraint().ikSaveNotification(saveList);
+    },
+    toIKSaveJSON() {
+        let result = {ikd: this.ikd, type: 'Bone', height: this.height };
+        let o = this.orientation;
+        result.orientation = {
+            position : [o.position.x, o.position.y, o.position.z],
+            quaternion: [o.quaternion.x, o.quaternion.y, o.quaternion.z, o.quaternion.w],
+            scale : [o.scale.x, o.scale.y, o.scale.z],
+            ikd: o.ikd
+        }
+        result.requires = {};
+        let req = result.requires;
+        //if(this.getIKPin()) req.pin = this.getIKPin().ikd;
+        if(this.getConstraint()) req.constraint = this.getConstraint().ikd;
+        return result; 
+    },
+    async loadIKInfoFromJSON(json, loader, pool, scene) {
+        if(this.orientation == null) {
+            this.orientation = new Object3D();
+            this.add(this.orientation);
+        }
+        this.orientation.ikd = json.orientation.ikd;
+        let jo = json.orientation;
+        let q = jo.quaternion; 
+        let t = jo.position;
+        let s = jo.scale;
+        this.orientation.placeholder = false;
+        this.orientation.quaternion.set(...q);
+        this.orientation.position.set(...t);
+        this.scale.set(...s);
+        this.height = json.height;
+        let p = await Saveable.prepop(json.requires, loader, pool, scene);
+        //if(p.pin != null) this.pin = p.pin;
+        if(p.constraint != null) {
+            this.constraint = p.constraint;
+            this.constraint.updateDisplay();
+        }
+        return this;
+    },
     original_add: THREE.Bone.prototype.add,
 
     add(elem) {

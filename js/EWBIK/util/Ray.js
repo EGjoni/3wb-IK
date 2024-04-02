@@ -1,5 +1,5 @@
 
-import { Vec3, any_Vec3} from "./vecs.js";
+import { Vec3, Vec3Pool, any_Vec3} from "./vecs.js";
 
 export class Ray {
     
@@ -125,17 +125,69 @@ export class Ray {
         return result;
     }
     elongate(amt) {
-        this.workingVector.set(this.p2);
-        this.p1.lerp(this.p2, -0.5*amt);
-        this.p2.lerp(this.workingVector, -0.5*amt);
-        /*let midPoint = this.p1.add(this.p2).mult(0.5);
-        let p1Heading = this.p1.sub(midPoint);
-        let p2Heading = this.p2.sub(midPoint);
-        let p1Add = p1Heading.clone().normalize().mult(amt);
-        let p2Add = p2Heading.clone().normalize().mult(amt);
-        this.p1.set(p1Heading.add(p1Add).add(midPoint));
-        this.p2.set(p2Heading.add(p2Add).add(midPoint));*/
+        this.workingVector.set(this.p2).sub(this.p1).normalize().mult(0.5*amt);
+        this.p2.add(this.workingVector);
+        this.workingVector.mult(-1);
+        this.p1.add(this.workingVector);
     }
+
+    intersectsPlane(ta, tb, tc, pool) {
+		let I = this.workingVector;
+        let u = pool.any_Vec3().set(tb).sub(ta); 
+        let v = pool.any_Vec3().set(tc).sub(ta);
+        let n = pool.any_Vec3();
+        let dir = pool.any_Vec3().set(this.p2).sub(this.p1);
+        let w0 = pool.any_Vec3().set(this.p1).sub(ta); 
+
+		n =  u.cross(v, n);
+		let r = -(n.dot(w0)) / n.dot(dir);
+		I.set(dir); 
+		I.mult(r).add(this.p1);	
+		return I;		
+	}
+
+
+
+	/**
+     * Note: in js this function is slow due to unecessary object instantiation overhead
+     * Find where this ray intersects a sphere
+	 * @param {Number} radius radius of the sphere
+	 * @param {Vec3} S1 reference to variable in which the first intersection will be placed
+	 * @param {Vec3} S2 reference to variable in which the second intersection will be placed
+	 * @return number of intersections found;
+	 */
+	intersectsSphere(radius, S1, S2) {
+		let e = this.workingVector;
+        e.set(this.p2).sub(this.p1);
+		e.normalize();
+	    let h = this.p1.clone();
+		h.setComponents(0,0,0);
+		h =  h.sub(this.p1);  // h=r.o-c.M
+	    let lf = e.dot(h);                      // lf=e.h
+		let radpow = radius*radius;
+		let hdh = h.magSq(); 
+		let lfpow = lf*lf;		
+		let s = radpow-hdh+lfpow;   // s=r^2-h^2+lf^2
+		
+        if (s < 0.0) return 0;    // no intersection points ?
+		
+        s = Math.sqrt(s);   // s=sqrt(r^2-h^2+lf^2)
+
+		let result = 0;
+		if (lf < s) {      // S1 behind A ?
+			if (lf+s >= 0) {  // S2 before A ?
+				s = -s;   // swap S1 <-> S2}
+				result = 1; // one intersection point
+			} 
+		}else result = 2; // 2 intersection points
+
+		e.multClone(lf-s, S1);  
+		S1.add(this.p1); // S1=A+e*(lf-s)
+		e.multClone(lf+s, S2);  
+		S2.add(this.p1); // S2=A+e*(lf+s)
+
+		return result;
+	}
     
     reverse() {
         let temp = this.p1;

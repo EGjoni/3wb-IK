@@ -326,7 +326,7 @@ class WorkingBone {
     }
 
     updateCosDampening() {
-        this.hasLimitingConstraint = this.constraint?.isReturnful();
+        this.hasLimitingConstraint = this.constraint?.isLimiting();
         const stiffness = this.forBone.getStiffness();
         const defaultDampening = this.chain.getDampening();
         this.stiffdampening = this.forBone.getParent() == null ? Math.PI : (1 - stiffness) * defaultDampening;
@@ -349,7 +349,7 @@ class WorkingBone {
                 this.chain.previousDeviation = Infinity;
             return;
         }
-        this.updateDescendantsPain();
+        //this.updateDescendantsPain();
         this.updateTargetHeadings(this.chain.boneCenteredTargetHeadings, this.chain.weights, this.myWeights);
         //const prevOrientation = Rot.fromRot(this.simLocalAxes.localMBasis.rotation);
         let gotCloser = true;
@@ -384,6 +384,8 @@ class WorkingBone {
             return;
         }
         this.updateDescendantsPain();
+        //this.simLocalAxes.getGlobalMBasis().rotation.normalize();
+        //this.simLocalAxes.getLocalMBasis().rotation.normalize();
         this.updateTargetHeadings(this.chain.boneCenteredTargetHeadings, this.chain.weights, this.myWeights);
         
         this.updateTipHeadings(this.chain.boneCenteredTipHeadings, !translate);
@@ -405,13 +407,15 @@ class WorkingBone {
         }
         let localDesiredRotby = this.simLocalAxes.getParentAxes().getGlobalMBasis().getLocalOfRotation(desiredRotation, this.chain.tempRot);
         let reglobalizedRot = desiredRotation;
+        this.simLocalAxes.rotateByLocal(localDesiredRotby);
+        
         if (this.hasLimitingConstraint && !skipConstraints) {            
             let rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, localDesiredRotby);
-            this.currentHardPain = 0;
+            /*this.currentHardPain = 1;
             if(Rot.distance(rotBy, localDesiredRotby) > 1e-6) { 
                 this.currentHardPain = 1; //violating a hard constraint should be maximally painful.
-            }
-            reglobalizedRot = this.simLocalAxes.parent.globalMBasis.rotation.applyAfter(localDesiredRotby);
+            }*/
+            reglobalizedRot = this.simLocalAxes.parent.globalMBasis.rotation.applyAfter(localDesiredRotby, this.chain.tempRot);
             this.simLocalAxes.rotateByLocal(rotBy);
         } else {
             if (translate) {
@@ -425,9 +429,10 @@ class WorkingBone {
             this.post_UpdateTipHeadings(localizedTipHeadings, true, reglobalizedRot);           
         } else {
             this.chain.hasFastPass = false;
-        }*
-        //if(window.perfing) performance.mark("updateOptimalRotationToPinnedDescendants end");
+        }*///if(window.perfing) performance.mark("updateOptimalRotationToPinnedDescendants end");
         //if(window.perfing) performance.measure("updateOptimalRotationToPinnedDescendants", "updateOptimalRotationToPinnedDescendants start", "updateOptimalRotationToPinnedDescendants end");   */
+        this.endYHeading = this.simBoneAxes.getGlobalMBasis().getYHeading().clone();
+        if(this.forBone.directRef.ikd == 'b1' && this.currentHardPain > 0) console.log(this.endYHeading.dist(this.startYHeading))
         return localDesiredRotby;
     }
 

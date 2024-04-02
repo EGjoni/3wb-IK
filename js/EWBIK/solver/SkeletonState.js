@@ -612,9 +612,9 @@ export class TargetState {
         this.priorities = priorities;
         
        
-        normedPriority = totalPriority / priorityCount;
+        //normedPriority = totalPriority / priorityCount;
 
-        this.priorities = priorities.map(priority => priority * normedPriority * maxPriority);
+        this.priorities = priorities.map(priority => totalPriority == 0 || maxPriority == 0 ? 0 : (priority / totalPriority)*maxPriority);//* normedPriority * maxPriority);
     }
 
     setWeight(weight) {

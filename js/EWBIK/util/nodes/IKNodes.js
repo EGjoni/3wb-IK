@@ -3,6 +3,7 @@ import { Rot } from "./../Rot.js";
 import { IKTransform } from "./IKTransform.js";
 const THREE = await import('three');
 import { Quaternion, Vector3, Object3D, Matrix4 } from "three";
+import { Saveable, Loader } from "../loader/saveable.js";
 
 
 
@@ -10,7 +11,7 @@ function lerp(start, end, t) {
     return (t * (end - start)) + start;
 }
 
-export class IKNode {
+export class IKNode extends Saveable {
     static totalNodes = 0;
     static NORMAL = 0;
     static IGNORE = 1;
@@ -27,7 +28,7 @@ export class IKNode {
     globalMBasis = null;
     /** @type {IKNode} */
     parent = null;
-    id = 'IKNode-' + IKNode.totalNodes;
+    areGlobal = true;
     forceOrthoNormality = true;
     static originthreevec = new Vector3(0, 0, 0);
     static identitythreequat = new Quaternion(0, 0, 0, 1);
@@ -35,31 +36,70 @@ export class IKNode {
     temp_originthreevec = new Vector3(0, 0, 0);
     temp_identitythreequat = new Quaternion(0, 0, 0, 1);
     temp_unitthreescale = new Vector3(1, 1, 1);
+    childNodes = new Set();
 
-    constructor(globalMBasis, parent, ikd = 'IKNode-' + (IKNode.totalNodes + 1), pool = noPool) {
-        this.ikd = ikd;
-        IKNode.totalNodes += 1;
-        this.pool = pool;
-        if (globalMBasis == null) {
-            this.localMBasis = IKTransform.newPooled(this.pool);
-            this.globalMBasis = IKTransform.newPooled(this.pool);
-        } else {
-            this.localMBasis = globalMBasis.clone();
-            this.globalMBasis = globalMBasis.clone();
+
+    toJSON() {
+        let result = super.toJSON();
+        result.forceOrthoNormality = this.forceOrthoNormality;
+        return result;
+    }
+
+    getRequiredRefs(){
+        return {
+            localMBasis: this.localMBasis,
+            globalMBasis: this.globalMBasis,
+            childNodes : [...this.childNodes],
+            parent: this.parent,
+        };
+    }
+
+    static fromJSON(json, loader, pool, scene) {     
+        this.isLoading = true;   
+        let result = new IKNode(undefined, undefined, json.ikd);
+        return result; 
+    }
+    async postPop(json, loader, pool, scene)  {
+        if(json.requires.localMBasis == null) 
+            return this;
+        let p = await Saveable.prepop(json.requires, loader, pool, scene);
+        this.localMBasis = p.localMBasis;
+        this.globalMBasis = p.globalMBasis;
+        if(this.globalMBasis == null) this.areGlobal = true;
+        for(let c of p.childNodes) {
+            this.childNodes.add(c);
+            c.areGlobal = false;
         }
-        this.dirty = true;
-        this.childNodes = new Set();
-        this.workingVector = this.pool.new_Vec3();
-        this.areGlobal = true;
+        this.parent = p.parent;
+        this.isLoading = false;
+        return this;
+    }
+
+    constructor(globalMBasis, parent, ikd = 'IKNode-' + (IKNode.totalNodes++), pool = noPool) {
+        super(ikd, new.target.name, new.target.totalNodes, pool);
+        if(!Saveable.loadMode) {
+            if (globalMBasis == null) {
+                this.localMBasis = IKTransform.newPooled(this.pool);
+                this.globalMBasis = IKTransform.newPooled(this.pool);
+            } else {
+                this.localMBasis = globalMBasis.clone();
+                this.globalMBasis = globalMBasis.clone();
+            }
         
-        this.tag = ikd;
-        if (parent != null) {
-            this.setParent(parent);
-        } else {
+            this.dirty = true;
+            this.workingVector = this.pool.new_Vec3();
             this.areGlobal = true;
+            
+            this.tag = ikd;
+            if (parent != null && !Saveable.loadMode) {
+                this.setParent(parent);
+            } else {
+                this.areGlobal = true;
+            }
+            this.markDirty();
+            
+            this.updateGlobal();
         }
-        this.markDirty();
-        this.updateGlobal();
     }
 
     /**
@@ -630,21 +670,47 @@ export class IKNode {
  */
 export class TrackingNode extends IKNode {
     static totalTrackingNodes = 0;
+
+    static async fromJSON(json, loader, pool, scene) {
+        let result = new TrackingNode(loader.findSceneObject(json.requires.toTrack, scene), json.ikd);
+        result.globalMBasis = new IKTransform();
+        result.localMBasis = new IKTransform();
+        return result;
+    }
+
+    toJSON() {
+        let result = super.toJSON();
+        return result; 
+    }
+    getRequiredRefs() {
+        let result = super.getRequiredRefs(); 
+        result.toTrack = this.toTrack; 
+        return result;
+    }
+    async postPop(json, loader, pool, scene)  {
+        let p = await Saveable.prepop(json.requires, loader, pool, scene);
+        await super.postPop(json, loader, pool, scene);
+        if (this.toTrack != null)
+            this.adoptLocalValuesFromObject3D(this.toTrack);
+        return this;
+    }
+
     /**
      * 
      * @param {Object3D} toTrack 
      */
-    constructor(toTrack, ikd = 'TrackingNode-' + (TrackingNode.totalNodes + 1), forceOrthoNormality = true, pool = noPool) {
+    constructor(toTrack, ikd = 'TrackingNode-' + (TrackingNode.totalNodes++), forceOrthoNormality = true, pool = noPool) {
         super(undefined, undefined, ikd, pool);
-        this.ikd = ikd;
-        TrackingNode.totalNodes += 1;
         this.toTrack = toTrack;
+        
         if (this.toTrack?.scale.x != 1 || this.toTrack?.scale.y != 1 || this.toTrack?.scale.z != 1)
             this.forceOrthoNormality = false
-        //this.toTrack.matrixWorldAutoUpdate = false;
-        if (this.toTrack != null)
-            this.adoptLocalValuesFromObject3D(this.toTrack);
-        this.markDirty();
+            //this.toTrack.matrixWorldAutoUpdate = false;
+        if(!Saveable.loadMode) {
+            if (this.toTrack != null)
+                this.adoptLocalValuesFromObject3D(this.toTrack);
+            this.markDirty();
+        }
         //this.updateGlobal();
     }
 

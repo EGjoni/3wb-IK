@@ -134,15 +134,30 @@ async function select(item) {
 }
 
 
-function addSceneArmature(armature) {
+function addSceneArmature(armature, makePrettyBones = true, initPinList = true) {
     //window.armatures.push(armature);    
     //armature.inferOrientations(armature.rootBone);
     //initHumanoidRestConstraints(armature);
-    D.byid(window.autoSolve ? 'auto-solve' : 'interaction-solve').checked = true;
-    initIK(armature);
+    document.getElementById(window.autoSolve ? 'auto-solve' : 'interaction-solve').checked = true;
+    if(makePrettyBones) {
+        initPrettyBones(armature);
+    }
+    if(initPinList) {
+        makePinsList(1, armature.armatureObj3d, armature);
+    }
+    armature.regenerateShadowSkeleton(false);
+    armature.ikReady = true;
+    if(armatures.indexOf(armature) == -1) armatures.push(armature);
     updateGlobalPinLists();
     updateGlobalBoneLists();
 }
+
+
+function initIK(armature) {
+    armature.regenerateShadowSkeleton(false);
+    armature.ikReady = true;
+}
+
 
 function setPinVisibility(makeVisible) {
     for (let pin of pinsList) {
@@ -271,7 +286,7 @@ function initControls(THREE, renderer) {
     window.axesHelperSize = 1;
     window.boneAxesHelper = new THREE.AxesHelper(axesHelperSize);
     window.pinAxesHelper = new THREE.AxesHelper(axesHelperSize);
-    D.byid(window.autoSolve ? 'auto-solve' : 'interaction-solve').checked = true;
+    document.getElementById(window.autoSolve ? 'auto-solve' : 'interaction-solve').checked = true;
     window.THREE = THREE;
     raycaster = new THREE.Raycaster();
     raycaster.layers.enable(window.boneLayer);
@@ -311,8 +326,10 @@ function initControls(THREE, renderer) {
             doSolve(selectedBone, true);//.parentArmature.solve();
 
         }
-        if (selectedBone.getConstraint() != null)
+        if (selectedBone.getConstraint() != null) {
+            window.FKConstrain(selectedBone, selectedBone.getConstraint());
             selectedBone.getConstraint().updateDisplay();
+        }
 
     });
     boneCtrls.addEventListener('objectChange', function (event) {
@@ -340,8 +357,10 @@ function initControls(THREE, renderer) {
         if (selectedBone?.parentArmature.ikReady) {
             doSolve(selectedBone, true);//.parentArmature.solve();
         }
-        if (selectedBone.getConstraint() != null)
+        if (selectedBone.getConstraint() != null) {
+            window.FKConstrain(selectedBone, selectedBone.getConstraint());
             selectedBone.getConstraint().updateDisplay();
+        }
         bone_transformDragging = true;
 
     });
@@ -350,6 +369,7 @@ function initControls(THREE, renderer) {
 
 
     pinOrientCtrls = new TransformControls(camera, renderer.domElement);
+    pinOrientCtrls.space = 'local'
     pinOrientCtrls.addEventListener('change', render);
     pinOrientCtrls.addEventListener('dragging-changed', function (event) {
         pin_transformActive = event.value;
@@ -371,8 +391,10 @@ function initControls(THREE, renderer) {
         if (selectedPin?.forBone.parentArmature.ikReady) {
             doSolve(contextBone, true);//.parentArmature.solve();
         }
-        if (contextBone.getConstraint() != null)
-            contextBone.getConstraint().updateDisplay();
+        /*if (selectedBone.getConstraint() != null) {
+            window.FKConstrain(selectedBone, selectedBone.getConstraint());
+            selectedBone.getConstraint().updateDisplay();
+        }*/
         pinOrientCtrls.visible = false;
         //pinTranslateCtrls.visible = false;
         //armature.solve();
@@ -414,7 +436,7 @@ function initControls(THREE, renderer) {
     pinOrientCtrls.mode = 'combined';
     pinOrientCtrls.getRayCaster().layers.set(boneLayer);
     boneCtrls.getRayCaster().layers.set(boneLayer);
-    pinOrientCtrls.size = 1.5;
+    pinOrientCtrls.size = 1;
     //pinOrientCtrls.size = 0.5;
     //pinTranslateCtrls.size = 1.2;
     //scene.add(pinTranslateCtrls);
@@ -556,27 +578,19 @@ function initPrettyBones(armature, mode, override, depth = 999) {
     armature.showBones(0.1, true);
 }
 
-function initIK(armature) {
-
-    //armature.regenerateShadowSkeleton(true);
-
-    armature.regenerateShadowSkeleton(false);
-    armature.ikReady = true;
-}
-
 async function switchSelected(key) {
     switch (key) {
         case 'Escape':
             window.cancelInterstice()
             break;
-        case '1':
+        case '[': //previous bone
             selectedBoneIdx = (selectedBoneIdx + 1) % boneList.length
             selectedBone = boneList[selectedBoneIdx];
             boneCtrls.attach(selectedBone);
             selectedBone.add(boneAxesHelper);
             select(selectedBone)
             break;
-        case '2':
+        case ']': //next bone
             selectedBoneIdx = (selectedBoneIdx + (boneList.length - 1)) % boneList.length
             selectedBone = boneList[selectedBoneIdx];
             boneCtrls.attach(selectedBone);
@@ -623,54 +637,6 @@ async function switchSelected(key) {
             //pinTranslateCtrls.enabled != pinTranslateCtrls.enabled;
             break;
     }
-}
-
-
-
-window.serializeInstance = function (instance, in_progress = {}) {
-    const serialized = {};
-    const className = instance.constructor.name;
-
-    // Initialize the class type tracker in in_progress if not already present
-    if (!in_progress[className]) {
-        in_progress[className] = {};
-    }
-
-    for (const key of Object.keys(instance)) {
-        const value = instance[key];
-        const type = typeof value;
-
-        if (type === 'string' || type === 'number' || type === 'boolean' || value === null) {
-            serialized[key] = value;
-        } else if (value instanceof Object) {
-            if (value.constructor.name === 'Rot' || value.constructor.name === 'Vec3') {
-                serialized[key] = value.constructor.name === 'Rot' ? [value.x, value.y, value.z, value.w] : [value.x, value.y, value.z];
-            } else if ('ikd' in value) {
-                // Check if this ikd has already been processed to avoid infinite loops
-                if (in_progress[value.constructor.name] && in_progress[value.constructor.name][value.ikd]) {
-                    serialized[key] = value.ikd; // Reference to already serialized object
-                } else {
-                    // Serialize this new object
-                    serialized[key] = value.ikd;
-                    if (!in_progress[value.constructor.name]) {
-                        in_progress[value.constructor.name] = {};
-                    }
-                    in_progress[value.constructor.name][value.ikd] = serializeInstance(value, in_progress);
-                }
-            }
-        }
-    }
-
-    // If the instance has an ikd, it should be stored in in_progress
-    if ('ikd' in instance) {
-        if (!in_progress[className][instance.ikd]) {
-            in_progress[className][instance.ikd] = serialized;
-        }
-    } else {
-        // For instances without ikd, we handle them as needed. Here it's returned directly.
-    }
-
-    return { serialized, in_progress };
 }
 
 window.getTranslationColor = (position, range) => {

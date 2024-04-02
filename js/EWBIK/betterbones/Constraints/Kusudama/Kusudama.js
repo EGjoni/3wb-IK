@@ -6,58 +6,246 @@ import { Vec3, any_Vec3 } from "../../../util/vecs.js";
 import { Ray } from "../../../util/Ray.js";
 import { IKNode } from "../../../util/nodes/IKNodes.js";
 import { generateUUID } from "../../../util/uuid.js";
-import { Constraint, LimitingReturnful } from "../Constraint.js";
+import { Constraint, Limiting, LimitingReturnful } from "../Constraint.js";
+import { kusudamaFragShader, kusudamaVertShader } from "./shaders.js";
+import { LimitCone } from "./LimitCone.js";
+import { Saveable } from "../../../util/loader/saveable.js";
 
-export class Kusudama extends LimitingReturnful {
-    
+export class Kusudama extends Limiting {
+
     static TAU = Math.PI * 2;
     static PI = Math.PI;
-    static totalKusudamas = 0;
+    static totalInstances = 0;
+    static vertShade = kusudamaVertShader;
+    static fragShade = kusudamaFragShader;
+    static baseShellColor = new THREE.Vector4(0.4, 0, 0.4, 1.0);
+    static violationColor = new THREE.Vector4(1, 0, 0, 1);
+    coneSeq = [];
+    limitCones = [];
+    static desireGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+    static desiredMat = new THREE.MeshBasicMaterial({color: new THREE.Color('blue')});
     
-
-    constructor(forBone = null, ikd = 'Kusudama-'+(Kusudama.totalKusudamas++), vecpool = noPool) {
-        this.pool = vecpool;
-        if(!forBone?.parent instanceof THREE.Bone) { 
-            console.warn("Root bones should not specify a constraint. Add this bone to a parent before attempting to register a constrain on it.");        
-        }
-        this.ikd = ikd;
-        this.directionAxes = this.maybeCreateOrientationAxes();
-        this.twistAxes = this.maybeCreateTwistAxes();
-        this.painfulness = 0.0;
-        this.cushionRatio = 0.1;
+    static async fromJSON(json, loader, pool, scene) {
+        let result = new Kusudama(undefined, json.ikd, pool);
+        return result;
+    }
+    async postPop(json, loader, pool, scene)  {
+        let res = await super.postPop(json, loader, pool, scene);
+        let p = await Saveable.prepop(json.requires, loader, pool, scene);
+        this.frameCanonical = p.frameCanonical;
+        this.boneCanonical = p.boneCanonical;
         this.limitCones = [];
+        for(let lc of p.limitCones) {
+            this.limitCones.push(lc);
+        }
+        this.initKusuNodes();
+        return this;
+    }
+
+    getRequiredRefs () {
+        let req = super.getRequiredRefs();
+        req.limitCones = [...this.limitCones];
+        req.frameCanonical = this.frameCanonical;
+        req.boneCanonical = this.boneCanonical;
+        return req;
+    }
+
+    constructor(forBone = null, ikd = 'Kusudama-' + (Kusudama.totalInstances++), pool = noPool) {
+        let basis = new IKNode(undefined, undefined, undefined, pool)
+        super(forBone, basis, ikd, pool);
+        this.ikd = ikd;
         this.minAxialAngle = Math.PI;
         this.range = Math.PI * 3;
         this.orientationallyConstrained = false;
         this.axiallyConstrained = false;
         this.strength = 1.0;
-        this.forBone = forBone;
-        this.twistMinRot = Rot.IDENTITY.clone();
-        this.twistRangeRot = Rot.IDENTITY.clone();
-        this.twistMaxRot = Rot.IDENTITY.clone();
-        this.twistHalfRangeRot = Rot.IDENTITY.clone();
-        this.twistCentRot = Rot.IDENTITY.clone();
-        this.boneRay = new Ray(this.pool.any_Vec3(), this.pool.any_Vec3());
-        this.constrainedRay = new Ray(this.pool.any_Vec3(), this.pool.any_Vec3());
-        this.twistMinVec = new Vec3(0, 0, 1);
-        this.twistMaxVec = new Vec3(0, 0, 1);
-        this.twistCenterVec = new Vec3(0, 0, -1);
-        this.twistHalfRangeHalfCos = -0.5;
         this.flippedBounds = false;
-        this.forBone.constraint = this;                
-
-        if (forBone) {            
-            this.limitingAxes =new IKNode(null, null, undefined, this.pool); 
-            this.limitingAxes.getLocalMBasis().translateTo(new Vec3(this.forBone.position));
-            this.twistAxes = this.limitingAxes.attachedClone(false);
-            this.forBone.addConstraint(this); 
-            this.enable();
+        if(!Saveable.loadMode) {
+            if(this.forBone) {
+                let yHead = this.tempNode1.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation()).getLocalMBasis().getYHeading();
+                this.tempNode1.adoptLocalValuesFromObject3D(this.forBone).localMBasis.rotation.applyToVec(yHead, yHead);
+                this.limitCones.push(new LimitCone(yHead, 0.2, this.pool));
+            }
+            this.initKusuNodes()
         }
+    }
+
+    initKusuNodes() {
+        this.frameCanonical = this.basisAxes;
+        this.boneCanonical = this.basisAxes.freeClone();
+        this.boneCanonical.setParent(this.frameCanonical);
+        this.desiredTracer = new THREE.Mesh(Kusudama.desireGeo, Kusudama.desiredMat);
+        
+        this.__frame_calc_internal = new IKNode(undefined, undefined, undefined, this.pool);
+        this.__bone_calc_internal = new IKNode(undefined, undefined, undefined, this.pool);
+        if (this.forBone?.height) {
+            this.boneCanonical.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
+            this.geometry = new THREE.SphereGeometry(this.forBone.height * .75, 32, 32);
+        } else {
+            this.geometry = new THREE.SphereGeometry(.75, 32, 32);
+        }
+
+        for (let i = 0; i < 120; i++) { this.coneSeq.push(new THREE.Vector4()); }
+
+        this.coneSeqMaterial = new THREE.ShaderMaterial({
+            vertexShader: Kusudama.vertShade,
+            fragmentShader: Kusudama.fragShade, // Your fragment shader code here
+            transparent: false,
+            blending: THREE.NormalBlending,
+            side: THREE.DoubleSide,
+            uniforms: {
+                shellColor: { value: Kusudama.baseShellColor },
+                vertLightDir: { value: new THREE.Vector3(0, 0, 1) },
+                coneSequence: { value: this.coneSeq },
+                coneCount: { value: 1 },
+                multiPass: { value: true },
+                frame: { value: 0 },
+                screensize: { value: new THREE.Vector2(1920, 1080) }
+            },
+        });
+        this.coneSeqMaterial.oldOnBFR = this.coneSeqMaterial.onBeforeRender;
+        this.coneSeqMaterial.onBeforeRender = function (renderer, scene, camera, geometry, mesh, ...others) {
+            this.uniforms.frame.value = renderer.info.render.frame;
+            this.uniforms.screensize.value.x = renderer.domElement.width;
+            this.uniforms.screensize.value.y = renderer.domElement.height;
+            if (this.oldOnBFR != null)
+                this.oldOnBFR(renderer, scene, camera, geometry, mesh, ...others);
+        }
+        this.shell = new THREE.Mesh(this.geometry, this.coneSeqMaterial);
+
+        this.__bone_calc_internal.setRelativeToParent(this.__frame_calc_internal);
+        this.updateDisplay();
+    }
+
+
+    updateDisplay() {
+        this.shell.quaternion.set(0, 0, 0, 1);
+        this.shell.position.set(this.forBone.position.x, this.forBone.position.y, this.forBone.position.z);
+        this.forBone.parent.add(this.shell);
+        this.shell.add(this.desiredTracer);
+        let i = 0;
+        for (let lc of this.limitCones) {
+            let cp = lc.controlPoint.normalize();
+            let tc1 = lc.tangentCircleCenterNext1.normalize();
+            let tc2 = lc.tangentCircleCenterNext2.normalize();
+            this.shell.material.uniforms.coneSequence.value[i].set(cp.x, cp.y, cp.z, lc.radius);
+            this.shell.material.uniforms.coneSequence.value[i + 1].set(tc1.x, tc1.y, tc1.z, lc.tangentCircleRadiusNext);
+            this.shell.material.uniforms.coneSequence.value[i + 2].set(tc2.x, tc2.y, tc2.z, lc.tangentCircleRadiusNext);
+            i += 3;
+        }
+        this.shell.material.uniforms.coneCount.value = this.limitCones.length;
+        this.updateViolationHint();
+    }
+
+    inBoundsDisplay = [1.0];
+    inBoundsConstrain = [1.0];
+    updateViolationHint() {
+        this.__frame_calc_internal.adoptLocalValuesFromObject3D(this.forBone);
+        this.__bone_calc_internal.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
+        this.tempHeading.set(this.__bone_calc_internal.getGlobalMBasis().getYHeading());
+        this.frameCanonical.setVecToLocalOf(this.tempHeading, this.tempHeading);
+        
+        let result = this.pointInLimits(this.tempHeading, this.inBoundsDisplay);
+        
+        this.desiredTracer.position.x = result.x; //this.tempHeading.x;
+        this.desiredTracer.position.y = result.y; //this.tempHeading.y;
+        this.desiredTracer.position.z = result.z; //this.tempHeading.z;
+        this.desiredTracer.layers.set(1);
+        this.desiredTracer.updateMatrix();
+       
+        //console.log(this.tempHeading.toConsole(1))
+        if (this.inBoundsDisplay[0] == -1 && result.sub(this.tempHeading).magSq() > 1e-12)
+            this.shell.material.uniforms.shellColor.value = Kusudama.violationColor;
+        else
+            this.shell.material.uniforms.shellColor.value = Kusudama.baseShellColor;
+    }
+
+    addLimitCone(previous, next, newPoint, radius) {
+        let insertAt = 0;
+
+        if (this.limitCones.length == 0) {
+            this.addLimitConeAtIndex(-1, newPoint, radius);
+        }
+        else if (previous != null && next == null) {
+            insertAt = this.limitCones.indexOf(previous) + 1;
+            if (newPoint == null) {
+                newPoint = previous.getControlPoint().clone();
+                Rot.fromAxisAngle(newPoint.getOrthogonal(), previous.getRadius() * 1.5).applyToVec(newPoint, newPoint);
+                radius = previous.getRadius();
+            }
+        } else if (next != null && previous == null) {
+            insertAt = this.limitCones.indexOf(next);
+            if (newPoint == null) {
+                newPoint = next.getControlPoint().clone();
+                Rot.fromAxisAngle(newPoint.getOrthogonal(), next.getRadius() * 1.5).applyToVec(newPoint, newPoint);
+                radius = next.getRadius();
+            }
+        } else {
+            insertAt = Math.max(0, this.limitCones.indexOf(next));
+            if (newPoint == null) {
+                newPoint = previous.getControlPoint().clone();
+                newPoint.add(previous.getControlPoint());
+                newPoint.div(2);
+                radius = (next.getRadius() + previous.getRadius()) / 2;
+            }
+        }
+        return this.addLimitConeAtIndex(insertAt, newPoint, radius);
+    }
+
+    /**
+     * Add a limitcone after the provided limitcone. Its values will be interpolated
+     * between the limitcones it is adjacent to. If it is only adjacent to one cone, it will
+     * have the same radius as that cone, rotated in a random direction away from it. 
+     * 
+     * Hope you like surprises.
+     *  @param {LimitCone} next LimitCone to insert this one before
+     */
+    addLimitConeBefore(next) {
+        let atIndex = this.limitCones.indexOf(next);
+        let result = this.addLimitCone(null, next, null, null);
+        return result;
+    }
+
+    /**
+     * Add a limitcone before the provided limitcone. Its values will be interpolated
+     * between the limitcones it is adjacent to. If it is only adjacent to one cone, it will
+     * have the same radius as that cone, rotated in a random direction away from it. 
+     * 
+     * Hope you like surprises.
+     * @param {LimitCone} previous LimitCone to insert this one after
+     */
+    addLimitConeAfter(previous) {
+        let atIndex = this.limitCones.indexOf(previous) + 1;
+        let result = this.addLimitConeAtIndex(previous, null, null, null);
+        return result;
+    }
+
+    removeLimitCone(limitCone) {
+        const index = this.limitCones.indexOf(limitCone);
+        if (index !== -1) {
+            this.limitCones.splice(index, 1);
+            this.updateTangentRadii();
+            this.updateRotationalFreedom();
+        }
+    }
+
+    addLimitConeAtIndex(index, coneDir, coneRadius) {
+        let newCone = null;
+        if (coneDir instanceof LimitCone) {
+            this.limitCones.splice(index, 0, coneDir)
+            newCone = coneDir;
+        } else {
+            newCone = new LimitCone(coneDir, coneRadius);
+            this.limitCones.splice(index, 0, newCone);
+        }
+        this.updateTangentRadii();
+        this.updateDisplay();
+        return newCone;
     }
 
     constraintUpdateNotification() {
         this.updateTangentRadii();
-        this.updateRotationalFreedom(); 
+        this.updateRotationalFreedom();
     }
 
     optimizeTwistAxes() {
@@ -72,7 +260,7 @@ export class Kusudama extends LimitingReturnful {
                 let nextC = this.getLimitCones()[i + 1];
                 let thisCp = thisC.getControlPoint().clone();
                 let nextCp = nextC.getControlPoint().clone();
-                let thisToNext = Rot.fromVecs(thisCp, nextCp); 
+                let thisToNext = Rot.fromVecs(thisCp, nextCp);
                 let halfThisToNext = Rot.fromAxisAngle(thisToNext.getAxis(), thisToNext.getAngle() / 2);
 
                 let halfAngle = halfThisToNext.applyToClone(thisCp);
@@ -100,141 +288,60 @@ export class Kusudama extends LimitingReturnful {
     updateTangentRadii() {
         for (let i = 0; i < this.limitCones.length; i++) {
             let next = i < this.limitCones.length - 1 ? this.limitCones[i + 1] : null;
-            this.limitCones[i].updateTangentHandles(next); 
+            this.limitCones[i].updateTangentHandles(next);
         }
     }
 
-    snapToLimits() {
-        if (this.orientationallyConstrained) {
-            this.setAxesToOrientationSnap(this.attachedTo().localAxes(), this.swingOrientationAxes()); 
-        }
-        if (this.axiallyConstrained) {
-            this.snapToTwistLimits(this.attachedTo().localAxes(), this.twistOrientationAxes()); 
-        }
-    }
-
-    setAxesToOrientationSnap(toSet, limitingAxes) {
+    getAcceptableRotation(currentState, currentBoneOrientation, desiredRotation, calledBy = null) {
         let inBounds = [1.0];
-        limitingAxes.updateGlobal();
-        this.boneRay.p1.set(limitingAxes.origin());
-        this.boneRay.p2.set(toSet.y().p2);
-        let bonetip = limitingAxes.getLocalOf(toSet.yRay().p2).clone();
-        let inLimits = this.pointInLimits(bonetip, inBounds, AbstractLimitCone.BOUNDARY);
+        let currentOrientation = currentState.localMBasis.rotation.applyAfter(currentBoneOrientation.localMBasis.rotation, this.tempOutRot);
+        let desiredOrientation = desiredRotation.applyAfter(currentOrientation, this.tempRot2);
+        this.tempVec1.setComponents(0, 1, 0);
+        let currentHeading = currentOrientation.applyToVec(this.tempVec1, this.tempVec1);
+        this.tempVec2.setComponents(0, 1, 0);
+        let desiredHeading = desiredOrientation.applyToVec(this.tempVec2, this.tempVec2);
+        let frameLocalDesiredHeading = this.frameCanonical.setVecToLocalOf(desiredHeading, this.tempHeading);
+        let inLimits = this.pointInLimits(frameLocalDesiredHeading, inBounds);
 
-        if (inBounds[0] === -1 && inLimits !== null) {
-            this.constrainedRay.p1.set(this.boneRay.p1);
-            this.constrainedRay.p2.set(limitingAxes.getGlobalOf(inLimits));
-            let rectifiedRot = Rot.fromVecs(this.boneRay.heading(), this.constrainedRay.heading());
-            toSet.rotateByGlobal(rectifiedRot);
-            toSet.updateGlobal();
+        if (inBounds[0] == -1 && inLimits != null) {
+            let constrainedHeading = this.frameCanonical.getGlobalMBasis().setVecToGlobalOf(inLimits, this.tempVec3);
+            let rectifiedRot = this.tempOutRot.setFromVecs(currentHeading, constrainedHeading);
+            return rectifiedRot;
         }
-    }
-
-    snapToTwistLimits(toSet, twistAxes) {
-        if (!this.axiallyConstrained) return 0.0;
-        let globTwistCent = twistAxes.getGlobalMBasis().rotation.applyTo(this.twistCentRot);
-        let alignRot = globTwistCent.applyInverseTo(toSet.getGlobalMBasis().rotation);
-        let decomposition = alignRot.getSwingTwist(this.pool.any_Vec3(0, 1, 0));
-        decomposition[1].clampToCosHalfAngle(this.twistHalfRangeHalfCos);
-        let recomposition = decomposition[0].applyTo(decomposition[1]);
-        toSet.getParentAxes().getGlobalMBasis().inverseRotation.applyTo(globTwistCent.applyTo(recomposition), toSet.localMBasis.rotation);
-        toSet.localMBasis.lazyRefresh();
-        toSet.markDirty();
-        return 0;
+        return desiredRotation;
     }
 
     setAxesToReturnfulled(toSet, currentOrientation, swingAxes, twistAxes, cosHalfReturnfullness, angleReturnfullness) {
-        if (swingAxes !== null && this.painfulness > 0.0) {
-            if (this.orientationallyConstrained) {
-                let origin = toSet.origin();
-                let inPoint = toSet.yRay().p2.clone();
-                let pathPoint = this.pointOnPathSequence(inPoint, swingAxes);
-                inPoint.sub(origin);
-                pathPoint.sub(origin);
-                let toClamp = Rot.fromVecs(inPoint, pathPoint);
-                toClamp.clampToCosHalfAngle(cosHalfReturnfullness);
-                toSet.rotateByGlobal(toClamp);
-            }
-            if (this.axiallyConstrained) {
-                let angleToTwistMid = this.angleToTwistCenter(toSet, twistAxes);
-                let clampedAngle = MathUtils.clamp(angleToTwistMid, -angleReturnfullness, angleReturnfullness);
-                toSet.rotateAboutY(clampedAngle, false);
-            }
+        if (this.painfulness > 0.0) {
+            let origin = toSet.origin();
+            let inPoint = toSet.yRay().p2.clone();
+            let pathPoint = this.pointOnPathSequence(inPoint, swingAxes);
+            inPoint.sub(origin);
+            pathPoint.sub(origin);
+            let toClamp = Rot.fromVecs(inPoint, pathPoint);
+            toClamp.clampToCosHalfAngle(cosHalfReturnfullness);
+            toSet.rotateByGlobal(toClamp);
         }
     }
 
-    setAxialLimits(minAngle, inRange) {
-        this.minAxialAngle = minAngle;
-        this.range = inRange;
-        let y_axis = this.pool.new_Vec3(0, 1, 0);
-        this.twistMinRot = Rot.fromAxisAngle(y_axis, this.minAxialAngle);
-        this.twistMinVec = this.twistMinRot.applyToVecClone(this.pool.new_Vec3(0, 0, 1));
-
-        this.twistHalfRangeHalfCos = Math.cos(inRange / 4);
-        this.twistRangeRot = Rot.fromAxisAngle(y_axis, this.range);
-
-        this.twistMaxVec = this.twistRangeRot.applyToVecClone(this.twistMinVec);
-
-        this.twistHalfRangeRot = Rot.fromAxisAngle(y_axis, this.range / 2);
-        this.twistCenterVec = this.twistHalfRangeRot.applyToVecClone(this.twistMinVec);
-        this.twistCentRot = Rot.fromVecs(this.pool.new_Vec3(0, 0, 1), this.twistCenterVec);
-
-        this.constraintUpdateNotification();
-    }
-
-    setTwist(ratio, toSet) {
-        let globTwistCent = Rot.IDENTITY.clone();
-        this.twistAxes.getGlobalMBasis().applyTo(this.twistMinRot, globTwistCent);
-        let alignRot = globTwistCent.applyInverseToRot(toSet.getGlobalMBasis().rotation);
-        let decomposition = alignRot.getSwingTwist(this.pool.new_Vec3(0, 1, 0));
-        let goal = Rot.fromAxisAngle(this.twistHalfRangeRot.getAxis(), 2 * this.twistHalfRangeRot.getAngle() * ratio);
-        let toGoal = goal.applyAfter(alignRot.getInverse());
-        let achieved = toGoal.applyAfter(alignRot);
-        decomposition[1] = achieved;
-        let recomposition = decomposition[0].applyAfter(decomposition[1]);
-        toSet.getParentAxes().getGlobalMBasis().inverseRotation.applyAfter(globTwistCent.applyAfter(recomposition), toSet.localMBasis.rotation);
-        toSet.localMBasis.lazyRefresh();
-        toSet.markDirty();
-    }
-
-    getTwistRatio(toGet, twistAxes) {
-        let globTwistCent = Rot.IDENTITY.clone();
-        twistAxes.getGlobalMBasis().applyTo(this.twistCentRot, globTwistCent);
-        let centAlignRot = globTwistCent.applyInverseTo(toGet.getGlobalMBasis().rotation);
-        let centDecompRot = centAlignRot.getSwingTwist(this.pool.new_Vec3(0, 1, 0));
-        let locZ = centDecompRot[1].applyToClone(this.pool.new_Vec3(0, 0, 1));
-        let loctwistMaxVec = twistCentRot.getInverse().applyToClone(this.twistMaxVec);
-        let loctwistMinVec = twistCentRot.getInverse().applyToClone(this.twistMinVec);
-        let toMax = Rot.fromAxisAngle(locZ, loctwistMaxVec);
-        let fromMin = Rot.fromAxisAngle(locZ, loctwistMinVec);
-        let toMaxAngle = toMax.getAngle();
-        let minToAngle = fromMin.getAngle();
-        let absRange = Math.abs(this.range);
-        if (minToAngle > toMaxAngle) {
-            return ((absRange / 2) + centDecompRot[1].getAngle()) / Math.abs(absRange);
-        } else {
-            return ((absRange / 2) - centDecompRot[1].getAngle()) / Math.abs(absRange);
-        }
-    }
-
-    pointInLimits(inPoint, inBounds, boundaryMode) {
-        let point = inPoint.clone(); 
-        point.normalize(); 
+    pointInLimits(inPoint, inBounds) {
+        let point = inPoint.clone();
+        point.normalize();
 
         inBounds[0] = -1;
 
         let closestCollisionPoint = null;
         let closestCos = -2;
-        if (this.limitCones.length > 1 && this.orientationallyConstrained) {
+        if (this.limitCones.length > 1) {
             for (let i = 0; i < this.limitCones.length - 1; i++) {
                 let collisionPoint = inPoint.clone();
-                collisionPoint.setComponents(0, 0, 0); 
+                collisionPoint.setComponents(0, 0, 0);
                 let nextCone = this.limitCones[i + 1];
                 let inSegBounds = this.limitCones[i].inBoundsFromThisToNext(nextCone, point, collisionPoint);
                 if (inSegBounds) {
                     inBounds[0] = 1;
                 } else {
-                    let thisCos = collisionPoint.dot(point); 
+                    let thisCos = collisionPoint.dot(point);
                     if (closestCollisionPoint === null || thisCos > closestCos) {
                         closestCollisionPoint = collisionPoint.clone();
                         closestCos = thisCos;
@@ -242,18 +349,15 @@ export class Kusudama extends LimitingReturnful {
                 }
             }
             return inBounds[0] === -1 ? closestCollisionPoint : inPoint;
-        } else if (this.orientationallyConstrained) {
+        } else {
             if (point.dot(this.limitCones[0].getControlPoint()) > this.limitCones[0].getRadiusCosine()) {
                 inBounds[0] = 1;
                 return inPoint;
             } else {
-                let axis = this.limitCones[0].getControlPoint().cross(point, this.pool.any_Vec3()); 
-                let toLimit = Rot.fromAxisAngle(axis, this.limitCones[0].getRadius()); 
-                return toLimit.applyToVecClone(this.limitCones[0].getControlPoint()); 
+                let axis = this.limitCones[0].getControlPoint().cross(point, this.pool.any_Vec3());
+                let toLimit = Rot.fromAxisAngle(axis, this.limitCones[0].getRadius());
+                return toLimit.applyToVecClone(this.limitCones[0].getControlPoint());
             }
-        } else {
-            inBounds[0] = 1;
-            return inPoint;
         }
     }
 
@@ -265,15 +369,15 @@ export class Kusudama extends LimitingReturnful {
      */
     pointOnPathSequence(inPoint, limitingAxes) {
         let closestPointDot = 0;
-        let result = limitingAxes.getLocalOf(inPoint, this.pool.any_Vec3()); 
+        let result = limitingAxes.getLocalOf(inPoint, this.pool.any_Vec3());
         result.normalize();
 
         if (this.limitCones.length === 1) {
-            result.set(this.limitCones[0].controlPoint); 
+            result.set(this.limitCones[0].controlPoint);
         } else {
             for (let i = 0; i < this.limitCones.length - 1; i++) {
                 let nextCone = this.limitCones[i + 1];
-                let closestPathPoint = this.limitCones[i].getClosestPathPoint(nextCone, point); 
+                let closestPathPoint = this.limitCones[i].getClosestPathPoint(nextCone, point);
                 let closeDot = closestPathPoint.dot(point);
                 if (closeDot > closestPointDot) {
                     result.set(closestPathPoint);
@@ -282,26 +386,14 @@ export class Kusudama extends LimitingReturnful {
             }
         }
 
-        return limitingAxes.getGlobalOf(result); 
+        return limitingAxes.getGlobalOf(result);
     }
 
-    getTwistLocVecs(toGet) {
-        let twistY = twistAxes.yRay().heading(); 
-        let globY = toGet.yRay().heading();
-        let globZ = toGet.zRay().heading();
-        let globX = toGet.xRay().heading();
-        let algnY = Rot.fromVecs(globY, twistY); 
-        let alignedZ = algnY.applyToVecClone(globZ); 
-        let alignedX = algnY.applyToVecClone(globX);
-        let twistLocZ = twistAxes.getLocalOf(alignedZ.add(twistAxes.origin()));
-        let twistLocX = twistAxes.getLocalOf(alignedX.add(twistAxes.origin()));
-        return [twistLocX, twistLocZ]; 
-    }
 
     setPainfulness(amt) {
         this.painfulness = amt;
         if (this.forBone && this.forBone.parentArmature) {
-            this.forBone.parentArmature.updateShadowSkelRateInfo(); 
+            this.forBone.parentArmature.updateShadowSkelRateInfo();
         }
     }
 
@@ -309,260 +401,15 @@ export class Kusudama extends LimitingReturnful {
         return this.painfulness;
     }
 
-    addLimitCone(newPoint, radius, previous, next) {
-        let insertAt = 0;
-
-        if (next === null || this.limitCones.length === 0) {
-            this.addLimitConeAtIndex(-1, newPoint, radius);
-        } else if (previous !== null) {
-            insertAt = this.limitCones.indexOf(previous) + 1;
-        } else {
-            insertAt = Math.max(0, this.limitCones.indexOf(next));
-        }
-        this.addLimitConeAtIndex(insertAt, newPoint, radius);
+    /**
+    * @return the limitingAxes of this Kusudama (these are just its parentBone's majorRotationAxes)
+    */
+    swingOrientationAxes() {
+        //if(inverted) return inverseLimitingAxes; 
+        return limitingAxes;
     }
 
-    removeLimitCone(limitCone) {
-        const index = this.limitCones.indexOf(limitCone);
-        if (index !== -1) {
-            this.limitCones.splice(index, 1);
-            this.updateTangentRadii(); 
-            this.updateRotationalFreedom(); 
-        }
+    twistOrientationAxes() {
+        return twistAxes;
     }
-
-     /**
-	 * @return the limitingAxes of this Kusudama (these are just its parentBone's majorRotationAxes)
-	 */
-	swingOrientationAxes() {
-		//if(inverted) return inverseLimitingAxes; 
-		return limitingAxes;
-	}
-	
-	twistOrientationAxes() {
-		return twistAxes;
-	}
 }
-
-const kusudamaFragShader = `
-varying vec3 vertNormal;
-varying vec3 vertViewNormal;
-varying vec4 color;
-
-void main() {
-    vertViewNormal = normalize(normalMatrix * normal); // Transform normal to view space and normalize
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    vertNormal = normalize(normal);
-}`
-
-
-
-const kusudamaVertShader = `
-#ifdef GL_ES
-precision mediump float;
-precision mediump int;
-#endif
-
-uniform vec4 shellColor;
-
-//Model space normal direction of the current fragment
-//since we're on a sphere, this is literally just the fragment's position in 
-//modelspace
-varying vec3 vertNormal;
-
-//This shader can display up to 30 cones (represented by 30 4d vectors) 
-// alphachannel represents radius, rgb channels represent xyz coordinates of 
-// the cone direction vector in model space
-uniform vec4 coneSequence[30];
-uniform int coneCount; 
-
-//Make this "true" for sceendoor transparency (randomly discarding fragments)
-//so that you can blur the result in another pass. Otherwise make it  
-//false for a solid shell.  
-uniform bool multiPass;
-
-//Following three varyings are 
-//Only used for fake lighting. 
-//Not conceptually relevant
-varying vec3 vertViewNormal;
-uniform vec3 vertLightDir;
-
-
-float hash(float n) {
-    float x = sin(n) * 43758.5453123;
-    return fract(x);
-}
-
-float noise(vec2 U) {
-    return hash(U.x+5000.0*U.y);
-}
-
-bool randBit(vec2 U) {
-    float dist2 = 1.0;
-    return 0.5 < (noise(U) * 4. -(noise(U+vec2(dist2,0.))+noise(U+vec2(0.,dist2))+noise(U-vec2(0.,dist2))+noise(U-vec2(dist2,0.))) + 0.5);
-}
-///END OF NOISE FUNCTIONS FOR FANCY TRANSPARENCY RENDERING.
-
-bool isInInterConePath(in vec3 normalDir, in vec4 tangent1, in vec4 cone1, in vec4 tangent2, in vec4 cone2) {			
-    vec3 c1xc2 = cross(cone1.xyz, cone2.xyz);		
-    float c1c2dir = dot(normalDir, c1xc2);
-        
-    if(c1c2dir < 0.0) { 
-        vec3 c1xt1 = cross(cone1.xyz, tangent1.xyz); 
-        vec3 t1xc2 = cross(tangent1.xyz, cone2.xyz);	
-        float c1t1dir = dot(normalDir, c1xt1);
-        float t1c2dir = dot(normalDir, t1xc2);
-        
-        return (c1t1dir > 0.0 && t1c2dir > 0.0); 
-            
-    }else {
-        vec3 t2xc1 = cross(tangent2.xyz, cone1.xyz);	
-        vec3 c2xt2 = cross(cone2.xyz, tangent2.xyz);	
-        float t2c1dir = dot(normalDir, t2xc1);
-        float c2t2dir = dot(normalDir, c2xt2);
-        
-        return (c2t2dir > 0.0 && t2c1dir > 0.0);
-    }	
-    return false;
-}
-
-//determines the current draw condition based on the desired draw condition in the setToArgument
-// -3 = disallowed entirely; 
-// -2 = disallowed and on tangentCone boundary
-// -1 = disallowed and on controlCone boundary
-// 0 =  allowed and empty; 
-// 1 =  allowed and on controlCone boundary
-// 2  = allowed and on tangentCone boundary
-int getAllowabilityCondition(in int currentCondition, in int setTo) {
-    if((currentCondition == -1 || currentCondition == -2)
-        && setTo >= 0) {
-        return currentCondition *= -1;
-    } else if(currentCondition == 0 && (setTo == -1 || setTo == -2)) {
-        return setTo *=-2;
-    }  	
-    return max(currentCondition, setTo);
-}
-
-
-
-//returns 1 if normalDir is beyond (cone.a) radians from cone.rgb
-//returns 0 if normalDir is within (cone.a + boundaryWidth) radians from cone.rgb 
-//return -1 if normalDir is less than (cone.a) radians from cone.rgb
-int isInCone(in vec3 normalDir, in vec4 cone, in float boundaryWidth) {
-    float arcDistToCone = acos(dot(normalDir, cone.rgb));
-    if(arcDistToCone > (cone.a+(boundaryWidth/2.))) {
-        return 1; 
-    }
-    if(arcDistToCone < cone.a-(boundaryWidth/2.)) {
-        return -1;
-    }
-    return 0;
-} 
-
-//returns a color corresponding to the allowability of this region, or otherwise the boundaries corresponding 
-//to various cones and tangentCone 
-vec4 colorAllowed(in vec3 normalDir,  in int coneCount, in float boundaryWidth) {
-    normalDir = normalize(normalDir);
-    int currentCondition = -3;
-    
-    if(coneCount == 1) {
-        vec4 cone = coneSequence[0];
-        int inCone = isInCone(normalDir, cone, boundaryWidth);
-        inCone = inCone == 0 ? -1 : inCone < 0 ? 0 : -3;
-        currentCondition = getAllowabilityCondition(currentCondition, inCone);
-    } else {
-        for(int i=0; i<coneCount-1; i+=3) {
-            
-            int idx = i*3; 
-            vec4 cone1 = coneSequence[idx];
-            vec4 tangent1 = coneSequence[idx+1];			
-            vec4 tangent2 = coneSequence[idx+2];			
-            vec4 cone2 = coneSequence[idx+3];
-                                        
-            int inCone1 = isInCone(normalDir, cone1, boundaryWidth);
-            
-            inCone1 = inCone1 == 0 ? -1 : inCone1 < 0 ? 0 : -3;
-            currentCondition = getAllowabilityCondition(currentCondition, inCone1);
-                
-            int inCone2 = isInCone(normalDir, cone2, boundaryWidth);
-            inCone2 =  inCone2 == 0 ? -1 : inCone2  < 0 ? 0 : -3;
-            currentCondition = getAllowabilityCondition(currentCondition, inCone2);
-        
-            int inTan1 = isInCone(normalDir, tangent1, boundaryWidth); 
-            int inTan2 = isInCone(normalDir, tangent2, boundaryWidth);
-            
-            if( inTan1 < 1 || inTan2  < 1) {			
-                inTan1 =  inTan1 == 0 ? -2 : -3;
-                currentCondition = getAllowabilityCondition(currentCondition, inTan1);
-                inTan2 =  inTan2 == 0 ? -2 : -3;
-                currentCondition = getAllowabilityCondition(currentCondition, inTan2);
-            } else {				 
-                bool inIntercone = isInInterConePath(normalDir, tangent1, cone1, tangent2, cone2);
-                int interconeCondition = inIntercone ? 0 : -3; 
-                currentCondition = getAllowabilityCondition(currentCondition, interconeCondition);					
-            }
-        }
-    }	
-    
-    vec4 result = shellColor;
-    
-    if(multiPass && (currentCondition == -3 || currentCondition > 0)) {
-        
-        /////////
-        //CODE FOR FANCY BLURRED TRANSPARENCY. 
-        //NOT OTHERWISE CONCEPTUALLY RELEVANT TO 
-        //TO VISUALIZATION
-        ////////
-        
-        vec3 randDir = vec3(normalDir.x  * noise(normalDir.xy)/50.0,  normalDir.y  * noise(normalDir.yz)/50.0, normalDir.z  * noise(normalDir.zx)/50.0);
-        randDir = normalDir;
-        float lon = atan(randDir.x/randDir.z) + 3.14159265/2.0;
-        float lat = atan(randDir.y/randDir.x) + 3.14159265/2.0;
-                
-        bool latDraw = randBit(vec2(lat, lon));//mod(lat, 0.005) < 0.00499;
-        bool lonDraw = randBit(vec2(lon, lat));//mod(lon, 0.005) < 0.00499;
-            
-        if(randBit(vec2(lon, lat))) {		
-            result = vec4(0.0,0.0,0.0,0.0);	
-        }
-        ////////
-        //END CODE FOR FANCY BLURRED TRANSPARENCY
-        ///////
-    } else if (currentCondition != 0) {
-    
-        float onTanBoundary = abs(currentCondition) == 2 ? 0.3 : 0.0; 
-        float onConeBoundary = abs(currentCondition) == 1 ? 0.3 : 0.0;	
-    
-        //return distCol;
-        result += vec4(0.0, onConeBoundary, onTanBoundary, 1.0);
-    } else {
-        discard;
-    }
-    return result;
-            
-}
-
-void main() {
-
-    vec3 normalDir = normalize(vertNormal); // the vertex normal in Model Space.
-    float lightScalar = abs( (dot(vertViewNormal, vec3(0,0,1)*.75)+.25));
-    vec4 sc = vec4(shellColor.rgb*lightScalar, 1.0);
-    vec4 colorAllowed = colorAllowed(normalDir, coneCount, 0.02);  
-
-    if(colorAllowed.a == 0.0) {
-        discard;
-    } else {
-        gl_FragColor = sc;
-    }    
-    //colorAllowed += shellColor*(colorAllowed + fwidth(colorAllowed)); 
-    //colorAllowed /= 2.0;
-    /*vec3 lightCol = vec3(1.0,0.8,0.0);
-    float gain = vertViewNormal.z < 0. ? -0.3 : 0.5;
-    colorAllowed.rgb = (colorAllowed.rgb + lightCol*(lightScalar + gain)) / 2.;
-    vec4 specCol = vec4(1.0, 1.0, 0.1, colorAllowed.a);  
-    colorAllowed = colorAllowed.g > 0.8 ? colorAllowed+specCol : colorAllowed; */
-    //gl_FragColor = shellColor*colorAllowed.a;
-}
-`
-
-

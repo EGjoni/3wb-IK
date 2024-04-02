@@ -6,6 +6,7 @@ import { Ray } from "../../../util/Ray.js";
 import { IKNode, TrackingNode } from "../../../util/nodes/IKNodes.js";
 import { IKTransform } from '../../../util/nodes/IKTransform.js';
 import { Constraint, Returnful } from '../Constraint.js';
+import { Saveable } from '../../../util/loader/saveable.js';
 /** 
  * Very simple constraint defining a rest pose a bone should prefer to be in. 
  * It is safe, fast, and easy to change the specified target rest pose whenever you wish without notifying the solver.
@@ -13,10 +14,19 @@ import { Constraint, Returnful } from '../Constraint.js';
  * difficult to reach anyway.
 */
 export class Rest extends Returnful {
-    static totalRestConstraints = 0;
+    static totalInstances = 0;
     /**@type {Bone} */
     painfulness = 0.5;
     
+    getRequiredRefs() {
+        let req = super.getRequiredRefs();
+        req.boneFrameRest = this.boneFrameRest;
+    }
+    async postPop(json, loader, pool, scene)  {
+        let p = await Saveable.prepop(json.requires, loader, pool, scene);
+        this.boneFrameRest = p.boneFrameRest;
+        return this;
+    } 
     
 
     /**
@@ -27,18 +37,20 @@ export class Rest extends Returnful {
      * 
      * Note that the solver needs to run at least 2 iterations per solve in order for this to accomplish anything. And the more iterations the merrier
      */
-    constructor(forBone, ikd='RestConstrain-'+(Rest.totalRestConstraints++), pool = noPool) {
+    constructor(forBone, ikd='RestConstraint-'+(Rest.totalInstances++), pool = noPool) {
         super(forBone, undefined, ikd, pool);
-        /**@type {IKNode}*/
-        this.boneFrameRest =new IKNode(null, null, undefined, this.pool); //inferred orientation of the boneframe which would be required for IKBoneOrientation to be align with the transform the user specified.
-        this.restPose_three = null;
-        if (this.forBone != null) {            
-            //if(restPose != null)
-             //   this.setRestPose(restPose);
-           // else 
-                this.setCurrentAsRest();
-            if(this.forBone)
-                this.forBone.springy = true;
+        if(!Constraint.loadMode) {
+            /**@type {IKNode}*/
+            this.boneFrameRest = new IKNode(null, null, undefined); //inferred orientation of the boneframe which would be required for IKBoneOrientation to be align with the transform the user specified.
+            this.restPose_three = null;
+            if (this.forBone != null) {            
+                //if(restPose != null)
+                //   this.setRestPose(restPose);
+            // else 
+                    this.setCurrentAsRest();
+                if(this.forBone)
+                    this.forBone.springy = true;
+            }
         }
     }
 

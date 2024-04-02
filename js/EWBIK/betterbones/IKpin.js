@@ -3,10 +3,11 @@ import { IKNode, TrackingNode} from "../util/nodes/IKNodes.js";
 import { generateUUID } from "../util/uuid.js";
 const THREE = await import('three');
 import { Object3D } from "three";
+import { Saveable } from "../util/loader/saveable.js";
 
 
-export class IKPin {
-    static totalPins = 0;
+export class IKPin extends Saveable{
+    static totalInstances = 0;
     forBone = null;
     effectorTransform = new IKTransform();
     target = null;
@@ -14,6 +15,7 @@ export class IKPin {
     /**@type {IKNode} */
     targetNode = null;
     pinWeight = 0.5;
+    depthFalloff = 0;
     modeCode = 3;
     xPriority = 1;
     yPriority = 1;
@@ -23,6 +25,50 @@ export class IKPin {
     static _YDIR = 0b010;
     static _ZDIR = 0b100;
 
+    toJSON() {
+        let result = super.toJSON();
+        result.pinWeight = this.pinWeight;
+        result.xPriority = this.xPriority;
+        result.yPriority = this.yPriority;
+        result.zPriority = this.zPriority;
+        result.modeCode = this.modeCode;
+        result.isEnabled = this.enabled;
+        result.depthFalloff = this.depthFalloff;
+        return result;
+    }
+
+    static async fromJSON(json, loader, pool, scene) {
+        let result = new IKPin(
+            loader.findSceneObject(json.requires.forBone, scene),
+            undefined,
+            undefined,
+            !json.enabled,
+            json.ikd,
+            pool
+        )
+        result.pinWeight = json.pinWeight;
+        result.xPriority = json.xPriority;
+        result.yPriority = json.yPriority;
+        result.zPriority = json.zPriority;
+        result.modeCode = json.modeCode;
+         
+        return result;
+    }
+    getRequiredRefs () {
+        let req = {
+            forBone: this.forBone,
+            targetNode: this.targetNode
+        };
+        return req;
+    }
+
+    async postPop(json, loader, pool, scene)  {
+        let p = await Saveable.prepop(json.requires, loader, pool, scene); 
+        this.targetNode = p.targetNode;
+        this.target_threejs = this.targetNode.toTrack;
+        return this;
+    }
+
     /**
      * 
      * @param {*} forBone 
@@ -31,33 +77,32 @@ export class IKPin {
      * @param {Object3D or IKNode} targetNode required. The IKNode Object3D instance serving as this pin's target.  
      * @param {boolean} disabled if true, will register the pin without activating it (meaning the effector bone won't attempt to solve for the pin). You can manually enable the pin by calling pin.enable()
      */
-    constructor(forBone, targetNode, effectorTransformLocal = null, disabled = false, ikd = 'IKPin-'+(IKPin.totalPins+1)) {
-        this.ikd = ikd;
-        IKPin.totalPins +=1;
+    constructor(forBone, targetNode, effectorTransformLocal = null, disabled = false, ikd = 'IKPin-'+(IKPin.totalInstances++), pool=noPool) {
+        super(ikd, 'IKPin', IKPin.totalInstances, pool);
         if(forBone.getIKPin() != null) {
             throw Error("The provided Bone already has an IKPin set.");
         }
         this.forBone = forBone;
-        this.ikd = ikd;
-        
-        if (targetNode == null) {
-            this.targetNode = new TrackingNode(null, undefined);           
-            this.targetNode.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());
-            this.targetNode.setParent(forBone.parentArmature.armatureNode);
-            this.targetNode.updateTrackedFrom_Global(true)
-        } else if(targetNode instanceof THREE.Object3D) {
-            let trackNode = new TrackingNode(targetNode, undefined);
-            this.targetNode = trackNode;
-            this.targetNode.setParent(forBone.parentArmature.armatureNode);
-            this.target_threejs = targetNode;
-        } else {
-            this.targetNode = targetNode;
-            if(targetNode instanceof TrackingNode) {
-                this.target_threejs = targetNode.toTrack
+        if(!Saveable.loadMode) {
+            if (targetNode == null) {
+                this.targetNode = new TrackingNode(null, undefined);           
+                this.targetNode.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());
+                this.targetNode.setParent(forBone.parentArmature.armatureNode);
+                this.targetNode.updateTrackedFrom_Global(true)
+            } else if(targetNode instanceof THREE.Object3D) {
+                let trackNode = new TrackingNode(targetNode, undefined);
+                this.targetNode = trackNode;
+                this.targetNode.setParent(forBone.parentArmature.armatureNode);
+                this.target_threejs = targetNode;
+            } else {
+                this.targetNode = targetNode;
+                if(targetNode instanceof TrackingNode) {
+                    this.target_threejs = targetNode.toTrack
+                }
             }
-        }
-        if(effectorTransformLocal != null) {
-            this.effectorTransformLocal = effectorTransformLocal;
+            if(effectorTransformLocal != null) {
+                this.effectorTransformLocal = effectorTransformLocal;
+            }
         }
         this.enabled = !disabled;
         this.xPriority = 1;
