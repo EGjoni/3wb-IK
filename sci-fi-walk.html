@@ -82,7 +82,7 @@
             window.nek1= inst1; 
             armature = inst1; 
 
-            armature.setDefaultIterations(1);
+            armature.setDefaultIterations(15);
             armature.setDampening(0.08);
             armature.dirtyRate = true;
             initEnvironment(scene, renderer, //scene,
@@ -99,18 +99,18 @@
         let lastIK = 0;
         function ikify(inst, loadId) {
             window.updateParseStream("Building IK Armature...", loadId);
-            let armature = new EWBIK(inst.scene.children[0], false);
+            let armature = new EWBIK(inst, false);
             armature.armatureNode.forceOrthonormality = false;
             window.armatures.push(armature);    
             
             window.updateParseStream("Inferring Bone directions and appearance...", loadId);
                 initPrettyBones(armature);            
             window.updateParseStream("Addings constraints...", loadId);            
-                //initHumanoidRestConstraints(armature);
+                initHumanoidRestConstraints(armature);
                 makePinsList(1, armature.armatureObj3d, armature);
             window.updateParseStream("UI stuff...", loadId);
                 updateGlobalBoneLists();
-                //initIK(armature);
+                initIK(armature);
             window.updateParseStream(null, loadId);
             return armature;
             /*let armature2 = new EWBIK(instances[1].scene.children[0], false);
@@ -125,13 +125,12 @@
                 (xhr, otherParam) => {window.updateLoadStream(xhr, loadId)},
                 (error) => {window.notifyStreamError(error, loadId)}
             );
-            scene.add(glb.scene);
-            glb.scene.scale.set(1,1,1);
+            let startAt = findBone(glb.scene).parent;
+            defuckify(startAt);
+            scene.add(startAt);
             //render();
-            let rootBone1 = glb.scene.children[0];
-            rootBone1.position.set(position.x, position.y, position.z);
             window.updateParseStream("Scene instaniated...", loadId);
-            return ikify(glb, loadId);
+            return ikify(startAt, loadId);
         }
 
         function onWindowResize() {
@@ -139,6 +138,62 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);            
             render();
+        }
+
+        function initHumanoidRestConstraints(armature) {
+            
+            armature.left_foot_pin = new IKPin(armature.bonetags["Ankle_L_098"]);
+            armature.right_foot_pin = new IKPin(armature.bonetags["Ankle_R_05"]);
+            armature.right_hand_pin = new IKPin(armature.bonetags["Wrist_R_021"]);
+            armature.left_hand_pin = new IKPin(armature.bonetags["Wrist_L_072"]);
+            armature.head_pin = new IKPin(armature.bonetags["Head_M_046"]);
+
+            armature.left_hand_pin.forBone.parent.setStiffness(1);
+            armature.left_hand_pin.forBone.parent.parent.setStiffness(1);
+            armature.left_hand_pin.forBone.parent.parent.parent.parent.setStiffness(1);
+            armature.left_hand_pin.forBone.parent.parent.parent.parent.parent.setStiffness(1);
+
+            armature.right_hand_pin.forBone.parent.setStiffness(1);
+            armature.right_hand_pin.forBone.parent.parent.setStiffness(1);
+            armature.right_hand_pin.forBone.parent.parent.parent.parent.setStiffness(1);
+            armature.right_hand_pin.forBone.parent.parent.parent.parent.parent.setStiffness(1);
+            
+            armature.left_foot_pin.forBone.parent.parent.setStiffness(1);
+            armature.left_foot_pin.forBone.parent.parent.parent.setStiffness(1);
+
+            armature.right_foot_pin.forBone.parent.parent.setStiffness(1);
+            armature.right_foot_pin.forBone.parent.parent.parent.setStiffness(1);
+
+            for(let b of armature.bones) {
+                if(b.parent instanceof THREE.Bone) {
+                    let restconst = new Rest(b);
+                    if(b == armature.bonetags['Scapula_L_065']) {
+                        restconst.setPainfulness(0.8);
+                        restconst.setStockholmRate(0.8);
+                    }
+                    if(b == armature.bonetags['Scapula_R_014']) {
+                        restconst.setPainfulness(0.8);
+                        restconst.setStockholmRate(0.8);
+                    }
+                    if(b == armature.bonetags['Neck_M_043']) {
+                        restconst.setPainfulness(0.95);
+                        restconst.setStockholmRate(0.8);
+                    }
+                    if(b == armature.bonetags['Neck_M_044']) {
+                        restconst.setPainfulness(0.95);
+                        restconst.setStockholmRate(0.95);
+                    }
+                    if(b == armature.bonetags['Neck_M_045']) {
+                        restconst.setPainfulness(0.95);
+                        restconst.setStockholmRate(0.95);
+                    }
+                    if(b == armature.bonetags['Head_M_046']) {
+                        restconst.setPainfulness(0.95);
+                        restconst.setStockholmRate(0.95);
+                        b.setStiffness(0.1);
+                    }
+                }
+            }
         }
 
         async function animate() {
