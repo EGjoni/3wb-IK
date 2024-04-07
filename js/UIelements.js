@@ -7,7 +7,6 @@ console.log("hmmm?");
 import { IKPin } from "./EWBIK/betterbones/IKpin.js";
 import { CallbacksSequence } from "./EWBIK/CallbacksSequence.js"
 import { Bone, Vector3 } from "three";
-import { TransformState } from "./EWBIK/solver/SkeletonState.js";
 import { NoPool, Vec3, Vec3Pool, any_Vec3 } from "./EWBIK/util/vecs.js";
 import { Rot } from "./EWBIK/util/Rot.js";
 import { ConvexGeometry } from "convexGeo";
@@ -138,7 +137,7 @@ window.makeUI = function () {
             overflow: hidden;
             justify-content: stretch;
         }
-        .slider {
+        .slider-container input, .slider {
             grid-row: 1;
             width: 100%;
             position: relative;
@@ -150,7 +149,7 @@ window.makeUI = function () {
             box-sizing: content-box;
             padding: 0px;
         }
-        .slider-value {
+        .slider-container output, .slider-value {
             padding-left: 2px;
             filter: drop-shadow(0px 0px 2px white);
             grid-row: 1;
@@ -162,7 +161,7 @@ window.makeUI = function () {
             z-index: 2;
             pointer-events: none;
         }
-        .slider-label {
+        .slider-container label, .slider-label {
             filter: drop-shadow(0px 0px 2px white);
             grid-row: 1;
             grid-column: 1;
@@ -268,12 +267,12 @@ window.makeUI = function () {
         <div id="no-armature-opts-hint">Click on a bone or pin to see config options.</div>
         <div class="hidden">
             <div>Name: <span id="armature-name"></span></div>
-            <div style="width: fit-content">
-                <div class= "stretch-div">
+            <div class= "stretch-div">
+                <form class="dampening-form slider-container">
                     <label for="default-dampening">Default Dampening:</label>            
                     <input type="range" id="default-dampening" name="default-dampening" min="0.00001" max="1.986" step="0.00001">
                     <output class="un-exp-output">0.1</output>
-                </div>
+                </form>
             </div>
             <div>
                 <button id="solve-btn">Solve (s)</button>
@@ -302,9 +301,16 @@ window.makeUI = function () {
             </div>
             <div id="pin-options" class="hidden">
                 <div>
-                    <label for="weight">Weight:</label>
-                    <input type="range" id="weight" name="weight" min="0.001" max="0.69" step="0.001" value="0.405">
-                    <output class="un-exp-output">0.5</output>
+                    <form class="pin-weight-form slider-container">
+                        <label for="weight">Weight:</label>
+                        <input type="range" id="weight" name="weight" min="0.001" max="0.69" step="0.001" value="0.405">
+                        <output class="un-exp-output">0.5</output>
+                    </form>
+                    <form class="pin-falloff-form slider-container">
+                        <label for="falloff">Fall-off:</label>
+                        <input type="range" id="falloff" name="falloff" min="0.001" max="1" step="0.001" value="0">
+                        <output id="falloff-output">0</output>
+                    </form>
                 </div>
                 <div>
                     <label for="x-priority">X alignment priority:</label>
@@ -445,15 +451,15 @@ window.makeUI = function () {
         setDOMtoInternalState();
     });
 
-    window.getdbgstring = function (bone, ts, wb) {
+    window.getdbgstring = function (wb) {
         let solveString = `
-PreSolve for ${bone.ikd}.\n
+PreSolve for ${wb.forBone.ikd}.\n
 %%%%%% Initial WB condition:                                            
 ${wb.simLocalAxes.getLocalMBasis().toString()} 
 ${wb.simLocalAxes.getGlobalMBasis().toString()}
 
 ######Initial Bone condition:
-${bone.toString()}
+${wb.forBone.toString()}
 `;
         return solveString;
     }
@@ -464,7 +470,7 @@ ${bone.toString()}
 
     window.getArmatureGlobalized = (v, wb) => {
         let globalized = new THREE.Vector3(v.x, v.y, v.z);
-        globalized = wb.forBone.directRef.parentArmature.armatureObj3d.localToWorld(globalized);
+        globalized = wb.forBone.parentArmature.armatureObj3d.localToWorld(globalized);
         return globalized;
     }
 
@@ -524,16 +530,16 @@ ${bone.toString()}
 
         let callbacks = new CallbacksSequence(
             {
-                beforeIteration: (bone, ts, wb) => {
-                    if (bone == window.contextBone) {
-                        let solveString = getdbgstring(bone, ts, wb);
+                beforeIteration: (wb) => {
+                    if (wb.forBone == window.contextBone) {
+                        let solveString = getdbgstring(wb);
                         //console.log(solveString);
                         window.intersectsDisplay.innerText = solveString;
                     }
                 },
-                afterIteration: (bone, ts, wb) => {
-                    if (bone == window.contextBone) {
-                        let solveString = getdbgstring(bone, ts, wb);
+                afterIteration: (wb) => {
+                    if (wb.forBone == window.contextBone) {
+                        let solveString = getdbgstring(wb);
                         //console.log(solveString);
                         window.intersectsDisplay.innerText = `${solveString}`;
                     }
@@ -545,7 +551,7 @@ ${bone.toString()}
 
     window.bonestepcallbacks = new CallbacksSequence(
         {
-            beforeIteration: (bone, ts, wb) => {
+            beforeIteration: (wb) => {
                 //if (bone == window.contextBone) {
                 initLines(wb);
                 wb.targetDrawer.draw(new THREE.Color('grey'),
@@ -568,13 +574,13 @@ ${bone.toString()}
                 wb.rotDraw.update((v, wb) => { return wb.simLocalAxes.origin().clone().add(v) });
                 //console.log("before: ");
                 wb.rotDraw.visible = false;
-                //let solveString = getdbgstring(bone, ts, wb);
+                //let solveString = getdbgstring(wb);
                 //console.log("pre");
                 //wb.simLocalAxes.toCons(true);
                 //window.intersectsDisplay.innerText = solveString;
                 //}
             },
-            afterIteration: (bone, ts, wb) => {
+            afterIteration: (wb) => {
                 //if (bone == window.contextBone) {
                 wb.tipDrawer.draw(new THREE.Color('white'),
                     new THREE.Color(1, 0, 0),//red
@@ -607,17 +613,17 @@ ${bone.toString()}
 
         let callbacks = new CallbacksSequence(
             {
-                beforePullback: (bone, ts, wb) => {
-                    if (bone == window.contextBone) {
+                beforePullback: (wb) => {
+                    if (wb.forBone == window.contextBone) {
                         initLines(wb);
-                        //let solveString = getdbgstring(bone, ts, wb);
+                        //let solveString = getdbgstring(wb);
                         //console.log(wb.lastReturnfulResult.fullRotation.toString());
                         //window.intersectsDisplay.innerText = solveString;
                     }
                 },
-                afterPullback: (bone, ts, wb) => {
+                afterPullback: (wb) => {
                     if (bone == window.contextBone) {
-                        let solveString = getdbgstring(bone, ts, wb);
+                        let solveString = getdbgstring(wb);
                         wb.lastReturnfulResult.fullRotation.toConsole();
                         wb.lastReturnfulResult.fullRotation.length();
                         window.intersectsDisplay.innerText = `${solveString}`;
@@ -707,25 +713,32 @@ ${bone.toString()}
         const unexp = event.target.parentNode.qs('.un-exp-output');
         window.contextPin?.setPinWeight(Math.pow(Math.E, event.target.value) - 1);
         unexp.value = window.contextPin.getPinWeight().toFixed(4);
-    })
+        window.doSolve(contextPin.forBone, true);
+    });
+    D.byid("falloff").addEventListener("input", (event) => {
+        const fall = event.target.parentNode.qs('#falloff-output');
+        window.contextPin?.setDepthFalloff(event.target.value);
+        fall.value = event.target.value;
+        window.doSolve(contextPin.forBone, true);
+    });
 
     D.byid("x-priority").addEventListener("input", (event) => {
         const unexp = event.target.parentNode.qs('.un-exp-output');
         window.contextPin?.setXPriority(Math.pow(Math.E, event.target.value) - 1);;
-        window.contextArmature?.solve(window.contextBone);
         unexp.value = window.contextPin.getXPriority().toFixed(4);
+        window.doSolve(contextPin.forBone, true);
     });
     D.byid("y-priority").addEventListener("input", (event) => {
         const unexp = event.target.parentNode.qs('.un-exp-output');
         window.contextPin?.setYPriority(Math.pow(Math.E, event.target.value) - 1);;
-        window.contextArmature?.solve(window.contextBone);
         unexp.value = window.contextPin.getYPriority().toFixed(4);
+        window.doSolve(contextPin.forBone, true);
     });
     D.byid("z-priority").addEventListener("input", (event) => {
         const unexp = event.target.parentNode.parentNode.qs('.un-exp-output');
         window.contextPin?.setZPriority(Math.pow(Math.E, event.target.value) - 1);;
-        window.contextArmature?.solve(window.contextBone);
         unexp.value = window.contextPin.getZPriority().toFixed(4);
+        window.doSolve(contextPin.forBone, true);
     });
 
 
@@ -814,7 +827,7 @@ ${bone.toString()}
         for (let a of armatures) {
             if (a.ikReady) {
                 for (let b of a.bones) {
-                    if (b.bonegeo != null && a.skelState?.getBoneStateById(b.ikd) != null) {
+                    if (b.bonegeo != null) {
                         if (e.target.checked) {
                             b.bonegeo.layers.enable(boneLayer);
                         } else {
@@ -837,7 +850,7 @@ ${bone.toString()}
         for (let a of armatures) {
             if (a.ikReady) {
                 for (let b of a.bones) {
-                    if (b.bonegeo != null && a.skelState?.getBoneStateById(b.ikd) == null) {
+                    if (b.bonegeo != null && a.shadowSkel?.isSolvable(b) == null) {
                         if (e.target.checked) {
                             b.bonegeo.layers.enable(boneLayer);
                         } else {
@@ -1270,6 +1283,8 @@ window.updateInfoPanel = async function (item) {
         pinToggle.checked = true;
         pinDom.qs("#weight").value = Math.log(window.contextPin.getPinWeight() + 1);
         pinDom.qs("#weight").parentNode.qs(".un-exp-output").value = window.contextPin.getPinWeight().toFixed(4);
+        pinDom.qs("#falloff").value = window.contextPin.getDepthFallOff();
+        pinDom.qs("#falloff").parentNode.qs("#falloff-output").value = window.contextPin.getDepthFallOff();
         pinDom.qs("#x-priority").value = Math.log(window.contextPin.getXPriority() + 1);
         pinDom.qs("#x-priority").parentNode.qs(".un-exp-output").value = window.contextPin.getXPriority().toFixed(4);
         pinDom.qs("#y-priority").value = Math.log(window.contextPin.getYPriority() + 1);

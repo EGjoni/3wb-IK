@@ -99,7 +99,7 @@
         let lastIK = 0;
         function ikify(inst, loadId) {
             window.updateParseStream("Building IK Armature...", loadId);
-            let armature = new EWBIK(inst, false);
+            let armature = new EWBIK(inst);
             armature.armatureNode.forceOrthonormality = false;
             window.armatures.push(armature);    
             

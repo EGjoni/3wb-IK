@@ -22,7 +22,7 @@ export class LimitCone extends Saveable {
     tangentCircleRadiusNextCos;
 
     static fromJSON(json, loader, pool, scene) {
-        let result = new LimitCone(Vec3.fromJSON(json.controlPoint, pool), parseFloat(json.radius), pool);
+        let result = new LimitCone(Vec3.fromJSON(json.controlPoint, pool), parseFloat(json.radius), json.ikd, pool);
         result.tangentCircleCenterNext1 = Vec3.fromJSON(json.tangentCircleCenterNext1, pool);
         result.tangentCircleCenterNext2 = Vec3.fromJSON(json.tangentCircleCenterNext2, pool);
         result.tangentCircleRadiusNext = parseFloat(json.tangentCircleRadiusNext);
@@ -327,6 +327,9 @@ updateTangentHandles(next) {
 
         let A = this.getControlPoint().clone();
         let B = next.getControlPoint().clone();
+        if(A.dist(B) == 0) { //to avoid issues with identical limitcone controlpoints
+            B.add(this.pool.any_Vec3(Math.random(), Math.random(), Math.random()).mult(0.00001)).normalize();
+        }
 
         let arcNormal = A.cross(B);
 

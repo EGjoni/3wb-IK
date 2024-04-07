@@ -15,23 +15,23 @@
 
 export class CallbacksSequence {
 
-    /** @property {function(Bone, TransformState)} beforeShadow - called before transferring the scene object's current state to the ShadowSkeleton. */
+    /** @property {function(WorkingBone)} beforeShadow - called before transferring the scene object's current state to the ShadowSkeleton. */
     beforeShadow = undefined;
-    /** @property {function(Bone, TransformState)} afterShadow - called after transferring the scene object's current state to the ShadowSkeleton.*/
+    /** @property {function(WorkingBone)} afterShadow - called after transferring the scene object's current state to the ShadowSkeleton.*/
     afterShadow = undefined
-    /** @property {function(Bone, TransformState, WorkingBone)} beforeIteration - called once per bone, per solver iteration before attempting to optimize a bone's transform. WorkingBone refers to the internal bone representation that is about to be optimized.*/
+    /** @property {function(WorkingBone)} beforeIteration - called once per bone, per solver iteration before attempting to optimize a bone's transform. WorkingBone refers to the internal bone representation that is about to be optimized.*/
     beforeIteration = undefined;
-    /** @property {function(Bone, TransformState, WorkingBone)} beforePullback - called once per bone, per solver iteration before attempting to pull a bone back to a comfortable region. WorkingBone refers to the internal bone representation that is about to be optimized.*/
+    /** @property {function(WorkingBone)} beforePullback - called once per bone, per solver iteration before attempting to pull a bone back to a comfortable region. WorkingBone refers to the internal bone representation that is about to be optimized.*/
     beforePullback = undefined;
 
-    /** @property {function(Bone, TransformState, WorkingBone)} afterPullback - called once per bone, per solver after attempting to pull a bone back to a comfortable region. WorkingBone refers to the internal bone representation that is about to be optimized.*/
+    /** @property {function(WorkingBone)} afterPullback - called once per bone, per solver after attempting to pull a bone back to a comfortable region. WorkingBone refers to the internal bone representation that is about to be optimized.*/
     afterPullback = undefined;
-    /** @property {function(Bone, TransformState, WorkingBone)} afterIteration - called once per bone, per solver iteration after attempting to optimize a bone's transform. WorkingBone refers to the internal bone representation that is was just optimized.*/
+    /** @property {function(WorkingBone)} afterIteration - called once per bone, per solver iteration after attempting to optimize a bone's transform. WorkingBone refers to the internal bone representation that is was just optimized.*/
     afterIteration = undefined;
-    /**@property {function(Bone, TransformState)} afterSolve - called once per bone after solving has completed and the results are transferred to the transformState.*/
+    /**@property {function(WorkingBone)} afterSolve - called once per bone after solving has completed and the results are transferred to the transformState.*/
     afterSolve = undefined;
     /** 
-     * @property {function(Bone, TransformState)} afterScene - called once per bone after solving has completed and the results are transferred to the Object3d's. 
+     * @property {function(WorkingBone)} afterScene - called once per bone after solving has completed and the results are transferred to the Object3d's. 
      */
     afterScene = undefined;
 
@@ -40,30 +40,30 @@ export class CallbacksSequence {
     }
     __initStep(augmentWith) {
         if (this.__callbacksIn.beforeShadow != null) {
-            this.beforeShadow = function (bs, ts, wb) { augmentWith(this.__callbacksIn.beforeShadow, bs, ts, wb); }
+            this.beforeShadow = function (wb) { augmentWith(this.__callbacksIn.beforeShadow, wb); }
         } else this.beforeShadow = () => { return };
 
         if (this.__callbacksIn.afterShadow != null) {
-            this.afterShadow = function (bs, ts, wb) { augmentWith(this.__callbacksIn.afterShadow, bs, ts, wb); }
+            this.afterShadow = function (wb) { augmentWith(this.__callbacksIn.afterShadow, wb); }
         } else this.afterShadow = () => { return };
 
         if (this.__callbacksIn.beforeIteration != null) {
-            this.beforeIteration = function (bs, ts, wb) { augmentWith(this.__callbacksIn.beforeIteration, bs, ts, wb); }
+            this.beforeIteration = function (wb) { augmentWith(this.__callbacksIn.beforeIteration, wb); }
         } else this.beforeIteration = () => { return };
         if (this.__callbacksIn.beforePullback != null) {
-            this.beforePullback = function (bs, ts, wb) { augmentWith(this.__callbacksIn.beforePullback, bs, ts, wb); }
+            this.beforePullback = function (wb) { augmentWith(this.__callbacksIn.beforePullback, wb); }
         } else this.beforePullback = () => { return };
         if (this.__callbacksIn.afterPullback != null) {
-            this.afterPullback = function (bs, ts, wb) { augmentWith(this.__callbacksIn.afterPullback, bs, ts, wb); }
+            this.afterPullback = function (wb) { augmentWith(this.__callbacksIn.afterPullback, wb); }
         } else this.afterPullback = () => { return };
         if (this.__callbacksIn.afterIteration != null) {
-            this.afterIteration = function (bs, ts, wb) { augmentWith(this.__callbacksIn.afterIteration, bs, ts, wb); }
+            this.afterIteration = function (wb) { augmentWith(this.__callbacksIn.afterIteration, wb); }
         } else this.afterIteration = () => { return };
         if (this.__callbacksIn.afterSolve != null) {
-            this.afterSolve = function (bs, ts, wb) { augmentWith(this.__callbacksIn.afterSolve, bs, ts, wb); }
+            this.afterSolve = function (wb) { augmentWith(this.__callbacksIn.afterSolve, wb); }
         } else this.afterSolve = () => { return };
         if (this.__callbacksIn.afterScene != null) {
-            this.afterScene = function (bs, ts, wb) { augmentWith(this.__callbacksIn.afterScene, bs, ts, wb); }
+            this.afterScene = function (wb) { augmentWith(this.__callbacksIn.afterScene, wb); }
         } else this.afterScene = () => { return };
     }
 }

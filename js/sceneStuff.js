@@ -183,34 +183,57 @@ function updateGlobalBoneLists() {
     }
 }
 
-function makePinsList(pinSize, into = scene, armature) {
+function makePinsList(pinSize, into = scene, armature, align = false) {
     armature.pinsList = [];
     armature.targetsMeshList = [];
     let previouslySelected = selectedPin;
     let boneList = armature.bones;
     let i = 0;
+
+    function makeMeshHint(ikpin) { 
+        //let boneHeight = b.height
+        let baseSize = ikpin.forBone.height;
+        const targHint = ikpin.forBone.bonegeo != null ? ikpin.forBone.bonegeo : ikpin.forBone.getIKBoneOrientation();
+        targHint.updateWorldMatrix();
+        const globalTrans = targHint.matrixWorld; 
+        const geometry = ikpin.forBone?.bonegeo?.geometry ?? new THREE.BoxGeometry(baseSize * pinSize / 2, b.height, baseSize * pinSize);
+        
+        //const material = new THREE.MeshLambertMaterial({ color: 0xff0000, transparent: true, opacity: 0.6});
+        const material = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+        const targMesh = new THREE.Mesh(geometry, material);
+        //targMesh.position.set(0, b.height/2, 0);
+        const meshWrapper = new THREE.Object3D();
+        meshWrapper.add(targMesh);
+        meshWrapper.matrix.copy(globalTrans);
+        meshWrapper.matrix.decompose(meshWrapper.position, meshWrapper.quaternion, meshWrapper.scale);
+        let addTo = into;
+        if(ikpin.targetNode != null) {
+            addTo = ikpin.targetNode.toTrack.parent;
+        }
+        addTo.attach(meshWrapper);
+        meshWrapper.name = ikpin.ikd;
+        meshWrapper.ikd = ikpin.ikd;
+        meshWrapper.meshHint = targMesh;
+        meshWrapper.layers.set(boneLayer);
+        targMesh.layers.set(boneLayer);
+        return meshWrapper;
+    }
     for (let b of boneList) {
         if (b.getIKPin() != null) {
             let ikpin = b.getIKPin();
-            let baseSize = ikpin.forBone.height;
+            
             if (ikpin.targetNode.toTrack == null) {
-                //let boneHeight = b.height
-                const geometry = ikpin.forBone?.bonegeo?.geometry ?? new THREE.BoxGeometry(baseSize * pinSize / 2, b.height, baseSize * pinSize);
-                //const material = new THREE.MeshLambertMaterial({ color: 0xff0000, transparent: true, opacity: 0.6});
-                const material = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
-                const targMesh = new THREE.Mesh(geometry, material);
-                //targMesh.position.set(0, b.height/2, 0);
-                const meshWrapper = new THREE.Object3D();
-                meshWrapper.add(targMesh);
-                into.add(meshWrapper);
-                meshWrapper.name = ikpin.ikd;
-                meshWrapper.ikd = ikpin.ikd;
-                meshWrapper.meshHint = targMesh;
-                meshWrapper.layers.set(boneLayer);
-                targMesh.layers.set(boneLayer);
-                ikpin.targetNode.toTrack = meshWrapper;
+                ikpin.hintMesh = makeMeshHint(ikpin);
+                ikpin.targetNode.setTracked(ikpin.hintMesh);
                 ikpin.alignToBone();
-
+            } else {
+                if(ikpin.hintMesh == null) {
+                    ikpin.hintMesh = makeMeshHint(ikpin);
+                    ikpin.targetNode.setTracked(ikpin.hintMesh);
+                }
+                if(align) {
+                    ikpin.alignToBone();
+                }
             }
             armature.pinsList.push(ikpin);
             armature.targetsMeshList.push(ikpin.targetNode.toTrack);
@@ -387,7 +410,7 @@ function initControls(THREE, renderer) {
         pin_transformActive = event.value;
         pin_transformDragging = true;
         const tracknode = pinsList[selectedPinIdx].targetNode;
-        tracknode.adoptTrackedLocal();
+        tracknode.mimic();
         if (selectedPin?.forBone.parentArmature.ikReady) {
             doSolve(contextBone, true);//.parentArmature.solve();
         }

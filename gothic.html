@@ -104,7 +104,7 @@
         let lastIK = 0;
         function ikify(inst, loadId) {
             window.updateParseStream("Building IK Armature...", loadId);
-            let armature = new EWBIK(inst.scene.children[0], true);
+            let armature = new EWBIK(inst.scene.children[0]);
             armature.armatureNode.forceOrthonormality = false;
             window.armatures.push(armature);    
             
@@ -118,7 +118,7 @@
                 //initIK(armature);
             window.updateParseStream(null, loadId);
             return armature;
-            /*let armature2 = new EWBIK(instances[1].scene.children[0], false);
+            /*let armature2 = new EWBIK(instances[1].scene.children[0]);
             armature2.armatureNode.forceOrthonormality = false;
             addSceneArmature(armature2);*/
         }

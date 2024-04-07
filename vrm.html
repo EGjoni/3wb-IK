@@ -132,7 +132,7 @@
         let lastIK = 0;
         function ikify(inst, loadId) {
             window.updateParseStream("Building IK Armature...", loadId);
-            let armature = new EWBIK(inst.scene.children[0], false);
+            let armature = new EWBIK(inst.scene.children[0]);
             armature.setDefaultIterations(7);
             armature.setDampening(1);
             armature.armatureNode.forceOrthonormality = false;
@@ -142,7 +142,7 @@
             initPrettyBones(armature);
             window.updateParseStream("Addings constraints...", loadId);
             initHumanoidRestConstraints(armature);
-            makePinsList(1, armature.armatureObj3d, armature);
+            makePinsList(1, armature.armatureObj3d, armature, true);
             window.updateParseStream("UI stuff...", loadId);
             updateGlobalBoneLists();
             initIK(armature);
@@ -162,7 +162,7 @@
             rootBone1.position.set(position.x, position.y, position.z);
             window.updateParseStream("Scene instaniated...", loadId);
             return onloaded(vrm, loadId);
-            /*let armature1 = new EWBIK(rootBone1, false);
+            /*let armature1 = new EWBIK(rootBone1);
             armature1.armatureNode.forceOrthonormality = false;
             addSceneArmature(armature1);*/
         }
@@ -233,10 +233,8 @@
 
             for (let b of armature.bones) {
                 if (b.parent instanceof THREE.Bone) {
-                    //let restconst = new Rest(b);
-                    let twistConst = new Twist(b, 1.1).setVisibilityCondition((twist, bone) => { return bone == window.contextBone });
-                    twistConst.layers.set(window.boneLayer);
-                    /*if (b == armature.bonetags["J_Bip_C_Head"]) {
+                    let restconst = new Rest(b);
+                    if (b == armature.bonetags["J_Bip_C_Head"]) {
                         restconst.setPainfulness(0.7);
                         restconst.setStockholmRate(0.8);
                     }
@@ -252,11 +250,11 @@
                     if (b == armature.bonetags['J_Bip_R_Shoulder']) {
                         restconst.setPainfulness(0.8);
                         restconst.setStockholmRate(0.8);
-                    }*/
+                    }
                 }
             }
 
-            /*armature.r_leg_lower.rotateX(1.75);
+            armature.r_leg_lower.rotateX(1.75);
             armature.l_leg_lower.rotateX(1.75);
 
             armature.r_leg_upp.rotateX(-1);
@@ -272,10 +270,17 @@
             armature.r_arm_lower.rotateX(-0.5);
 
             armature.l_arm_upp.rotateZ(-0.5);
-            armature.r_arm_upp.rotateZ(0.5);*/
+            armature.r_arm_upp.rotateZ(0.5);
+
+            /*for (let b of armature.bones) {
+                if (b.parent instanceof THREE.Bone) {
+                    let twistConst = new Twist(b, 1.1).setVisibilityCondition((twist, bone) => { return bone == window.contextBone });
+                    twistConst.layers.set(window.boneLayer);
+                }
+            }*/
 
             //armature.root = new IKPin(armature.bonetags["Root"]);
-            //armature.hips = new IKPin(armature.bonetags["J_Bip_C_Hips"]);
+            armature.hips = new IKPin(armature.bonetags["J_Bip_C_Hips"]);
             armature.head_pin = new IKPin(armature.c_head);
             //armature.c_uuperchest_pin = new IKPin(armature.upper_chest);
             armature.r_hand_pin = new IKPin(armature.bonetags["J_Bip_R_Hand"]);

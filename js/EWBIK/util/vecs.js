@@ -487,10 +487,19 @@ export class Vec3Pool {
     tempPool = null;// new Array(this.tempSize);
     tempBuffer; //= new Float64Array(tempSize * 3);
     isFinalized = false;
+    isUnfinalized = false;
+    pendingFirstReInsert = false;
     lru = -1;
 
     constructor(tempSize = 10000) {
         this.setTempPoolSize(tempSize);
+    }
+
+
+    unfinalize() {
+        this.isFinalized = false;
+        this.isUnfinalized = true;
+        this.pendingFirstReInsert = true;
     }
 
     reclaim() {
@@ -501,7 +510,7 @@ export class Vec3Pool {
             this.inProgressPool = [];
             this.persistentPool = [];
         }
-        this.releaseAll();
+        this.releaseTemp();
         console.log("RECLAIMED: " + this.reclaimedPool.length);
     }
 
@@ -544,6 +553,10 @@ export class Vec3Pool {
             //console.log("temp: "+this.lru);
             return vec;
         } else {
+            if(this.isUnfinalized && this.pendingFirstReInsert) {
+                this.pendingFirstReInsert = false;
+                this.inProgressPool = [...this.persistentPool];
+            }
             let newV;
             if(this.reclaimedPool.length > 0) {
                 newV = this.reclaimedPool.pop();
@@ -574,6 +587,10 @@ export class Vec3Pool {
             odb[obase+2] = z; 
             return vec;
         } else {
+            if(this.isUnfinalized && this.pendingFirstReInsert) {
+                this.pendingFirstReInsert = false;
+                this.inProgressPool = [...this.persistentPool];
+            }
             let newV;
             if(this.reclaimedPool.length > 0) {
                 newV = this.reclaimedPool.pop();
@@ -657,22 +674,24 @@ export class Vec3Pool {
         if(this.reclaimedPool.length > 0) {
             this.persistentPool = this.inProgressPool;
             this.inProgressPool = [];   
-            this.isFinalized = true;         
+            this.isFinalized = true; 
+            this.isUnfinalized = false; 
+            this.pendingFirstReInsert = false;         
             return;
         }
-        const prevBuffer = this.persistentBuffer;
-        this.persistentBuffer = new Float64Array(this.inProgressPool.length * 3);
-        const persistentBuffer = this.persistentBuffer;
+        const newBuffer  = new Float64Array(this.inProgressPool.length * 3);
+        const oldBuffer = this.persistentBuffer;
         for (let i = 0; i < this.inProgressPool.length; i++) {
             const baseIdx = i*3;
             const vec = this.inProgressPool[i];
             const vx = vec.x, vy = vec.y, vz = vec.z;
-            persistentBuffer[baseIdx] = vx;
-            persistentBuffer[baseIdx+1] = vy;
-            persistentBuffer[baseIdx+2] = vz;
-            vec.dataBuffer = persistentBuffer;
+            newBuffer[baseIdx] = vx;
+            newBuffer[baseIdx+1] = vy;
+            newBuffer[baseIdx+2] = vz;
+            vec.dataBuffer = newBuffer;
             vec.baseIdx = baseIdx;
         }
+        this.persistentBuffer = newBuffer;
 
         this.persistentPool = this.inProgressPool;
         this.inProgressPool = [];
@@ -684,7 +703,7 @@ export class Vec3Pool {
     /**
      * Let the VectorPool know that you're done with all of the temporary vectors you've been using so it doesn't need to yell at you.
      */
-    releaseAll() {
+    releaseTemp() {
         this.lru = -1;
         this.assumeFree = true;
     }
@@ -751,7 +770,7 @@ export class NoPool {
     any_Vec3fv(v) {
         return new Vec3(v.x, v.y, v.z); 
     }
-    releaseAll() {
+    releaseTemp() {
         
     }
 }

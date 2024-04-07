@@ -4,12 +4,12 @@ import { generateUUID } from "../util/uuid.js";
 const THREE = await import('three');
 import { Object3D } from "three";
 import { Saveable } from "../util/loader/saveable.js";
+import { ShadowNode } from "../util/nodes/ShadowNode.js";
 
 
 export class IKPin extends Saveable{
     static totalInstances = 0;
     forBone = null;
-    effectorTransform = new IKTransform();
     target = null;
     enabled = true;
     /**@type {IKNode} */
@@ -17,13 +17,13 @@ export class IKPin extends Saveable{
     pinWeight = 0.5;
     depthFalloff = 0;
     modeCode = 3;
-    xPriority = 1;
-    yPriority = 1;
-    zPriority = 1;
+    xPriority = 0.5;
+    yPriority = 0.5;
+    zPriority = 0;
     
-    static _XDIR = 0b001;
-    static _YDIR = 0b010;
-    static _ZDIR = 0b100;
+    static XDir = 0b001;
+    static YDir = 0b010;
+    static ZDir = 0b100;
 
     toJSON() {
         let result = super.toJSON();
@@ -71,13 +71,11 @@ export class IKPin extends Saveable{
 
     /**
      * 
-     * @param {*} forBone 
-     * @param {IKTransform} effectorNodeLocal optional, by default will be the identity transform, which corresponds to the bone orientation so that the bone always attempts to align to the target. 
-     * If instead you want the alignment to occur with respect to some imaginary transformation on top of the bone, you can provid it here.
-     * @param {Object3D or IKNode} targetNode required. The IKNode Object3D instance serving as this pin's target.  
+     * @param {Bone} forBone the bone to treat as an effector (which is, the thing that attemptes to align with the target)
+     * @param {Object3D or IKNode} targetNode The IKNode Object3D instance serving as this pin's target. If not provided, one will be created and pre aligned to the bone. 
      * @param {boolean} disabled if true, will register the pin without activating it (meaning the effector bone won't attempt to solve for the pin). You can manually enable the pin by calling pin.enable()
      */
-    constructor(forBone, targetNode, effectorTransformLocal = null, disabled = false, ikd = 'IKPin-'+(IKPin.totalInstances++), pool=noPool) {
+    constructor(forBone, targetNode, disabled = false, ikd = 'IKPin-'+(IKPin.totalInstances++), pool=noPool) {
         super(ikd, 'IKPin', IKPin.totalInstances, pool);
         if(forBone.getIKPin() != null) {
             throw Error("The provided Bone already has an IKPin set.");
@@ -85,29 +83,26 @@ export class IKPin extends Saveable{
         this.forBone = forBone;
         if(!Saveable.loadMode) {
             if (targetNode == null) {
-                this.targetNode = new TrackingNode(null, undefined);           
-                this.targetNode.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());
-                this.targetNode.setParent(forBone.parentArmature.armatureNode);
-                this.targetNode.updateTrackedFrom_Global(true)
+                let targthree = new THREE.Object3D();
+                forBone.getIKBoneOrientation().updateWorldMatrix(true, false);
+                targthree.matrix.copy(forBone.getIKBoneOrientation().matrixWorld);
+                targthree.matrix.decompose(targthree.position, targthree.quaternion, targthree.scale);
+                forBone.parentArmature.armatureObj3d.attach(targthree);
+                this.targetNode = new ShadowNode(targthree, 'ShadowNode-of-target_'+this.ikd, pool);
+                this.targetNode.updateGlobal();
+                this.targetNode.project();
             } else if(targetNode instanceof THREE.Object3D) {
-                let trackNode = new TrackingNode(targetNode, undefined);
-                this.targetNode = trackNode;
-                this.targetNode.setParent(forBone.parentArmature.armatureNode);
-                this.target_threejs = targetNode;
+                if(targetNode.trackedBy != null) {
+                    this.targetNode = targetNode.trackedBy;
+                } else {
+                    this.targetNode = new ShadowNode(targetNode, undefined, pool);
+                }
             } else {
                 this.targetNode = targetNode;
-                if(targetNode instanceof TrackingNode) {
-                    this.target_threejs = targetNode.toTrack
-                }
             }
-            if(effectorTransformLocal != null) {
-                this.effectorTransformLocal = effectorTransformLocal;
-            }
+            this.target_threejs = this.targetNode.toTrack;
         }
         this.enabled = !disabled;
-        this.xPriority = 1;
-        this.yPriority = 1;
-        this.zPriority = 0;
         this.forBone.setIKPin(this);
     }
 
@@ -137,7 +132,7 @@ export class IKPin extends Saveable{
 	 * any bones which are ancestors to that pin's end-effector 
 	 * are not aware of any pins wich are target of bones descending from that end effector. 
 	 * 
-	 * Changing this value makes ancestor bones aware, and also determines how much less
+	 * Changing this value makes ancestor bones aware descendant pins, and also determines how much less
 	 * they care with each level down.  
 	 * 
 	 * Presuming all descendants of this pin have a falloff of 1, then:
@@ -156,9 +151,8 @@ export class IKPin extends Saveable{
 	 */
 
     setDepthFalloff(depth) {
-        this.depthFalloff = depth;
-        let prevDepth = this.depthFalloff;
-		this.depthFalloff = depth;
+        let prevDepth = this.depthFalloff;        
+		this.depthFalloff = parseFloat(depth);
 		if((this.depthFalloff == 0 && prevDepth != 0) 
 		|| (this.depthFalloff != 0 && prevDepth == 0)) {
 			this.forBone?.parentArmature?.regenerateShadowSkeleton();
@@ -167,18 +161,42 @@ export class IKPin extends Saveable{
 		}
     }
 
-    getDepthFalloff() {
+    getDepthFallOff() {
         return this.depthFalloff;
     }
 
-    setPositionPriority(val) {
-
+    getPinWeight() {
+        return this.pinWeight;
     }
+
+    setPinWeight(weight) {
+        const prevWeight = this.pinWeight;
+        this.pinWeight = Math.max(weight, 0);
+        this.forBone?.parentArmature.updateShadowSkelRateInfo();
+        if(this.isEnabled()) {
+            if(prevWeight <= 0 && this.pinWeight > 0) {
+                this.forBone?.parentArmature?.regenerateShadowSkeleton();
+            } 
+            if(this.pinWeight <= 0 && prevWeight >= 0)  {
+                this.forBone?.parentArmature?.regenerateShadowSkeleton();
+            }
+        }
+    }
+    
+    /**returns the normalized priority for the requested basis direction */
+    getPriority(basisDirection) {
+        switch(basisDirection) {
+            case IKPin.XDir: return this.xPriority;
+            case IKPin.YDir: return this.yPriority;
+            case IKPin.ZDir: return this.zPriority; 
+        }
+    }
+
 
     /**
 	 * Sets  the priority of the orientation bases which effectors reaching for this target will and won't align with. 
 	 * If all are set to 0, then the target is treated as a simple position target. 
-	 * It's usually better to set at least on of these three values to 0, as giving a nonzero value to all three is most often redundant and just adds comput time. 
+	 * giving a nonzero value to all three is most often redundant and just adds compute time, but you should have at least two non-zero values if you want to fully specify target orientations.
 	 *
 	 * @param xPriority Determines how much this pin's bone tries to align its x-axis with the target x-axis.
 	 * @param yPriority Determines how much this pin's bone tries to align its y-axis with the target y-axis.	
@@ -187,24 +205,43 @@ export class IKPin extends Saveable{
 
     setTargetPriorities(xPriority, yPriority, zPriority) {
 
-        let xDir = xPriority > 0 ? IKPin._XDIR : 0;
-		let yDir = yPriority > 0 ? IKPin._YDIR : 0;
-		let zDir = zPriority > 0 ? IKPin._ZDIR : 0;
+        let xDir = xPriority > 0 ? IKPin.XDir : 0;
+		let yDir = yPriority > 0 ? IKPin.YDir : 0;
+		let zDir = zPriority > 0 ? IKPin.ZDir : 0;
         let prevmodecode = this.modeCode;
+        let maxPriority = 0;
+        let totalPriority = 0;
+        let priorityCount = 0;
 		this.modeCode = 0; 
 
 		this.modeCode += xDir; 
 		this.modeCode += yDir; 
 		this.modeCode += zDir;
 		
-		let subTargetCount = 1;
-		if((this.modeCode &1) != 0) subTargetCount++;   
-		if((this.modeCode &2) != 0) subTargetCount++;   
-		if((this.modeCode &4) != 0) subTargetCount++; 
+        let priorities = [xPriority, yPriority, zPriority];
+
+		if (xDir >0) {
+            totalPriority += priorities[0];
+            maxPriority = Math.max(priorities[0], maxPriority);
+            priorityCount++;
+        }
+        if (yDir >0) {
+            totalPriority += priorities[1];
+            maxPriority = Math.max(priorities[1], maxPriority);
+            priorityCount++;
+        }
+        if (zDir >0) {
+            totalPriority += priorities[2];
+            maxPriority = Math.max(priorities[2], maxPriority);
+            priorityCount++;
+        }
+        this.priorities = priorities;
+        this.priorities = priorities.map(priority => totalPriority == 0 || maxPriority == 0 ? 0 : (priority / totalPriority)*maxPriority);
 		
-		this.xPriority = xPriority;
-		this.yPriority = yPriority;
-		this.zPriority = zPriority;		
+        this.xPriority = priorities[0];
+		this.yPriority = priorities[1];
+		this.zPriority = priorities[2];	
+			
         
         if(prevmodecode != this.modeCode) {
             this.forBone?.parentArmature?.regenerateShadowSkeleton();
@@ -212,25 +249,29 @@ export class IKPin extends Saveable{
         this.forBone?.parentArmature?.updateShadowSkelRateInfo();
     }
 
+
     /**
 	 * @param xPriority Determines how much this pin's bone tries to align its x-axis with the target x-axis.	
 	 */
     setXPriority(val) {
-        this.setTargetPriorities(parseFloat(val), this.yPriority, this.zPriority);
+        this.xPriority = parseFloat(val);
+        this.setTargetPriorities(this.xPriority, this.yPriority, this.zPriority);
     }
 
     /**
 	 * @param yPriority Determines how much this pin's bone tries to align its y-axis with the target y-axis.	
 	 */
     setYPriority(val) {
-        this.setTargetPriorities(this.xPriority, parseFloat(val), this.zPriority);
+        this.yPriority = parseFloat(val);
+        this.setTargetPriorities(this.xPriority, this.yPriority, this.zPriority);
     }
 
     /**
 	 * @param zPriority Determines how much this pin's bone tries to align its z-axis with the target z-axis.	
 	 */
     setZPriority(val) {
-        this.setTargetPriorities(this.xPriority, this.yPriority, parseFloat(val));
+        this.zPriority = parseFloat(val);
+        this.setTargetPriorities(this.xPriority, this.yPriority, this.zPriority);
     }
 
     getSubtargetCount() {
@@ -350,7 +391,14 @@ export class IKPin extends Saveable{
     }
 
     getParentPin() {
-        return this.parentPin;
+        let currBone = this.forBone.parent; 
+        while(currBone != null && currBone instanceof Bone) {
+            let currpin = currBone.getIKPin();
+            if(currpin != null && currpin.isEnabled())
+                return currpin;
+            currBone = currBone.parent;
+        }
+        return null;
     }
 
     isAncestorOf(potentialDescendent) {
@@ -365,46 +413,12 @@ export class IKPin extends Saveable{
         return false;
     }
 
-    getPinWeight() {
-        return this.pinWeight;
-    }
-
-    setPinWeight(weight) {
-        const prevWeight = this.pinWeight;
-        this.pinWeight = Math.max(weight, 0);
-        this.forBone?.parentArmature.updateShadowSkelRateInfo();
-        if(this.isEnabled()) {
-            if(prevWeight <= 0 && this.pinWeight > 0) {
-                this.forBone?.parentArmature?.regenerateShadowSkeleton();
-            } 
-            if(this.pinWeight <= 0 && prevWeight >= 0)  {
-                this.forBone?.parentArmature?.regenerateShadowSkeleton();
-            }
-        }
-    }
-
     /**
      * positions this pin to precisely where its bone can reach it.
     */
     alignToBone() {
-        const object = this.targetNode.toTrack;
-        let prevPar = object.parent;
-        object.position.set(0, 0, 0);
-        object.quaternion.set(0, 0, 0, 1); //obj is in jpl
-        object.scale.set(1, 1, 1);
-        object.updateMatrix();
-        this.forBone.getIKBoneOrientation().add(object); 
-        object.updateWorldMatrix();
-        this.forBone.getIKBoneOrientation().attach(object);
-        this.targetNode.adoptGlobalValuesFromObject3D(object, true);
-        prevPar.attach(object);
-
-        //this.targetNode.sendTrackedToGlobal(this.forBone.getIKBoneOrientation()?.children[0] ?? this.forBone.getIKBoneOrientation());
-        //this.targetNode.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation()?.children[0] ?? this.forBone.getIKBoneOrientation());
-        //this.forBone.getIKBoneOrientation().updateWorldMatrix();
-        //this.forBone.getIKBoneOrientation().getWorldPosition(this.targetNode.toTrack.position);
-        //this.forBone.getIKBoneOrientation().getWorldQuaternion(this.targetNode.toTrack.quaternion);
-        //this.targetNode.adoptTrackedLocal();
+        this.targetNode.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());
+        this.targetNode.project();
     }
 
 

@@ -444,7 +444,8 @@ export class QCP {
 				this.wsum += weight[i];
 			}
 		}*/
-		if(weight != null && this.wsum != 0) {
+		if(weight != null) {
+			this.wsum = 0;
 			for (let i = 0; i < toCenter.length; i++) {
 				center.mulAdd(toCenter[i], weight[i]);
 				this.wsum += weight[i];

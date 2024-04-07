@@ -52,7 +52,7 @@ export class SkeletonState {
         return this.constraints.length;
     }
 
-    getTargetState(index) {
+    getIKPin(index) {
         return this.targets[index];
     }
 
@@ -191,7 +191,7 @@ export class SkeletonState {
      * @param {number} [weight=1.0] - The weight of this target in the solving process.
      */
     addTarget(id, transform_id, forBoneid, priorities = [1.0, 1.0, 0.0], depthFalloff = 0.0, weight = 1.0) {
-        const result = new TargetState(id, transform_id, forBoneid, priorities, depthFalloff, weight, this);
+        const result = new IKPin(id, transform_id, forBoneid, priorities, depthFalloff, weight, this);
         this.targetMap[id] = result;
         return result;
     }
@@ -514,7 +514,7 @@ export class TransformState {
     }
 }
 
-export class TargetState {
+export class IKPin {
     constructor(id, transform_id, forBoneid, priorities, depthFalloff, weight, parentSkelState) {
         this.init(id, transform_id, forBoneid, priorities, depthFalloff, weight);
         this.skeletonState = parentSkelState;
@@ -532,9 +532,9 @@ export class TargetState {
         const yDir = this.priorities[1] > 0;
         const zDir = this.priorities[2] > 0;
         this.modeCode = 0;
-        if (xDir) this.modeCode += TargetState.XDir;
-        if (yDir) this.modeCode += TargetState.YDir;
-        if (zDir) this.modeCode += TargetState.ZDir;
+        if (xDir) this.modeCode += IKPin.XDir;
+        if (yDir) this.modeCode += IKPin.YDir;
+        if (zDir) this.modeCode += IKPin.ZDir;
     }
 
     setIndex(index) {
@@ -577,7 +577,7 @@ export class TargetState {
     }
 
     getPriority(basisDirection) {
-        return this.priorities[Math.floor(basisDirection / 2)];
+        return this.priorities[Math.floor(basisDirection /2)];
     }
  
     /**takes an array of target direction weights and modifies them in accordance with the priorities this targetstate specifies */
@@ -592,19 +592,19 @@ export class TargetState {
 
         this.modeCode = 0;
         if (xDir) {
-            this.modeCode += TargetState.XDir;
+            this.modeCode += IKPin.XDir;
             totalPriority += priorities[0];
             maxPriority = Math.max(priorities[0], maxPriority);
             priorityCount++;
         }
         if (yDir) {
-            this.modeCode += TargetState.YDir;
+            this.modeCode += IKPin.YDir;
             totalPriority += priorities[1];
             maxPriority = Math.max(priorities[1], maxPriority);
             priorityCount++;
         }
         if (zDir) {
-            this.modeCode += TargetState.ZDir;
+            this.modeCode += IKPin.ZDir;
             totalPriority += priorities[2];
             maxPriority = Math.max(priorities[2], maxPriority);
             priorityCount++;

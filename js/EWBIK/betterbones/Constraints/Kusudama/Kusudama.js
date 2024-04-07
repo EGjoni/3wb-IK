@@ -64,7 +64,7 @@ export class Kusudama extends Limiting {
             if(this.forBone) {
                 let yHead = this.tempNode1.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation()).getLocalMBasis().getYHeading();
                 this.tempNode1.adoptLocalValuesFromObject3D(this.forBone).localMBasis.rotation.applyToVec(yHead, yHead);
-                this.limitCones.push(new LimitCone(yHead, 0.2, this.pool));
+                this.limitCones.push(new LimitCone(yHead, 0.2, undefined, this.pool));
             }
             this.initKusuNodes()
         }
@@ -235,7 +235,7 @@ export class Kusudama extends Limiting {
             this.limitCones.splice(index, 0, coneDir)
             newCone = coneDir;
         } else {
-            newCone = new LimitCone(coneDir, coneRadius);
+            newCone = new LimitCone(coneDir, coneRadius, undefined, this.pool);
             this.limitCones.splice(index, 0, newCone);
         }
         this.updateTangentRadii();

@@ -28,8 +28,8 @@ export function pcaOrientation(vecs, startBasis, onFail) {
         //in other words, just align the y-axes, and then rotate about the y-axis until the x-axes are aligned.
         //then z can just be whatever the start basis said it was.
         let infr = inferredAxes;
-        let x = any_Vec3(infr[0].vector[0], infr[0].vector[1], infr[0].vector[2]); //ephemeral
-        let y = any_Vec3(infr[1].vector[0], infr[1].vector[1], infr[1].vector[2]); //ephemeral
+        let y = any_Vec3(infr[0].vector[0], infr[0].vector[1], infr[0].vector[2]); //ephemeral
+        let x = any_Vec3(infr[1].vector[0], infr[1].vector[1], infr[1].vector[2]); //ephemeral
         let z = any_Vec3(infr[2].vector[0], infr[2].vector[1], infr[2].vector[2]); //ephemeral
         x.normalize();
         y.normalize();

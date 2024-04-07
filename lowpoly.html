@@ -114,7 +114,7 @@
             //let mod1 = findBone(inst.scene);
             let rootNode = findThing(inst.scene, "RootNode");
             //mod1.remove(mod1[0]);
-            let armature = new EWBIK(rootNode[0], true);
+            let armature = new EWBIK(rootNode[0]);
             window.skeletonHelper = new THREE.SkeletonHelper(inst.scene);
             scene.add(skeletonHelper);
             rootBone = armature.rootBone;
@@ -128,7 +128,7 @@
             updateGlobalPinLists();
             updateGlobalBoneLists();
             //addSceneArmature(armature);
-            /*let armature2 = new EWBIK(instances[1].scene.children[0], false);
+            /*let armature2 = new EWBIK(instances[1].scene.children[0]);
             armature2.armatureNode.forceOrthonormality = false;
             addSceneArmature(armature2);*/
         }

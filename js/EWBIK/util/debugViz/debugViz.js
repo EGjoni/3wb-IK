@@ -1,5 +1,5 @@
 import { any_Vec3 } from "../vecs.js";
-import { TargetState } from "../../solver/SkeletonState.js";
+import { IKPin } from "../../betterbones/IKpin.js";
 import {
     Object3D,
     Line, Float32BufferAttribute,
@@ -200,9 +200,9 @@ export class BoneRots extends Object3D {
                 nl.layers.enableAll();
                 this.rotLines.push(nl);
             }
-            const modeCode = sb.targetState.getModeCode();
+            const modeCode = sb.ikPin.getModeCode();
             hdx++;
-            if ((modeCode & TargetState.XDir) != 0) {
+            if ((modeCode & IKPin.XDir) != 0) {
                 if(hdx > hdx_) {
                     let nl = new MovementLine(any_Vec3(), any_Vec3(), BoneRots.XPlusCol);
                     this.add(nl);
@@ -217,7 +217,7 @@ export class BoneRots extends Object3D {
                 }
                 hdx += 2;
             }
-            if ((modeCode & TargetState.YDir) != 0) {
+            if ((modeCode & IKPin.YDir) != 0) {
                 if(hdx > hdx_) {
                     let nl = new MovementLine(any_Vec3(), any_Vec3(), BoneRots.YPlusCol);
                     this.add(nl);
@@ -232,7 +232,7 @@ export class BoneRots extends Object3D {
                 }
                 hdx += 2;
             }
-            if ((modeCode & TargetState.ZDir) != 0) {
+            if ((modeCode & IKPin.ZDir) != 0) {
                 if(hdx > hdx_) {
                     let nl = new MovementLine(any_Vec3(), any_Vec3(), BoneRots.ZPlusCol);
                     this.add(nl);
@@ -256,7 +256,7 @@ export class BoneRots extends Object3D {
         if (BoneRots.activeBoneRot != this && BoneRots.activeBoneRot != null) {
             BoneRots.activeBoneRot.visible = false;
         }
-        this.wb.chain.rottrack.makeVisible(this.wb.forBone.directRef.parentArmature.armatureObj3d)
+        this.wb.chain.rottrack.makeVisible(this.wb.forBone.parentArmature.armatureObj3d)
         BoneRots.activeBoneRot = this;
         this.visible = true;
     }

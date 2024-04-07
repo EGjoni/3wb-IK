@@ -143,7 +143,7 @@
             EWBIK.defaultWScale = 1;
             //let result = await orthonormalize(inst);
             return result;
-            /*let armature = new EWBIK(inst.scene, true);
+            /*let armature = new EWBIK(inst.scene);
             rootBone = armature.rootBone;
             armature.armatureNode.forceOrthonormality = false;
             window.armatures.push(armature);
@@ -154,7 +154,7 @@
             updateGlobalPinLists();
             updateGlobalBoneLists();
             addSceneArmature(armature);*/
-            /*let armature2 = new EWBIK(instances[1].scene.children[0], false);
+            /*let armature2 = new EWBIK(instances[1].scene.children[0]);
             armature2.armatureNode.forceOrthonormality = false;
             addSceneArmature(armature2);*/
         }
@@ -190,7 +190,7 @@
             //let rootBone1 = glb.scene.children[0];
             //rootBone1.position.set(position.x, position.y, position.z);
             return glb;
-            /*let armature1 = new EWBIK(rootBone1, false);
+            /*let armature1 = new EWBIK(rootBone1);
             armature1.armatureNode.forceOrthonormality = false;
             addSceneArmature(armature1);*/
     }

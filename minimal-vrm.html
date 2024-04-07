@@ -22,7 +22,7 @@
             (vrm) => {
                 scene.add(vrm.scene);
                 rootBone = vrm.scene.children[0];
-                armature = new EWBIK(rootBone, false);                    
+                armature = new EWBIK(rootBone);                    
                 boneList = armature.bones;
                 armature.inferOrientations(rootBone);
 

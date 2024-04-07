@@ -161,6 +161,16 @@ export class IKTransform extends Saveable {
         this.setFromMatrix4(this.secretMatrix_e);
     }
 
+    /**
+     * updates storeIn to contain the globalspace heading of the provided input vector
+      */
+    getHeading(invec, storeIn = this.pool.any_Vec3(0,0,0)) {
+        this.setVecToGlobalOf(invec, storeIn);
+        storeIn.sub(this.translate);
+        storeIn.normalize();
+        return storeIn;
+    }
+
     /**extracts skew by default */
     setFromMatrix4(mat4, extractSkew = true) {
         const pos = this.tempTransVector3;
@@ -188,7 +198,7 @@ export class IKTransform extends Saveable {
             */
             this.rotation.setToInversion(this._inverseRotation);
             this.inverseRotation.applyBeforeMatrix4_rot(mat4.elements, this.skewMatrix_e);
-            this.matrixSub(this.scaleMatrix_e, this.skewMatrix_e);
+            IKTransform.matrixSub(this.scaleMatrix_e, this.skewMatrix_e);
             this._updateOrthoNormalHint();
             this.state &= ~IKTransform.precompInverseDirty;
         }        
@@ -296,7 +306,7 @@ export class IKTransform extends Saveable {
     /**lazily checks if the composed matrix needs updating, and updates it if so*/
     recompose() {
         if(this.state & IKTransform.compositionsDirty) {
-            this.matrixAddOutTo(this.scaleMatrix_e, this.skewMatrix_e, this.secretMatrix_e);
+            IKTransform.matrixAddOutTo(this.scaleMatrix_e, this.skewMatrix_e, this.secretMatrix_e);
             this.rotation.applyBeforeMatrix4_rot(this.secretMatrix_e, this.composedMatrix_e);
             this.translate.writeInto(this.composedMatrix_e, 12);
             //mark everything but the compositions and inverseRotation dirty, leaving inverseRotation however it was
@@ -311,7 +321,7 @@ export class IKTransform extends Saveable {
      * @param {Matrix4} addTo the matrix to add values into (as in, addition, not replacement or concatenation)
      * @return the matrix that was added into
     */
-    matrixAdd(mat1, addTo) {
+    static matrixAdd(mat1, addTo) {
         addTo[0] += mat1[0]; addTo[4] += mat1[4]; addTo[8] += mat1[8];  addTo[12] += mat1[12];
         addTo[1] += mat1[1]; addTo[5] += mat1[5]; addTo[9] += mat1[9];  addTo[13] += mat1[13];
         addTo[2] += mat1[2]; addTo[6] += mat1[6]; addTo[10] += mat1[10];addTo[14] += mat1[14];
@@ -325,7 +335,7 @@ export class IKTransform extends Saveable {
      * @param {Matrix4} storeIn matrix to store results in
      * @return the matrix that was added into
     */
-    matrixAddOutTo(mat1, mat2, storeIn) {
+    static matrixAddOutTo(mat1, mat2, storeIn) {
         storeIn[0] = mat2[0]+mat1[0]; storeIn[4] = mat2[4]+mat1[4]; storeIn[8] = mat2[8]+mat1[8];   storeIn[12] = mat2[12]+mat1[12];
         storeIn[1] = mat2[1]+mat1[1]; storeIn[5] = mat2[5]+mat1[5]; storeIn[9] = mat2[9]+mat1[9];   storeIn[13] = mat2[13]+mat1[13];
         storeIn[2] = mat2[2]+mat1[2]; storeIn[6] = mat2[6]+mat1[6]; storeIn[10] = mat2[10]+mat1[10]; storeIn[14] = mat2[14]+mat1[14];
@@ -340,7 +350,7 @@ export class IKTransform extends Saveable {
      * @param {Matrix4} subFrom the matrix to subtract values from
      * @return the matrix that was subtractedFrom
     */
-    matrixSub(mat1, subFrom) {
+    static matrixSub(mat1, subFrom) {
         subFrom[0] -= mat1[0]; subFrom[4] -= mat1[4]; subFrom[8] -= mat1[8];   subFrom[12] -= mat1[12];
         subFrom[1] -= mat1[1]; subFrom[5] -= mat1[5]; subFrom[9] -= mat1[9];   subFrom[13] -= mat1[13];
         subFrom[2] -= mat1[2]; subFrom[6] -= mat1[6]; subFrom[10] -= mat1[10]; subFrom[14] -= mat1[14];
@@ -355,7 +365,7 @@ export class IKTransform extends Saveable {
      * @param {Matrix4} storeIn matrix to store results in
      * @return the matrix that was subtractedFrom
     */
-     matrixSubOutTo(mat1, subFrom, storeIn) {
+     static matrixSubOutTo(mat1, subFrom, storeIn) {
         storeIn[0] = subFrom[0]-mat1[0]; storeIn[4] = subFrom[4]-mat1[4]; storeIn[8] = subFrom[8]-mat1[8];  storeIn[12] = subFrom[12]-mat1[12];
         storeIn[1] = subFrom[1]-mat1[1]; storeIn[5] = subFrom[5]-mat1[5]; storeIn[9] = subFrom[9]-mat1[9];  storeIn[13] = subFrom[13]-mat1[13];
         storeIn[2] = subFrom[2]-mat1[2]; storeIn[6] = subFrom[6]-mat1[6]; storeIn[10] = subFrom[10]-mat1[10];  storeIn[14] = subFrom[14]-mat1[14];

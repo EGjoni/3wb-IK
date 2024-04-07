@@ -37,7 +37,7 @@ export class IKNode extends Saveable {
     temp_identitythreequat = new Quaternion(0, 0, 0, 1);
     temp_unitthreescale = new Vector3(1, 1, 1);
     childNodes = new Set();
-
+    nodeDepth = 0;
 
     toJSON() {
         let result = super.toJSON();
@@ -132,6 +132,9 @@ export class IKNode extends Saveable {
         return result;
     }
 
+    /**updates the local values of this transform such that its worldspace values match
+     * the worldspace values of the provided object 3d
+     */
     adoptGlobalValuesFromObject3D(object3d, updateLocal = true) {
         
         this.localMBasis.setFromObj3d(object3d);
@@ -139,6 +142,7 @@ export class IKNode extends Saveable {
         if (this.parent != null && updateLocal) {
             this.parent.setTransformToLocalOf(this.globalMBasis, this.localMBasis);
         }
+        this.markDirty();
         return this;
     }
 
@@ -159,7 +163,7 @@ export class IKNode extends Saveable {
     adoptAllValuesFromIKNode(node) {
         this.getLocalMBasis().adoptValues(node.getLocalMBasis());
         this.getGlobalMBasis().adoptValues(node.getGlobalMBasis());
-        this.dirty = node.dirty;
+        this.markDirty();
         return this;
     }
 
@@ -168,6 +172,16 @@ export class IKNode extends Saveable {
         if (this.parent != null && updateLocal) {
             this.parent.setTransformToLocalOf(this.globalMBasis, this.localMBasis);
         }
+        this.markDirty();
+        return this;
+    }
+
+    adoptGlobalValuesFromIKTransform(transform, updateLocal = true) {
+        this.globalMBasis.adoptValues(transform);
+        if (this.parent != null && updateLocal) {
+            this.parent.setTransformToLocalOf(transform, this.localMBasis);
+        }
+        this.markDirty();
         return this;
     }
 
@@ -245,6 +259,7 @@ export class IKNode extends Saveable {
             safetyCheck--;
         }
         this.childNodes.add(node);
+        node.nodeDepth = this.nodeDepth+1;
         node.parent = this;
         node.areGlobal = false;
         node.markDirty();
@@ -617,6 +632,35 @@ export class IKNode extends Saveable {
         IKNode.compareWith(this, node);
     }
 
+    /**
+     * @param {[IKNode]} nodelist
+     * @return returns the node which is the most recent common ancestor of the provided input nodes
+     */
+    static getCommonAncestor(nodelist, shallowest = 99999) {
+        for(let n of nodelist) {
+            shallowest = Math.min(shallowest, n.nodeDepth);
+        }
+        for(let i =0; i<nodelist.length; i++) {
+            while(nodelist[i].nodeDepth > shallowest) 
+                nodelist[i] = nodelist[i].parent
+        }
+        let common = nodelist[0];
+        let isCommon = true;
+        for(let n of nodelist) {
+            if(n != common) {
+                isCommon = false;
+                break;
+            }
+        }
+        if(!isCommon) {
+            for(let i =0; i<nodelist.length; i++) {
+                    nodelist[i] = nodelist[i].parent
+            }
+            return IKNode.getCommonAncestor(nodelist, shallowest-1);
+        }
+        else return common;
+    }
+
     /**visual comparison of two IKNode's local and global values*/
     static compareWith(node1, node2) {
         let builtLocal = IKTransform._getCompareStyles(node1.getLocalMBasis(), node2.getLocalMBasis());
@@ -670,6 +714,8 @@ export class IKNode extends Saveable {
  */
 export class TrackingNode extends IKNode {
     static totalTrackingNodes = 0;
+    /**@type {Object3D} */
+    _toTrack = null;
 
     static async fromJSON(json, loader, pool, scene) {
         let result = new TrackingNode(loader.findSceneObject(json.requires.toTrack, scene), json.ikd);
@@ -684,7 +730,7 @@ export class TrackingNode extends IKNode {
     }
     getRequiredRefs() {
         let result = super.getRequiredRefs(); 
-        result.toTrack = this.toTrack; 
+        result._toTrack = this._toTrack; 
         return result;
     }
     async postPop(json, loader, pool, scene)  {
