@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Three.js Skeleton Interaction</title>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "./js/three/three.module.js",
+                "orbitControls": "./js/three/jsm/OrbitControls.js",
+                "transformControls": "./js/penziltransform.js"
+              }
+        }
+    </script>
+    
+    <script> 
+        const keyState = {};
+        function updateKeyState(event) {
+            const keyCode = event.code;
+            if (event.type === 'keydown') {
+                keyState[keyCode] = true;
+            } else if (event.type === 'keyup') {
+                keyState[keyCode] = false;
+            }
+        }
+
+        document.addEventListener('keydown', updateKeyState);
+        document.addEventListener('keyup', updateKeyState);
+        
+
+        function isKeyPressed(keyCode) {
+            return !!keyState[keyCode];
+        }
+    </script>
+</head>
+<body>
+    <script type = "module"> 
+        import * as THREE from 'three';
+        import {OrbitControls} from "./js/three/jsm/OrbitControls.js";
+        import {Boxxy} from "./js/toys/Boxxy/Boxxy.js";
+
+        // Scene, camera, and renderer setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.5);
+        camera.position.z = 5;
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        scene.add(hemisphereLight);
+        let orbitControls = new OrbitControls(camera, renderer.domElement);
+        orbitControls.target.y = 1;
+        orbitControls.update();
+        let boxxy = new Boxxy(2);
+        boxxy.addTo(scene);
+        // Cube geometry and material setup
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            boxxy.update();
+            //console.log(acceleration);
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+                
+    </script>
+    <style>
+        body {margin: 0;}
+        canvas {display: block;}
+    </style>
+</body>

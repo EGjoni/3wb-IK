@@ -147,7 +147,7 @@ export class VVec {
     }
 
     // Add veec to a copy of this vec and return the copy
-    addCopy(vec) {
+    addClone(vec) {
         return this.came_from.getVector(this.idx, true).add(vec);
     }
 
@@ -158,7 +158,7 @@ export class VVec {
     }
 
     // subtract vec from a copy of this vec and return the copy
-    subCopy(vec) {
+    subClone(vec) {
         return this.came_from.getVector(this.idx, true).sub(vec);
     }
 
@@ -169,7 +169,7 @@ export class VVec {
     }
 
     // Multiplies a copy of this vec by the given scalar and return the copy
-    multCopy(scalar) {
+    multClone(scalar) {
         return this.came_from.getVector(this.idx, true).mult(scalar);
     }
 
@@ -180,7 +180,7 @@ export class VVec {
     }
 
     // divides a copy of this vec and return the copy
-    divCopy(vec) {
+    divClone(vec) {
         return this.came_from.getVector(this.idx, true).div(vec);
     }
 

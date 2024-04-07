@@ -1,10 +1,11 @@
-
-import { Vec3, new_Vec3 } from "../../../util/vecs.js";
+const THREE = await import('three');
+import { NoPool, Vec3} from "../../../util/vecs.js";
 import { Rot } from "../../../util/Rot.js";
 import { Ray } from "../../../util/Ray.js";
-
-export class LimitCone {
-
+import { Saveable } from "../../../util/loader/saveable.js";
+export class LimitCone extends Saveable {
+    static loader = new THREE.TextureLoader();
+    static totalInstances = 0;
     controlPoint;
 
     //radius stored as  cosine to save on the acos call necessary for angleBetween. 
@@ -20,50 +21,57 @@ export class LimitCone {
     tangentCircleRadiusNext;
     tangentCircleRadiusNextCos;
 
-    cushionTangentCircleCenterNext1;
-    cushionTangentCircleCenterNext2;
-    cushionTangentCircleCenterPrevious1;
-    cushionTangentCircleCenterPrevious2;
-    cushionTangentCircleRadiusNext;
-    cushionTangentCircleRadiusNextCos;
+    static fromJSON(json, loader, pool, scene) {
+        let result = new LimitCone(Vec3.fromJSON(json.controlPoint, pool), parseFloat(json.radius), json.ikd, pool);
+        result.tangentCircleCenterNext1 = Vec3.fromJSON(json.tangentCircleCenterNext1, pool);
+        result.tangentCircleCenterNext2 = Vec3.fromJSON(json.tangentCircleCenterNext2, pool);
+        result.tangentCircleRadiusNext = parseFloat(json.tangentCircleRadiusNext);
+        result.tangentCircleRadiusNextCos = parseFloat(json.tangentCircleRadiusNext);
+        return result;
+    }
 
-    static BOUNDARY = 0;
-    static CUSHION = 1;
+    async postPop(json, loader, pool, scene)  {
+        let p = Saveable.prepop(json.requires, loader, pool, scene);
+        this.parentKusudama = p.parentKusudama;
+        return this;
+    }
 
-    /**
-     * a triangle where the [1] is th tangentCircleNext_n, and [0] and [2] 
-     * are the points at which the tangent circle intersects this limitCone and the
-     * next limitCone
-     */
-    firstTriangleNext = new SGVec_3d[3];
-    secondTriangleNext = new SGVec_3d[3];
+    toJSON(json, loader, pool, scene) {
+        let result = super.toJSON(json, loader, pool, scene);
+        result.controlPoint = this.controlPoint.toJSON();
+        result.tangentCircleCenterNext1 = this.tangentCircleCenterNext1.toJSON();
+        result.tangentCircleCenterNext2 = this.tangentCircleCenterNext2.toJSON();
+        result.radius = this.radius;
+        result.tangentCircleRadiusNext = this.tangentCircleRadiusNext;
+        return result;
+    }
+
+    getRequiredRefs () {
+        return {parentKusudama : this.parentKusudama};
+    }
 
     /**
      * 
-     * @param direction 
-     * @param rad 
-     * @param cushion range 0-1, how far toward the boundary to begin slowing down the rotation if soft constraints are enabled.
-     * Value of 1 creates a hard boundary. Value of 0 means it will always be the case that the closer a joint in the allowable region 
-     * is to the boundary, the more any further rotation in the direction of that boundary will be avoided.   
-     * @param attachedTo
+     * @param {Vec3} direction the cone points in
+     * @param {Number} rad half angle of the cone opening
      */
-    constructor(direction, rad, attachedTo) {
-        setControlPoint(direction);
-        tangentCircleCenterNext1 = direction.getOrthogonal();
-        tangentCircleCenterNext2 = SGVec_3d.mult(tangentCircleCenterNext1, -1);
+    constructor(direction, rad, ikd=`LimitCone-${LimitCone.totalInstances++}`, pool=noPool) {
+        super(ikd,'LimitCone', LimitCone.totalInstances, pool);
+        this.tempVec1 = this.pool.new_Vec3(); 
+        this.tempVec2 = this.pool.new_Vec3();
+        this.controlPoint = new Vec3(0,1,0);
+        this.workingRay = new Ray(this.pool.any_Vec3(), this.pool.any_Vec3(), this.pool);
+        this.tempOutVec = this.pool.new_Vec3(0,0,0);
+        this.tempOriginVec = this.pool.new_Vec3(); 
+        this.tempRot = new Rot(1,0,0,0);
+        
+        this.radialHandle = null; 
+        this.setControlPoint(direction);
+        this.tangentCircleCenterNext1 = direction.getOrthogonal();
+        this.tangentCircleCenterNext2 = this.tangentCircleCenterNext1.multClone(-1);
 
-        this.radius = Math.max(Double.MIN_VALUE, rad);
-        this.radiusCosine = Math.cos(radius);
-        parentKusudama = attachedTo;
-    }
-
-    LimitCone(direction, rad, cushion, attachedTo) {
-        setControlPoint(direction);
-        tangentCircleCenterNext1 = direction.getOrthogonal();
-        tangentCircleCenterNext2 = SGVec_3d.mult(tangentCircleCenterNext1, -1);
-        this.radius = Math.max(Double.MIN_VALUE, rad);
-        this.radiusCosine = Math.cos(radius);
-        parentKusudama = attachedTo;
+        this.radius = Math.max(1e-12, rad);
+        this.radiusCosine = Math.cos(rad);
     }
 
     /**
@@ -74,10 +82,10 @@ export class LimitCone {
      * @return
      */
     inBoundsFromThisToNext(next, input, collisionPoint) {
-        isInBounds = false;//determineIfInBounds(next, input);
+        let isInBounds = false;//determineIfInBounds(next, input);
         //if(!isInBounds) {
-        closestCollision = getClosestCollision(next, input);
-        if (closestCollision == null) {
+        let closestCollision = this.getClosestCollision(next, input);
+        if (closestCollision == null || closestCollision == input) {
             /**
              * getClosestCollision returns null if the point is already in bounds,
              * so we set isInBounds to true.  
@@ -160,32 +168,38 @@ export class LimitCone {
         }
     }
 
+    
+
     /**
      * @param {LimitCone} next 
      * @param {Vec3} input 
      * @returns {Vec3|null}
      */
     getOnPathSequence(next, input) {
-        let c1xc2 = this.controlPoint.cross(next.controlPoint);
-        let c1c2dir = input.dot(c1xc2);
+        /**TODO: Maybe come up with some way to make this less conditional */
+        let c1c2dir = input.dot(this.controlPoint.cross(next.controlPoint, this.tempVec1));
         if (c1c2dir < 0.0) {
-            let c1xt1 = this.controlPoint.cross(this.tangentCircleCenterNext1);
-            let t1xc2 = this.tangentCircleCenterNext1.cross(next.controlPoint);
+            let c1xt1 = this.controlPoint.cross(this.tangentCircleCenterNext1, this.tempVec1);
+            let t1xc2 = this.tangentCircleCenterNext1.cross(next.controlPoint, this.tempVec2);
             if (input.dot(c1xt1) > 0 && input.dot(t1xc2) > 0) {
-                let tan1ToInput = new Ray(this.tangentCircleCenterNext1, input);
-                let result = new Vec3();
-                tan1ToInput.intersectsPlane(new Vec3(0, 0, 0), this.controlPoint, next.controlPoint, result);
+                let tan1ToInput = this.workingRay; 
+                tan1ToInput.p1.set(this.tangentCircleCenterNext1);
+                tan1ToInput.p2.set(input);
+                let result = this.tempOutVec;
+                tan1ToInput.intersectsPlane(tempOriginVec, this.controlPoint, next.controlPoint, result);
                 return result.normalize();
             } else {
                 return null;
             }
         } else {
-            let t2xc1 = this.tangentCircleCenterNext2.cross(this.controlPoint);
-            let c2xt2 = next.controlPoint.cross(this.tangentCircleCenterNext2);
+            let t2xc1 = this.tangentCircleCenterNext2.cross(this.controlPoint, this.tempVec1);
+            let c2xt2 = next.controlPoint.cross(this.tangentCircleCenterNext2, this.tempVec2);
             if (input.dot(t2xc1) > 0 && input.dot(c2xt2) > 0) {
-                let tan2ToInput = new Ray(this.tangentCircleCenterNext2, input);
-                let result = new Vec3();
-                tan2ToInput.intersectsPlane(new Vec3(0, 0, 0), this.controlPoint, next.controlPoint, result);
+                let tan2ToInput = this.workingRay; 
+                tan2ToInput.p1.set(this.tangentCircleCenterNext2); 
+                tan2ToInput.p2.set(input);
+                let result = this.tempOutVec;
+                tan2ToInput.intersectsPlane(tempOriginVec, this.controlPoint, next.controlPoint, result);
                 return result.normalize();
             } else {
                 return null;
@@ -199,17 +213,17 @@ export class LimitCone {
      * @returns {Vec3|null} null if inapplicable for rectification. the original point if in bounds, or the point rectified to the closest boundary on the path sequence between two cones if the point is out of bounds and applicable for rectification.
      */
     getOnGreatTangentTriangle(next, input) {
-        let c1xc2 = this.controlPoint.cross(next.controlPoint);
-        let c1c2dir = input.dot(c1xc2);
+        /**TODO: Maybe come up with some way to make this less conditional */
+        let c1c2dir = input.dot(this.controlPoint.cross(next.controlPoint, this.tempVec1));
         if (c1c2dir < 0.0) {
-            let c1xt1 = this.controlPoint.cross(this.tangentCircleCenterNext1);
-            let t1xc2 = this.tangentCircleCenterNext1.cross(next.controlPoint);
+            let c1xt1 = this.controlPoint.cross(this.tangentCircleCenterNext1, this.tempVec1);
+            let t1xc2 = this.tangentCircleCenterNext1.cross(next.controlPoint, this.tempVec2);
             if (input.dot(c1xt1) > 0 && input.dot(t1xc2) > 0) {
                 let toNextCos = input.dot(this.tangentCircleCenterNext1);
                 if (toNextCos > this.tangentCircleRadiusNextCos) {
                     let planeNormal = this.tangentCircleCenterNext1.cross(input);
-                    let rotateAboutBy = new Rot(planeNormal, this.tangentCircleRadiusNext);
-                    return rotateAboutBy.applyTo(this.tangentCircleCenterNext1);
+                    let rotateAboutBy = this.tempRot.setFromAxisAngle(planeNormal, this.tangentCircleRadiusNext);
+                    return rotateAboutBy.applyToVecClone(this.tangentCircleCenterNext1);
                 } else {
                     return input;
                 }
@@ -222,8 +236,8 @@ export class LimitCone {
             if (input.dot(t2xc1) > 0 && input.dot(c2xt2) > 0) {
                 if (input.dot(this.tangentCircleCenterNext2) > this.tangentCircleRadiusNextCos) {
                     let planeNormal = this.tangentCircleCenterNext2.cross(input);
-                    let rotateAboutBy = new Rot(planeNormal, this.tangentCircleRadiusNext);
-                    return rotateAboutBy.applyTo(this.tangentCircleCenterNext2);
+                    let rotateAboutBy = this.tempRot.setFromAxisAngle(planeNormal, this.tangentCircleRadiusNext);
+                    return rotateAboutBy.applyToVecClone(this.tangentCircleCenterNext2);
                 } else {
                     return input;
                 }
@@ -241,9 +255,9 @@ export class LimitCone {
 
     closestCone(next, input) {
         if (input.dot(controlPoint) > input.dot(next.controlPoint))
-            return this.controlPoint.copy();
+            return this.controlPoint.clone();
         else
-            return next.controlPoint.copy();
+            return next.controlPoint.clone();
     }
 
     /**
@@ -274,7 +288,8 @@ closestPointOnClosestCone(next, input, inBounds) {
 }
 
 /**
- * Returns null if no rectification is required.
+ * Returns the point on this cone which is closest to the input, but only if the input lies outside of the cone. 
+ * Returns null if the input is already inside of the cone.
  * @param {Vec3} input 
  * @param {boolean[]} inBounds 
  * @returns {Vec3|null}
@@ -282,11 +297,11 @@ closestPointOnClosestCone(next, input, inBounds) {
 closestToCone(input, inBounds) {
     if (input.dot(this.getControlPoint()) > this.getRadiusCosine()) {
         inBounds[0] = true;
-        return null; // input.copy();
+        return null; // input.clone();
     } else {
         let axis = this.getControlPoint().cross(input);
-        let rotTo = new Rot(axis, this.getRadius());
-        let result = rotTo.applyTo(this.getControlPoint());
+        let rotTo = this.tempRot.setFromAxisAngle(axis, this.getRadius());
+        let result = rotTo.applyToVec(this.getControlPoint(), this.tempOutVec);
         inBounds[0] = false;
         return result;
     }
@@ -297,67 +312,93 @@ closestToCone(input, inBounds) {
  */
 updateTangentHandles(next) {
     this.controlPoint.normalize();
-    this.updateTangentAndCushionHandles(next);
+    this.updateTangentHandles(next);
 }
 
 /**
  * @param {LimitCone} next 
  */
-updateTangentAndCushionHandles(next) {
+updateTangentHandles(next) {
+    this.radius = parseFloat(this.radius);
     if (next != null) {
+        next.radius = parseFloat(next.radius);
         let radA = this.radius;
         let radB = next.radius;
 
-        let A = this.getControlPoint().copy();
-        let B = next.getControlPoint().copy();
+        let A = this.getControlPoint().clone();
+        let B = next.getControlPoint().clone();
+        if(A.dist(B) == 0) { //to avoid issues with identical limitcone controlpoints
+            B.add(this.pool.any_Vec3(Math.random(), Math.random(), Math.random()).mult(0.00001)).normalize();
+        }
 
         let arcNormal = A.cross(B);
 
-        // Documentation on determining the tangent circle radius
+        /**
+         * There are an infinite number of circles co-tangent with A and B, every other
+         * one of which has a unique radius.  
+         * 
+         * However, we want the radius of our tangent circles to obey the following properties: 
+         *   1) When the radius of A + B == 0 radians, our tangent circle's radius should = pi/2 radians.
+         *   	In other words, the tangent circle should span a hemisphere, because A+B define two points, which on a sphere is a great arc. 
+         *   2) When the radius of A + B == pi radians, our tangent circle's radius should = 0 radians. 
+         *   	In other words, when A + B combined are capable of spanning the entire sphere, 
+         *   	our tangentCircle should be nothing.   
+         *   
+         * Another way to think of this is -- if we pick some radii for A and B, and hold them constant, then sample arbitrary directions of A and B to find the
+         * values which minimize the maximum distance, we want our tangentCircle's diameter to be precisely that minimum max-distance.
+         * 
+         * The term "want" here is used loosely. And probably there is merit to allowing user control over this. But without user control, this is the solution of least bulge.
+         *
+         */
         let tRadius = ((Math.PI) - (radA + radB)) / 2;
+
+        /**
+         * Okay listen. I'm gonna be honest.
+         * I know this code makes no fucking sense and you're not gonna be able to make heads or tails of it.
+         * But in my head it's a beautiful waltz of rays and intersections on a sphere.
+         * Just like, put on some Schubert, and imagine circles of Appolonius dancing on a sphere while you read it and it'll be fine.
+         */
 
         let boundaryPlusTangentRadiusA = radA + tRadius;
         let boundaryPlusTangentRadiusB = radB + tRadius;
 
-        let scaledAxisA = A.mult(Math.cos(boundaryPlusTangentRadiusA));
-        let planeDir1A = new Rot(arcNormal, boundaryPlusTangentRadiusA).applyTo(A);
-        let planeDir2A = new Rot(A, Math.PI / 2).applyTo(planeDir1A);
+        let scaledAxisA = A.multClone(Math.cos(boundaryPlusTangentRadiusA)); //projection of the tangent (before we actually find it) on coneA direction
+        //take coneA's controlpoint and rotate it along the path toward coneB's controlpoint by the sum of the radius of coneA and the tangentCone.
+        let planeDir1A = this.tempRot.setFromAxisAngle(arcNormal, boundaryPlusTangentRadiusA).applyToVecClone(A);
+        let planeDir2A = this.tempRot.setFromAxisAngle(A, Math.PI / 2).applyToVecClone(planeDir1A); //twirly bit.
 
-        let scaledAxisB = B.mult(Math.cos(boundaryPlusTangentRadiusB));
-        let planeDir1B = new Rot(arcNormal, boundaryPlusTangentRadiusB).applyTo(B);
-        let planeDir2B = new Rot(B, Math.PI / 2).applyTo(planeDir1B);
+        let scaledAxisB = B.multClone(Math.cos(boundaryPlusTangentRadiusB)); //projection of the tangent (before we actually find it) on coneB direciton
+        //take coneB's controlpoint and rotate it along the path toward coneA's controlpoint by the sum of the radius of coneB and the tangentCone.
+        let planeDir1B = this.tempRot.setFromAxisAngle(arcNormal, boundaryPlusTangentRadiusB).applyToVecClone(B);
+        let planeDir2B = this.tempRot.setFromAxisAngle(B, Math.PI / 2).applyToVecClone(planeDir1B); //twirly bit
 
-        let r1B = new Ray(planeDir1B, scaledAxisB); 
+        let r1B = new Ray(planeDir1B, scaledAxisB);
         let r2B = new Ray(planeDir1B, planeDir2B);
 
         r1B.elongate(99);
         r2B.elongate(99);
 
-        let intersection1 = r1B.intersectsPlane(scaledAxisA, planeDir1A, planeDir2A);
-        let intersection2 = r2B.intersectsPlane(scaledAxisA, planeDir1A, planeDir2A);
+        let intersection1 = r1B.intersectsPlane(scaledAxisA, planeDir1A, planeDir2A, this.pool).clone();
+        let intersection2 = r2B.intersectsPlane(scaledAxisA, planeDir1A, planeDir2A, this.pool).clone();
 
-        let intersectionRay = new Ray(intersection1, intersection2);
+        let intersectionRay = new Ray(intersection1, intersection2, this.pool);
         intersectionRay.elongate(99);
 
-        let sphereIntersect1 = new Vec3();
-        let sphereIntersect2 = new Vec3();
-        let sphereCenter = new Vec3();
-        intersectionRay.intersectsSphere(sphereCenter, 1, sphereIntersect1, sphereIntersect2);
+        let sphereIntersect1 = new Vec3(0,0,0); //for result storage
+        let sphereIntersect2 = new Vec3(0,0,0); //for result storage
+        
+        let intersections = intersectionRay.intersectsSphere(1, sphereIntersect1, sphereIntersect2);
 
-        this.tangentCircleCenterNext1 = sphereIntersect1;
-        this.tangentCircleCenterNext2 = sphereIntersect2;
+        this.tangentCircleCenterNext1 = sphereIntersect1.clone();
+        this.tangentCircleCenterNext2 = sphereIntersect2.clone();
         this.setTangentCircleRadiusNext(tRadius);
-    }
 
-    if (this.tangentCircleCenterNext1 == null) {
-        this.tangentCircleCenterNext1 = this.controlPoint.getOrthogonal().normalize();
+        if (intersections < 2) { //should only trigger when we only have one cone.
+            this.tangentCircleCenterNext1 = this.controlPoint.getOrthogonal().normalize();
+            this.tangentCircleCenterNext2 = this.controlPoint.getOrthogonal().normalize().mult(-1);
+        }
     }
-    if (this.tangentCircleCenterNext2 == null) {
-        this.tangentCircleCenterNext2 = this.tangentCircleCenterNext1.mult(-1).normalize();
-    }
-    if (next != null) {
-        this.computeTriangles(next);
-    }
+    
 }
 
 
@@ -366,34 +407,15 @@ updateTangentAndCushionHandles(next) {
 
 
     }
-    setTangentCircleCenterNext2(point, mode) {
-        if (mode == CUSHION) {
-            this.cushionTangentCircleCenterNext2 = point;
-        } else {
-            this.tangentCircleCenterNext2 = point;
-        }
+    setTangentCircleCenterNext2(point) {
+        this.cushionTangentCircleCenterNext2 = point;
     }
 
 
     setTangentCircleRadiusNext(rad) {
         this.tangentCircleRadiusNext = rad;
-        this.tangentCircleRadiusNextCos = Math.cos(tangentCircleRadiusNext);
+        this.tangentCircleRadiusNextCos = Math.cos(this.tangentCircleRadiusNext);
     }
-
-
-    /**
-     * @param next @type { LimitCone}
-     */
-    computeTriangles(next) {
-        this.firstTriangleNext[1] = this.tangentCircleCenterNext1.normalize();
-        this.firstTriangleNext[0] = this.getControlPoint().normalize();
-        this.firstTriangleNext[2] = next.getControlPoint().normalize();
-
-        this.secondTriangleNext[1] = this.tangentCircleCenterNext2.normalize();
-        this.secondTriangleNext[0] = this.getControlPoint().normalize();
-        this.secondTriangleNext[2] = next.getControlPoint().normalize();
-    }
-
 
     getControlPoint() {
         return this.controlPoint;
@@ -402,8 +424,6 @@ updateTangentAndCushionHandles(next) {
     setControlPoint(controlPoint) {
         this.controlPoint.set(controlPoint);
         this.controlPoint.normalize();
-        if (this.parentKusudama != null)
-            this.parentKusudama.constraintUpdateNotification();
     }
 
     getRadius() {
@@ -415,9 +435,8 @@ updateTangentAndCushionHandles(next) {
     }
 
     setRadius(radius) {
-        this.radius = radius;
+        this.radius = parseFloat(radius);
         this.radiusCosine = Math.cos(radius);
-        this.parentKusudama.constraintUpdateNotification();
     }
 
     getParentKusudama() {
