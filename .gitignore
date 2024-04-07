@@ -1,10 +1,6 @@
-js/three/OrbitControls.js
-js/three/three.module.js
-js/three/TransformControls.js
 indexRot.html
 js/EWBIK/util/unported.java
 .vscode/launch.json
 .vscode/settings.json
-js/three/three-vrm-core/lib/three-vrm-core.module.js
 gitvrm.html
 .gitignore
