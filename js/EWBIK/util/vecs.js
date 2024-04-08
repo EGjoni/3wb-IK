@@ -248,6 +248,11 @@ export class Vec3 {
         }
         return this;
     }
+    clampComponents(min, max) {
+        this.x = Math.max(Math.min(max, this.x), min);
+        this.y = Math.max(Math.min(max, this.y), min);
+        this.z = Math.max(Math.min(max, this.z), min);
+    }
 
     dot(v) {
         const vbaseX = v.baseIdx;
@@ -359,6 +364,7 @@ export class Vec3 {
     }
 
     addClone(v, result = this.clone()) {
+        result.set(this);
         result.add(v);
         return result;
     }
@@ -373,6 +379,7 @@ export class Vec3 {
     }
 
     subClone(v, result = this.clone()) {
+        result.set(this);
         result.sub(v);
         return result;
     }

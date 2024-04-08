@@ -8,7 +8,10 @@
             "imports": {
                 "three": "./js/three/three.module.js",
                 "orbitControls": "./js/three/jsm/OrbitControls.js",
-                "transformControls": "./js/penziltransform.js"
+                "transformControls": "./js/penziltransform.js",
+                "gltf" : "./js/three/jsm/GLTFLoader.js",
+                "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
+                "vrm" : "./js/three/jsm/three-vrm.module.js"
               }
         }
     </script>
@@ -38,32 +41,196 @@
         import * as THREE from 'three';
         import {OrbitControls} from "./js/three/jsm/OrbitControls.js";
         import {Boxxy} from "./js/toys/Boxxy/Boxxy.js";
+        import { GLTFLoader } from 'gltf';
+        import { VRMLoaderPlugin } from 'vrm';
+        import { EWBIK } from "./js/EWBIK/EWBIK.js";
+        import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
+        import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
+        import { Rest, Twist } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
+        window.Rest = Rest;
+        window.OrbitControls = OrbitControls;
+        window.IKNode = IKNode;
+        window.TrackingNode = TrackingNode;
+        window.IKPin = IKPin;
 
         // Scene, camera, and renderer setup
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer();
         const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.5);
-        camera.position.z = 5;
+        camera.position.z = 5; camera.position.y = 5;
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
         scene.add(hemisphereLight);
         let orbitControls = new OrbitControls(camera, renderer.domElement);
         orbitControls.target.y = 1;
         orbitControls.update();
-        let boxxy = new Boxxy(2);
-        boxxy.addTo(scene);
-        // Cube geometry and material setup
+        let boxxy = null; //new Boxxy(0.87, 0.87);
         
-        // Animation loop
+        window.scene = scene;
+        window.boxxy = boxxy;
+        window.frrate = 1/60;
+        window.frtime = window.frrate*1000;
+        const loader = new GLTFLoader();
+        const clock = new THREE.Clock();
+
+        async function init() {
+            loader.register((parser) => {
+                return new VRMLoaderPlugin(parser);
+            });
+            window.armature = await loadModel({ x: 0, y: 0, z: 0 }, 0, ikify);
+            clock.start();
+            animate();
+        }
+
+        function ikify(inst) {
+            let armature = new EWBIK(inst.scene.children[0]);
+            armature.setDefaultIterations(10);
+            armature.setDampening(1);
+            initHumanoidRestConstraints(armature);
+            armature.regenerateShadowSkeleton();
+            return armature;
+        }
+
+        function initHumanoidRestConstraints(armature) {
+
+            armature.l_arm_upp = armature.bonetags["J_Bip_L_UpperArm"];
+            armature.r_arm_upp = armature.bonetags["J_Bip_R_UpperArm"];
+            armature.l_arm_lower = armature.bonetags["J_Bip_L_LowerArm"];
+            armature.r_arm_lower = armature.bonetags["J_Bip_R_LowerArm"];
+            armature.l_leg_upp = armature.bonetags["J_Bip_L_UpperLeg"];
+            armature.r_leg_upp = armature.bonetags["J_Bip_R_UpperLeg"];
+            armature.l_leg_lower = armature.bonetags["J_Bip_L_LowerLeg"];
+            armature.r_leg_lower = armature.bonetags["J_Bip_R_LowerLeg"];
+            armature.c_head = armature.bonetags["J_Bip_C_Head"];
+            armature.c_hips = armature.bonetags["J_Bip_C_Hips"];
+            armature.c_chest = armature.bonetags["J_Bip_C_Chest"];
+            armature.upper_chest = armature.bonetags["J_Bip_C_UpperChest"];
+
+
+            armature.l_arm_upp.rotateZ(0.5);
+            armature.r_arm_upp.rotateZ(-0.5);
+
+            armature.l_arm_lower.rotateX(0.5);
+            armature.r_arm_lower.rotateX(0.5);
+
+            armature.l_arm_lower.rotateY(-0.75);
+            armature.r_arm_lower.rotateY(0.75);
+
+            armature.r_leg_upp.rotateY(-.5);
+            armature.l_leg_upp.rotateY(.5);
+
+            armature.r_leg_upp.rotateX(1);
+            armature.l_leg_upp.rotateX(1);
+
+            armature.r_leg_lower.rotateX(-1.75);
+            armature.l_leg_lower.rotateX(-1.75);
+
+            for (let b of armature.bones) {
+                if (b.parent instanceof THREE.Bone) {
+                    let restconst = new Rest(b);
+                    if (b == armature.bonetags["J_Bip_C_Head"]) {
+                        restconst.setPainfulness(0.7);
+                        restconst.setStockholmRate(0.8);
+                    }
+                    if (b == armature.bonetags["J_Bip_C_Neck"]) {
+                        restconst.setPainfulness(0.5);
+                        restconst.setStockholmRate(0.8);
+                    }
+                    if (b == armature.bonetags['J_Bip_L_Shoulder']) {
+                        restconst.setPainfulness(0.8);
+                        restconst.setStockholmRate(0.8);
+                    }
+
+                    if (b == armature.bonetags['J_Bip_R_Shoulder']) {
+                        restconst.setPainfulness(0.8);
+                        restconst.setStockholmRate(0.8);
+                    }
+                }
+            }
+
+            armature.r_leg_lower.rotateX(1.75);
+            armature.l_leg_lower.rotateX(1.75);
+
+            armature.r_leg_upp.rotateX(-1);
+            armature.l_leg_upp.rotateX(-1);
+
+            armature.r_leg_upp.rotateY(.5);
+            armature.l_leg_upp.rotateY(-.5);
+
+            armature.l_arm_lower.rotateY(0.75);
+            armature.r_arm_lower.rotateY(-0.75);
+
+            armature.l_arm_lower.rotateX(-0.5);
+            armature.r_arm_lower.rotateX(-0.5);
+
+            armature.l_arm_upp.rotateZ(-0.5);
+            armature.r_arm_upp.rotateZ(0.5);
+
+            let headNode = new THREE.Object3D(); 
+            armature.c_head.add(headNode);
+
+            boxxy = new Boxxy(
+                armature.c_hips, 
+                armature.bonetags["J_Bip_L_Foot"],
+                armature.l_leg_upp,
+                armature.bonetags["J_Bip_R_Foot"],
+                armature.r_leg_upp
+                );
+            boxxy.addTo(scene);
+            boxxy.hips.attach(headNode);
+            boxxy.hips.position.y *= 0.8;
+            boxxy.hipsNode.mimic();
+
+
+
+            /*for (let b of armature.bones) {
+                if (b.parent instanceof THREE.Bone) {
+                    let twistConst = new Twist(b, 1.1).setVisibilityCondition((twist, bone) => { return bone == window.contextBone });
+                    twistConst.layers.set(window.boneLayer);
+                }
+            }*/
+
+            //armature.root = new IKPin(armature.bonetags["Root"]);
+            armature.hips = new IKPin(armature.bonetags["J_Bip_C_Hips"], boxxy.hipsNode);
+            //armature.head_pin = new IKPin(armature.c_head, headNode);
+            //armature.c_uuperchest_pin = new IKPin(armature.upper_chest);
+            //armature.r_hand_pin = new IKPin(armature.bonetags["J_Bip_R_Hand"]);
+            //armature.l_hand_pin = new IKPin(armature.bonetags["J_Bip_L_Hand"]);
+            armature.r_foot_pin = new IKPin(armature.bonetags["J_Bip_R_Foot"], boxxy.right_foot.footNode);
+            armature.l_foot_pin = new IKPin(armature.bonetags["J_Bip_L_Foot"], boxxy.left_foot.footNode);
+        }
+        
+        
+        function delayAnimate() {
+            window.setTimeout(animate, window.frtime);
+        }
+
+        async function loadModel(position, loadId, onloaded) {
+            let vrm = await loader.loadAsync(
+                './vrmtests/testmodel.vrm',
+                (xhr, otherParam) => { },
+                (error) => { window.notifyStreamError(error, loadId) }
+            );
+            scene.add(vrm.scene);
+            let rootBone1 = vrm.scene.children[0];
+            rootBone1.position.set(position.x, position.y, position.z);
+            return onloaded(vrm, loadId);
+        }
+
         function animate() {
-            requestAnimationFrame(animate);
-            boxxy.update();
+            requestAnimationFrame(delayAnimate);
+            let updateCount = clock.getDelta()/window.frrate;
+            for(let i=0; i<updateCount; i++) {
+                boxxy.update();
+            }
+            window.armature.solve();
             //console.log(acceleration);
             renderer.render(scene, camera);
         }
-
-        animate();
+        
+        init();
+        //animate();
 
                 
     </script>

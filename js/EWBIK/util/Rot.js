@@ -503,17 +503,7 @@ export class Rot {
      * @return {Rot} this rotation for chaining
     */
     clampToCosHalfAngle(cosHalfAngle) {
-        /*let newCoeff = 1-(cosHalfAngle*Math.abs(cosHalfAngle));
-        let currentCoeff = this.q1 * this.q1 + this.q2 * this.q2 + this.q3 * this.q3;
-        if(newCoeff >= currentCoeff) 
-            return;
-        else {
-            this.q0 = this.q0 < 0 ? -cosHalfAngle : cosHalfAngle;
-            let compositeCoeff = Math.sqrt(newCoeff / currentCoeff); 
-            this.q1*= compositeCoeff;
-            this.q2*= compositeCoeff;
-            this.q3*= compositeCoeff;
-        }*/
+        
         this.shorten();
         let prevCoeff = (1 - (this.q0 * this.q0));
         if (cosHalfAngle <= this.q0 || prevCoeff == 0) {
@@ -823,17 +813,17 @@ export class Rot {
      * interpolate between two rotations (SLERP)
      * 
      */
-    static fromSlerp(value1, value2, amount) {
+    static fromSlerp(value1, value2, amount, storeIn = new Rot(1,0,0,0)) {
 
         if (isNaN(amount)) {
-            return new Rot(value1.w, value1.x, value1.y, value1.z);
+            return storeIn.setComponents(value1.w, value1.x, value1.y, value1.z);
         }
         if (amount < 0.0)
             return value1;
         else if (amount > 1.0)
             return value2;
 
-        let dot = value1.dotProduct(value2);
+        let dot = value1.dot(value2);
 
         let x2 = value2.x;
         let y2 = value2.y;
@@ -855,7 +845,7 @@ export class Rot {
             t2 = amount;
         }
 
-        return new Rot(
+        return storeIn.setComponents(
             (value1.w * t1) + (w2 * t2),
             (value1.x * t1) + (x2 * t2),
             (value1.y * t1) + (y2 * t2),

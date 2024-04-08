@@ -453,6 +453,7 @@ export class EWBIK extends Saveable {
  
 
     updateBoneColors(wb) {
+        if(wb.forBone.bonegeo == null) return;
         let pain = wb.getOwnPain();
         let bonecol = wb.forBone.bonegeo.material.color;
         bonecol.r = pain;

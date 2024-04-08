@@ -80,7 +80,7 @@ export class Ray {
     mag() {
         return this.heading().mag();
     }
-    mag(newMag) {
+    setMag(newMag) {
         let dir = this.heading();
         dir.setMag(newMag);
         this.setHeading(dir);
@@ -144,6 +144,39 @@ export class Ray {
 		I.set(dir); 
 		I.mult(r).add(this.p1);	
 		return I;		
+	}
+
+
+    /**
+	 * returns the point on this ray which is closest to the input ray
+	 * @param {Ray} r the ray to check against
+	 * @return {Vec3} the closest point on the input ray
+	 */
+
+	closestPointToRay3D(r, result=any_Vec3(0,0,0)) {
+		this.workingVector.set(this.p2);
+		let u =  this.workingVector.subClone(this.p1);
+		this.workingVector.set(r.p2);
+		let v =  this.workingVector.subClone(r.p1);
+		this.workingVector.set(this.p1);
+	    let w =  this.workingVector.subClone(r.p1);
+		let a = u.dot(u);         // always >= 0
+	    let b = u.dot(v);
+		let c = v.dot(v);         // always >= 0
+		let d = u.dot(w);
+		let e = v.dot(w);
+		let D = a*c - b*b;        // always >= 0
+		let sc; //tc
+
+		// compute the line parameters of the two closest points
+		if (D < 0.00000001) {          // the lines are almost parallel
+			sc = 0.0;
+		}
+		else {
+			sc = (b*e - c*d) / D;
+		}
+		result.set(this.p2).sub(this.p1).mult(sc).add(this.p1);
+		return result;
 	}
 
 

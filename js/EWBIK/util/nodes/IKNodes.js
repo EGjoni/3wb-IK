@@ -363,15 +363,15 @@ export class IKNode extends Saveable {
         else return false;
     }
 
-    getGlobalOf(input) {
+    getGlobalOfVec(input) {
         const result = input.clone();
-        this.setToGlobalOf(input, result);
+        this.setVecToGlobalOf(input, result);
         return result;
     }
 
-    setToGlobalOf(input, out) {
+    setVecToGlobalOf(input, out) {
         this.updateGlobal();
-        this.getGlobalMBasis().setToGlobalOf(input, out);
+        this.getGlobalMBasis().setVecToGlobalOf(input, out);
         return out;
     }
 

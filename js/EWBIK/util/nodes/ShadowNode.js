@@ -84,6 +84,7 @@ export class ShadowNode extends IKNode{
         if(markDescendantsDirty) {
             prevCurr.markDirty();
         }
+        return this;
     }
 
     /**Set the provided object3d as the one this ShadowNode tracks
@@ -99,6 +100,7 @@ export class ShadowNode extends IKNode{
         } else {
             this.setParent(this.toTrack.parent.trackedBy);
         }
+        return this;
     }
 
     get toTrack() {
@@ -113,6 +115,7 @@ export class ShadowNode extends IKNode{
     quickMimic() {
         this.localMBasis.setFromObj3d(this.toTrack);
         this._exclusiveMarkDirty();
+        return this;
     }
 
     /**
@@ -123,6 +126,7 @@ export class ShadowNode extends IKNode{
         this.localMBasis.setFromObj3d(this.toTrack);
         this.globalMBasis.setFromGlobalizedObj3d(this.toTrack, this.temp_originthreevec, this.temp_identitythreequat, this.temp_unitthreescale);
         this.dirty = false;
+        return this;
     }
     /**
      * sets the Object3D transforms to the local transforms of this ShadowNode.
@@ -147,6 +151,7 @@ export class ShadowNode extends IKNode{
             this.localMBasis.recompose();
             this.toTrack.matrix.copy(this.localMBasis.composedMatrix);
         }
+        return this;
     }
     
     setParent(par, requestedBy = undefined) {
@@ -158,6 +163,7 @@ export class ShadowNode extends IKNode{
         } else {
             throw new Error("ShadowNdes can only be parented to other ShadowNodes");
         }
+        return this;
     }
 
     
@@ -182,6 +188,7 @@ export class ShadowNode extends IKNode{
         } else {
             throw new Error("ShadowNdes can only be parented to other ShadowNodes");
         }
+        return this;
     }
 
     dispose() {
