@@ -16,10 +16,10 @@ export class Boxxy {
     hips = new THREE.Mesh(this.hipsgeometry, this.hipsmaterial);
     balanceThreshold = 0.25;    
     coeffr = 0.75;
-    coerel = 0.2;
+    coerel = 0.9;
     coefftilt = 0.7;
-    maxStepDuration = 600; //ms
-    minStepDuration = 600; //ms
+    maxStepDuration = 400; //ms
+    minStepDuration = 400; //ms
     tempv = new Vec3(0,0,0);
 
     // Movement variables
@@ -29,10 +29,11 @@ export class Boxxy {
     jerk = new Vec3(0, 0, 0);
     maxVelocity = 0.2;
 
-    runVel = 1.1;
-    walkVel = 0.15;
+    runVel = 0.05;
+    walkVel = 0.025;
     terminalVel = this.walkVel; 
-    impetus = 0.0003;
+    walk_impetus = 0.0005;
+    run_impetus =  0.001;
 
     impetizer = new Vec3(0, 0, 0);
     yhead = new Vec3(0, 1, 0);
@@ -94,55 +95,68 @@ export class Boxxy {
     
 
     
-    update() {
+    update(forwardVec, leftVec) {
         this.frameCount++;
-        
-        if(isKeyPressed('KeyA')) this.jerk.x -= this.impetus;
-        if(isKeyPressed('KeyD')) this.jerk.x += this.impetus;
-        if(isKeyPressed('KeyW')) this.jerk.z -= this.impetus;
-        if(isKeyPressed('KeyS')) this.jerk.z += this.impetus;
-        if(!(isKeyPressed('KeyA') ^ isKeyPressed('KeyD'))) this.jerk.x = 0;
-        if(!(isKeyPressed('KeyW') ^ isKeyPressed('KeyS'))) this.jerk.z = 0;
-        if(isKeyPressed('ShiftLeft')) 
+        if(isKeyPressed('ShiftLeft')) {
+            //console.log("shift");
             this.terminalVel= this.runVel;
-        else this.terminalVel = this.walkVel;
+            this.impetus = this.run_impetus;
+        } else {
+            this.impetus = this.walk_impetus;
+            this.terminalVel = this.walkVel;
+        }
+        
+        this.jerk.setComponents(0,0,0);
 
-        this.jerk.clampComponents(-this.impetus*10, this.impetus*10);
+        forwardVec.normalize().mult(this.impetus); leftVec.normalize().mult(this.impetus);
+        if(isKeyPressed('KeyA')) 
+            this.jerk.sub(leftVec);
+        if(isKeyPressed('KeyD')) 
+            this.jerk.add(leftVec);
+        if(isKeyPressed('KeyS')) 
+            this.jerk.sub(forwardVec);
+        if(isKeyPressed('KeyW')) 
+            this.jerk.add(forwardVec);
+        
+
+        this.jerk.clamp(-this.impetus, this.impetus);
         this.acceleration.add(this.jerk);
-        this.acceleration.clamp(0, 0.6);
+        //this.acceleration.clamp(0, 1.6);
         this.tiltceleration.add(this.jerk);
         this.tiltceleration.clamp(0,6);
         this.velocity.mult(this.coeffr);
         this.velocity.add(this.acceleration);
         this.velocity.clamp(0, this.terminalVel);
+        //console.log(this.terminalVel);
+        //console.log(this.velocity.mag());
         this.velocity.writeToTHREE(this.temp3V1);
         this.hips.position.add(this.temp3V1);
-        this.impetizer.set(this.tiltceleration).mult(3).add(this.yhead).normalize();
+        this.impetizer.set(this.tiltceleration).mult(103).add(this.yhead).normalize();
         this.tiltceleration.mult(this.coefftilt);
         this.acceleration.mult(this.coerel);
         this.impetizer.writeToTHREE(this.temp3V1); this.yhead.writeToTHREE(this.temp3V2)
-        this.hips.quaternion.setFromUnitVectors(this.temp3V1, this.temp3V2);//, impetizer);
+        this.hips.quaternion.setFromUnitVectors(this.temp3V2, this.temp3V1);//, impetizer);
         let isBalanced = this.isInBalance();
         if(this.left_foot.isPlanted && this.right_foot.isPlanted && !isBalanced) {
             let bestFoot = this.getBestFoot();
             bestFoot.unPlant(this.determineStepDuration());
             bestFoot.toBalance();
         } else if(!this.left_foot.isPlanted) {
-                if(this.right_foot.getHipDistance() >= this.legLength)
-                    this.left_foot.hurry(this.minStepDuration);
+                //if(this.right_foot.getHipDistance() >= this.legLength)
+                //    this.left_foot.hurry(this.minStepDuration);
                 //if(!isBalanced)
                     this.left_foot.toBalance();
                 //else
                   //  this.left_foot.toComfort();
         } else if(!this.right_foot.isPlanted) {
-                if(this.left_foot.getHipDistance() >= this.legLength)
-                    this.right_foot.hurry(this.minStepDuration);
+                //if(this.left_foot.getHipDistance() >= this.legLength)
+                //    this.right_foot.hurry(this.minStepDuration);
                 //if(!isBalanced)
                     this.right_foot.toBalance();
                 //else
                 //    this.right_foot.toComfort();
         } else if(isBalanced) {
-            this.left_foot.plant(); this.right_foot.plant();
+            //this.left_foot.plant(); this.right_foot.plant();
             this.left_foot.update();
             this.right_foot.update();
         }

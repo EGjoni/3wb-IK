@@ -47,6 +47,7 @@
         import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
         import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
         import { Rest, Twist } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
+        import {Vec3} from "./js/EWBIK/util/vecs.js";
         window.Rest = Rest;
         window.OrbitControls = OrbitControls;
         window.IKNode = IKNode;
@@ -55,10 +56,10 @@
 
         // Scene, camera, and renderer setup
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer();
         const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.5);
-        camera.position.z = 5; camera.position.y = 5;
+        camera.position.z = -5; camera.position.y = 2;
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
         scene.add(hemisphereLight);
@@ -192,8 +193,8 @@
             }*/
 
             //armature.root = new IKPin(armature.bonetags["Root"]);
-            armature.hips = new IKPin(armature.bonetags["J_Bip_C_Hips"], boxxy.hipsNode);
-            //armature.head_pin = new IKPin(armature.c_head, headNode);
+            //armature.hips = new IKPin(armature.bonetags["J_Bip_C_Hips"], boxxy.hipsNode);
+            armature.head_pin = new IKPin(armature.c_head, headNode);
             //armature.c_uuperchest_pin = new IKPin(armature.upper_chest);
             //armature.r_hand_pin = new IKPin(armature.bonetags["J_Bip_R_Hand"]);
             //armature.l_hand_pin = new IKPin(armature.bonetags["J_Bip_L_Hand"]);
@@ -217,12 +218,23 @@
             rootBone1.position.set(position.x, position.y, position.z);
             return onloaded(vrm, loadId);
         }
-
+        const forwardVec = new Vec3(0,0,1);
+        const leftVec = new Vec3(1,0,0);
+        const tempVec = new Vec3(1,0,0);
         function animate() {
             requestAnimationFrame(delayAnimate);
             let updateCount = clock.getDelta()/window.frrate;
+            tempVec.readFromTHREE(camera.position);
+            forwardVec.readFromTHREE(orbitControls.target);
+            forwardVec.sub(tempVec);
+            forwardVec.y = 0;
+            forwardVec.normalize();
+            tempVec.setComponents(0,1,0);
+            forwardVec.cross(tempVec, leftVec);
+            leftVec.normalize();
+            
             for(let i=0; i<updateCount; i++) {
-                boxxy.update();
+                boxxy.update(forwardVec, leftVec);
             }
             window.armature.solve();
             //console.log(acceleration);

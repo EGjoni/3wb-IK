@@ -182,7 +182,14 @@ export class Foot {
         this.interpoler = new Interpolator(this.footNode);
     }
 
-    update() {
+    update(t=-1) {
+        if(t>= 0 && t<=1) {
+            let travelVec = this.interpoler.goal_globalTransform.translate.subClone(this.interpoler.start_globalTransform.translate);
+            let traveLen = travelVec.mag();
+            let midY = travelVec.y/2; 
+            let tquad = ((0.25-((0.5-t)*(0.5-t)))*traveLen) + midY;
+            this.footNode.translateByGlobal(new Vec3(0,tquad/2,0));
+        }
         if(this.isPlanted) {
             this.goal.visible = false;
         }
