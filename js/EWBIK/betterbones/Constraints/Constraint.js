@@ -25,6 +25,7 @@ export class Constraint extends Saveable {
     parentConstraint = null; 
     tempOutRot = Rot.IDENTITY.clone();
     enabled = true;
+    _visible = true;
 
     /**@return {JSON} a json object by which this constraint may later be loaded*/
     toJSON() {
@@ -74,8 +75,9 @@ export class Constraint extends Saveable {
      * this doesn't need to be explicitly parented to anything, but will always be interpreted as being parented
      * to whatever the bone is parent to. If one isn't provide, it's taken to mean one isn't needed
     * */    
-    constructor(forBoneOrConstraint, basis=null, ikd = `Constraint-${Constraint.totalInstances++}`, pool=noPool) {
+    constructor(forBoneOrConstraint, basis=null, ikd = `Constraint-${Constraint.totalInstances++}`, pool=null) {
         super(ikd, new.target.name, new.target.totalInstances, pool);
+        
         let bone = forBoneOrConstraint;
         this.inBasis = basis;
         this.tempHeading = new Vec3(0, 1, 0);
@@ -104,11 +106,14 @@ export class Constraint extends Saveable {
                     this.parentConstraint.add(this)
                 }            
             }
+            if(pool == null) {
+                this.pool = this.forBone.parentArmature.stablePool;
+            }
         
             this.initNodes();
-            if(!this.forBone?.parent instanceof THREE.Bone) { 
-                console.warn("Root bones should not specify a constraint. Add this bone to a parent before attempting to register a constraint on it.");        
-            }
+            /*if(!this.forBone?.parent instanceof THREE.Bone) { 
+                console.warn("Adding constraints on Root bones may lead to unintuitive behavior");        
+            }*/
         }
     }
 
@@ -165,6 +170,15 @@ export class Constraint extends Saveable {
         this.constraintResult.__raw_preCallDiscomfort = null;
         if(this.parentConstraint == null) this.forBone.parentArmature.updateShadowSkelRateInfo();
         this.forBone?.parentArmature?.noOp(); //just to give anything watching the armature truer info if its trying to update the pain display
+    }
+
+    _visibilityCondition(cnstrt, bone) {
+        return false;
+    }
+
+
+    printInitializationString() {
+        return '';
     }
     
 
@@ -234,9 +248,9 @@ export class Limiting extends Constraint {
     
     constructor(...params) {
         super(...params);
-        if(!this.forBone?.parent instanceof THREE.Bone) { 
+        /*if(!this.forBone?.parent instanceof THREE.Bone) { 
             console.warn("Root bones should not specify a constraint. Add this bone to a parent before attempting to register a constrain on it.");
-        }
+        }*/
     }
 
     toJSON(...params) {
@@ -565,7 +579,7 @@ export class ConstraintStack extends LimitingReturnful {
      * @param {*} ikd 
      * @param {*} pool 
      */
-    constructor(forBoneOrConstraint, ikd='ConstraintStack-'+ConstraintStack.totalInstances++, pool=noPool) {
+    constructor(forBoneOrConstraint, ikd='ConstraintStack-'+ConstraintStack.totalInstances++, pool=null) {
         super(forBoneOrConstraint, null, ikd, pool);
         if(this.forBone != null && this.parentConstraint == null) {
             this.forBone.setConstraint(this); 
@@ -585,6 +599,7 @@ export class ConstraintStack extends LimitingReturnful {
         this.lastLimitBoneOrientation = new IKNode(null, null, undefined);
         this.lastLimitBoneOrientation.setParent(this.lastLimitState); 
         this.lastLimitBoneOrientation.adoptLocalValuesFromObject3D(this.forBone?.getIKBoneOrientation());
+        if(this.parentConstraint != null) this.visible = this.parentConstraint.visible;
     }
 
     add(...subconstraints) {
@@ -601,6 +616,41 @@ export class ConstraintStack extends LimitingReturnful {
         }
         this.updateLimitingSet();
         this.updateReturnfulledSet();
+    }
+
+
+    printInitializationString(doPrint = this.parentConstraint == null, parname = null) {
+        let result = ``;
+        let varname = `cstack_${this.instanceNumber}`;
+        let hassubConstraintStack = false; 
+        for(let c of this.allconstraints) { 
+            if(c instanceof ConstraintStack) {
+                hassubConstraintStack = true;
+                break;
+            }
+        }
+        if(parname == null && hassubConstraintStack) {
+            let tag = "";
+            for(let [t, b] of Object.entries(this.forBone.parentArmature.bonetags)) {
+                if(b == this.forBone) {
+                    tag = t; break;
+                }
+            }
+            parname = `armature.bonetags["${tag}"]`;
+        }
+
+        if(hassubConstraintStack) {
+            result += `let ${varname} = new ConstraintStack(${parname}, "${this.ikd}");
+`
+        } else varname = null;
+
+        for(let c of this.allconstraints) {
+            result+= `${c.printInitializationString(false, varname)}
+`;
+        }
+        if(doPrint) {
+            console.log(result);
+        } else return result;
     }
 
 
@@ -634,6 +684,23 @@ export class ConstraintStack extends LimitingReturnful {
     updateDisplay() {
         for(let c of this.allconstraints)
             c.updateDisplay();
+    }
+
+    _visible = true;
+    get visible() {
+        let parconstvis = this.parentConstraint == null ? true : this.parentConstraint.visible;
+        return this._visible 
+        && this.forBone.parentArmature.visible 
+        && this.forBone.visible
+        && parconstvis;
+    }
+
+    set visible(val) {
+        this._visible = val; 
+        for(let c of this.allconstraints) {
+            c.visible = false;
+            c.updateDisplay();
+        }
     }
 
     childDisabled() {

@@ -901,11 +901,13 @@ ${wb.forBone.toString()}
                 subconstraintContainer.appendChild(childDom);
             }
         }
-
+        let oldRefresh = toReturn.refresh == null ? ()=>{} : toReturn.refresh();
         toReturn.refresh = () => {
+            let allChildren = [...c.allconstraints];
             for (let subc of allChildren) {
                 subc.domControls?.refresh();
             }
+            oldRefresh();
         }
         return toReturn;
     }
@@ -1027,6 +1029,7 @@ ${wb.forBone.toString()}
 <input class="vec-component comp-y" name="y" type="number" step="0.001" val=1>
 <label class="vec-comp-label" for="z">Z:</label>
 <input class="vec-component comp-z" name="z" type="number" step="0.001" val=0>
+<button class="readDir">From Pose</button>
 
 <form class="slider-container cone-radius-form">
     <input class="slider lc-radius" name="radius" type="range" min="0.0" max="3.1415926" step="0.00001" value="0.1">
@@ -1052,8 +1055,22 @@ ${wb.forBone.toString()}
         lccro.value = rad;
         let coneBefore = lcc.qs(".add-cone-before");
         lc.domControls = lcc;
+        let fromPose = lcc.qs('.readDir');
+        fromPose.addEventListener('click', (event) => {
+            //hack
+            forKusudama.getViolationStatus()
+            let dir=forKusudama.tempHeading.clone(); 
+            lc.setControlPoint(dir); 
+            forKusudama.updateTangentRadii();
+            forKusudama.updateDisplay();
+        });
         coneBefore.addEventListener("click", (event) => {
-            let newLc = forKusudama.addLimitConeBefore(lc);
+            let dir = null;
+            if(forKusudama.getViolationStatus()) {
+                //hack, because we know this tempheading holds the current bone direction anyway
+                dir=forKusudama.tempHeading.clone(); 
+            }
+            let newLc = forKusudama.addLimitConeBefore(lc, dir);
             let newLcDom = window.createLimitConeDomElem(newLc, forKusudama);
             lc.domControls.parentNode.insertBefore(newLcDom, lc.domControls);
         });
@@ -1078,6 +1095,13 @@ ${wb.forBone.toString()}
             forKusudama.updateTangentRadii();
             forKusudama.updateDisplay();
         });
+        lcc.refresh = () => {
+            lccx.value = lc.getControlPoint().x;
+            lccy.value = lc.getControlPoint().y;
+            lccz.value = lc.getControlPoint().z;
+            lccr.value = lc.getRadius();
+            lccro.value = lccr.value;
+        }
         return lcc;
     }
     window.createKusudamaDomElem = function (forKusudama) {
@@ -1091,8 +1115,13 @@ ${wb.forBone.toString()}
         }
         let coneAfter = newKusu.qs(".add-limit-cone");
         coneAfter.addEventListener("click", (event)=>{
+            let dir = null;
+            if(forKusudama.getViolationStatus()) {
+                //hack, because we know this tempheading holds the current bone direction anyway
+                dir=forKusudama.tempHeading.clone(); 
+            }
             let lastCone = forKusudama.limitCones.length > 0 ? forKusudama.limitCones[forKusudama.limitCones.length-1] : null;
-            let newCone = forKusudama.addLimitCone(lastCone, null, null, null);
+            let newCone = forKusudama.addLimitCone(lastCone, null, dir, null);
             coneList.appendChild(window.createLimitConeDomElem(newCone, forKusudama));
         });
         let enforce = newKusu.qs(".kusudama-enforce");
@@ -1100,6 +1129,13 @@ ${wb.forBone.toString()}
             window.enforceConstraint(forKusudama.forBone, forKusudama);
             forKusudama.updateDisplay();
         })
+        let oldRefresh = genericContainer.refresh == null ? ()=>{} : genericContainer.refresh;
+        genericContainer.refresh = ()=>{
+            for(let lc of forKusudama.limitCones) {
+                lc.domControls.refresh();
+            }
+            oldRefresh();
+        }
         return genericContainer;
     }
 
@@ -1152,12 +1188,16 @@ ${wb.forBone.toString()}
 
         let range = result.qs(".range-form");
         let rangeOutput = range.querySelector(".range-output");
+        let base = result.qs(".base-form");
+        let baseResult = base.querySelector(".base-output");
+        base.qs(".slider").value = forTwist.getBaseZ();
+        baseResult.value = forTwist.getBaseZ();
+        range.qs(".slider").value = forTwist.getRange();
+        rangeOutput.value = forTwist.getRange();
         range.addEventListener("input", (event) => {
             forTwist.setRange(event.target.value);
             rangeOutput.value = forTwist.getRange();
         })
-        let base = result.qs(".base-form");
-        let baseResult = base.querySelector(".base-output");
         base.addEventListener("input", (event) => {
             forTwist.setBaseZ(event.target.value);
             baseResult.value = forTwist.getBaseZ();
@@ -1165,6 +1205,7 @@ ${wb.forBone.toString()}
         result.qs('.set-current-pose-as-reference').addEventListener('click', (e) => {
             forTwist.setCurrentAsReference();
         });
+        
         return wrapper;
     }
 
@@ -1406,7 +1447,7 @@ function initStack(corb) {
  */
 function initTwist(corb) {
     let ident = determineConstraintName(corb)
-    let newC = new Twist(corb, 0.1, contextBone, (cnstrt, bone) => bone == contextBone, ident);
+    let newC = new Twist(corb, 0.1, contextBone, undefined, undefined, (cnstrt, bone) => bone == contextBone, ident);
     let resultConst = getMakeConstraint_DOMElem(newC);
     return resultConst;
 }
@@ -1417,7 +1458,7 @@ function initTwist(corb) {
  */
 function initKusudama(corb) {
     let ident = determineConstraintName(corb)
-    let newC = new Kusudama(corb, ident);
+    let newC = new Kusudama(corb, (t, b) => b==contextBone, ident);
     let resultConst = getMakeConstraint_DOMElem(newC);
     return resultConst;
 }
@@ -1464,3 +1505,4 @@ window.enforceConstraint = function (bone, cstr) {
     }
 }
 makeUI();
+document.getElementById(window.autoSolve ? 'auto-solve' : 'interaction-solve').checked = true;

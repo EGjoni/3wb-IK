@@ -3,14 +3,14 @@
 
 
 
-const dbgContainer = document.createElement('div');
+/*const dbgContainer = document.createElement('div');
 dbgContainer.id = "info";
 document.querySelector("body").appendChild(dbgContainer);
 const intersectsDisplay = document.createElement('div');
 intersectsDisplay.innerHTML = `Intersected Coordinates:`
 window.dbgContainer = dbgContainer;
 window.intersectsDisplay = intersectsDisplay;
-dbgContainer.appendChild(intersectsDisplay);
+dbgContainer.appendChild(intersectsDisplay);*/
 window.perfing = false;
 let debugstyle = document.createElement('style');
 debugstyle.innerHTML = `
@@ -66,7 +66,7 @@ debugstyle.innerHTML = `
     grid-column: 4 / 5;
   }
 `;
-document.querySelector("head").appendChild(debugstyle);
+//document.querySelector("head").appendChild(debugstyle);
 window.debugTransl = document.createElement('div');
 debugTransl.classList.add('debug-transl');
 debugTransl.innerHTML = `
@@ -79,13 +79,21 @@ debugTransl.innerHTML = `
         <div class='name right'></div>  
     </div>
 `;
-dbgContainer.appendChild(window.debugTransl);
+//dbgContainer.appendChild(window.debugTransl);
+window.selectedPin = null;
+window.pinsList = [];
+window.targetsMeshList = [];
+window.armatures = window.armatures ? window.armatures : [];
+window.boneList = window.boneList ? window.boneList : [];
+window.boneMeshList = window.boneMeshList ? window.boneMeshList : [];
 //intersectsDisplay
 
 async function select(item) {
     if (item != null) {
-        let completedThing = await window.awaitingSelect(item);
-        if (completedThing) return;
+        if(window.awaitingSelect) {
+            let completedThing = await window.awaitingSelect(item);
+            if (completedThing) return;
+        }
     }
     if (item instanceof THREE.Bone) {
         selectedPin = null;
@@ -130,7 +138,8 @@ async function select(item) {
         if (contextBone != null)
             window.prevContextBone = contextBone;
     }
-    updateInfoPanel(item);
+    if(window.updateInfoPanel)
+        updateInfoPanel(item);
 }
 
 
@@ -138,7 +147,6 @@ function addSceneArmature(armature, makePrettyBones = true, initPinList = true) 
     //window.armatures.push(armature);    
     //armature.inferOrientations(armature.rootBone);
     //initHumanoidRestConstraints(armature);
-    document.getElementById(window.autoSolve ? 'auto-solve' : 'interaction-solve').checked = true;
     if(makePrettyBones) {
         initPrettyBones(armature);
     }
@@ -309,7 +317,6 @@ function initControls(THREE, renderer) {
     window.axesHelperSize = 1;
     window.boneAxesHelper = new THREE.AxesHelper(axesHelperSize);
     window.pinAxesHelper = new THREE.AxesHelper(axesHelperSize);
-    document.getElementById(window.autoSolve ? 'auto-solve' : 'interaction-solve').checked = true;
     window.THREE = THREE;
     raycaster = new THREE.Raycaster();
     raycaster.layers.enable(window.boneLayer);
@@ -508,11 +515,21 @@ function initControls(THREE, renderer) {
 
     boneCtrls.layers.set(window.boneLayer);
     pinOrientCtrls.layers.set(window.boneLayer);
+    pin_transformActive = false;
+    pin_transformDragging = false;
+    selectedPinIdx = -1;
+    selectedBoneIdx = -1;
+    selectedPin = null;
+    selectedBone = null;
+    bone_transformActive = false;
+    bone_transformDragging = false;
+    selectedBoneIdx = -1;
     //pinTranslateCtrls.layers.enable(boneLayer);
 
     window.addEventListener('mousedown', (event) => {
         lastmousedown = Date.now();
-        window.setDOMtoInternalState();
+        if(window.setDOMtoInternalState)
+            window.setDOMtoInternalState();
         //pinOrientCtrls.visible = false;//!((pin_transformDragging || selectedPinIdx >= 0) && pinOrientCtrls.enabled);
         //pinTranslateCtrls.visible = false;//!((pin_transformDragging || selectedPinIdx >= 0) && pinTranslateCtrls.enabled);
         //boneCtrls.visible = false;//!(bone_transformDragging || selectedBoneIdx >= 0);
@@ -526,7 +543,8 @@ function initControls(THREE, renderer) {
         boneCtrls.visible = bone_transformDragging || selectedBoneIdx >= 0;
         bone_transformDragging = false;
         pin_transformDragging = false;
-        window.setDOMtoInternalState();
+        if(window.setDOMtoInternalState)
+            window.setDOMtoInternalState();
     }, false);
 
     boneCtrls.layers.set(window.boneLayer);
@@ -629,17 +647,18 @@ async function switchSelected(key) {
         case 'n':
             interactionSolve = false;
             autoSolve = false;
-            document.getElementById("no-solve").checked = true;
+            if(document.getElementById('no-solve'))
+                document.getElementById("no-solve").checked = true;
             break;
-        case 's': //button, do a single solver step, should be disabled if autosolve is true
-            armatureSolve()
-            break;
+        //case 's': //button, do a single solver step, should be disabled if autosolve is true
+        //    armatureSolve()
+        //    break;
         case '-': //button, do a single pullback iteration.
             pullbackDebug();
             break;
-        case 'a': //radio select, always solve. 
-            autoSolve = !autoSolve;
-            break;
+        //case 'a': //radio select, always solve. 
+        //    autoSolve = !autoSolve;
+        //    break;
         case 'b':
             bonestepDebug();
             break
@@ -649,7 +668,8 @@ async function switchSelected(key) {
         case 'i': //radio select, only solve when interacting with a pin.
             autoSolve = false;
             interactionSolve = !interactionSolve;
-            document.getElementById("interaction-solve").checked = interactionSolve;
+            if(document.getElementById("interaction-solve"))
+                document.getElementById("interaction-solve").checked = interactionSolve;
             //doSolve();
             break;
         case 'r': //checkbox toggle the rotate widget

@@ -37,7 +37,7 @@ export class Rest extends Returnful {
      * 
      * Note that the solver needs to run at least 2 iterations per solve in order for this to accomplish anything. And the more iterations the merrier
      */
-    constructor(forBone, ikd='RestConstraint-'+(Rest.totalInstances++), pool = noPool) {
+    constructor(forBone, ikd='RestConstraint-'+(Rest.totalInstances++), pool = null) {
         super(forBone, undefined, ikd, pool);
         if(!Constraint.loadMode) {
             /**@type {IKNode}*/

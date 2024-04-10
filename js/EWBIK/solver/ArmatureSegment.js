@@ -355,7 +355,6 @@ class WorkingBone {
         if(this.cosHalfDampen == 1) {
             if(this.chain.wb_segmentRoot == this) 
                 this.chain.previousDeviation = Infinity;
-            return;
         }
         //this.updateDescendantsPain();
         this.updateTargetHeadings(this.chain.boneCenteredTargetHeadings, this.chain.weights, this.myWeights);
@@ -388,9 +387,6 @@ class WorkingBone {
 
     fastUpdateOptimalRotationToPinnedDescendants(translate, skipConstraint) {
         //if(window.perfing) performance.mark("fastUpdateOptimalRotationToPinnedDescendants start");
-        if(this.cosHalfDampen == 1) {
-            return;
-        }
         this.updateDescendantsPain();
         //this.simLocalAxes.getGlobalMBasis().rotation.normalize();
         //this.simLocalAxes.getLocalMBasis().rotation.normalize();

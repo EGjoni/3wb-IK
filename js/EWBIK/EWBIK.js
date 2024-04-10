@@ -233,7 +233,7 @@ export class EWBIK extends Saveable {
     makeBoneGeo(boneRef, height, radius, mat, hullpoints) {
         const cone = new THREE.ConeGeometry(radius * height, height, 5);
         cone.translate(0, height / 2, 0);
-        const hull = convexBlob(cone, ...hullpoints);
+        const hull = hullpoints.length > 0 ? convexBlob(cone, ...hullpoints) : cone;
         const material = new THREE.MeshPhongMaterial(mat);
         const boneplate = new THREE.Mesh(hull, material);
         //boneplate.position.y = height / 2;
@@ -264,31 +264,46 @@ export class EWBIK extends Saveable {
      * @param solvedOnly if false, will render all bones, not just the solver relevant ones.
      */
     showBones(radius = 0.5, solvedOnly = false) {
-        const minSize = 0.001;
         this.meshList.slice(0, 0);
         if (this.dirtyShadowSkel) this.regenerateShadowSkeleton();
         for (const bone of this.bones) {
-            let orientation = bone.getIKBoneOrientation();
-            if (orientation.children.length == 0) {
-                let matObj = null;
-                if (this.shadowSkel?.isSolvable(bone.ikd) == null || bone.parent == null) {
-                    matObj = { color: new THREE.Color(0.2, 0.2, 0.8), transparent: true, opacity: 0.6 };
-                } else {
-                    matObj = { color: bone.color, transparent: true, opacity: 1.0 };
-                }
-                let hullPoints = [];
+            this.makeBoneMesh(bone, radius, 'plate');
+        }
+    }
+
+    /**creates or recreates mesh and geometry to display the given bone*/
+    makeBoneMesh(bone, radius, mode = 'cone') {
+        const minSize = 0.001;
+        let oldGeo = bone.bonegeo;
+        let idx = this.meshList.indexOf(oldGeo);
+        let orientation = bone.getIKBoneOrientation();
+        //if (orientation.children.length == 0) {
+            let matObj = null;
+            if (this.shadowSkel?.isSolvable(bone.ikd) == null || bone.parent == null) {
+                matObj = { color: new THREE.Color(0.2, 0.2, 0.8), transparent: true, opacity: 0.6 };
+            } else {
+                matObj = { color: bone.color, transparent: true, opacity: 1.0 };
+            }
+            let hullPoints = [];
+            if(mode =='plate') {                
                 for (let c of bone.childBones()) {
                     c.updateWorldMatrix();
                     hullPoints.push(orientation.worldToLocal(bone.localToWorld(c.position.clone())));
                 }
-                let thisRadius = bone.parent instanceof THREE.Bone ? radius : radius / 2; //sick and tired of giant root bones. Friggen whole ass trunks.
-                let bonegeo = this.makeBoneGeo(bone, Math.max(bone.height ?? bone.parent?.height ?? minSize, minSize), thisRadius, matObj, hullPoints);
-                orientation.bonegeo = bonegeo;
-                bone.setBonegeo(bonegeo);
-                bone.bonegeo.layers.set(window.boneLayer);
-                bone.visible = true;
-                this.meshList.push(bonegeo);
             }
+            
+            let thisRadius = bone.parent instanceof THREE.Bone ? radius : radius / 2; //sick and tired of giant root bones. Friggen whole ass trunks.
+            let bonegeo = this.makeBoneGeo(bone, Math.max(bone.height ?? bone.parent?.height ?? minSize, minSize), thisRadius, matObj, hullPoints);
+            orientation.bonegeo = bonegeo;
+            bone.setBonegeo(bonegeo);
+            bone.bonegeo.layers.set(window.boneLayer);
+            bone.bonegeo.displayradius = radius; 
+            bone.visible = true;
+        //}
+        if(idx != -1) {
+            this.meshList[idx] = bone.bonegeo;
+        } else {
+            this.meshList.push(bone.bonegeo);
         }
     }
 
@@ -477,7 +492,7 @@ export class EWBIK extends Saveable {
     alignBoneToSolverResult(wb) {
         let forBone = wb.forBone;
         wb.simLocalAxes.project();
-        if(forBone.getConstraint() != null) {
+        if(forBone.getConstraint() != null && forBone.getConstraint().visible) {
             this.updateBoneColors(wb);
             forBone.getConstraint().updateDisplay();
         }
@@ -496,11 +511,33 @@ export class EWBIK extends Saveable {
      * If this bone has no orientation transform, or does have one but the overwrite argument is true, infers an orientation for this bone. 
      * The orientation is inferred to be the smallest rotation which would cause the y-axis of the bone's transformFrame to point toward the average position of its child bones.
      * @param {THREE.Bone} fromBone
-     * @param {string} cane be either 'plate' or 'cone'. The former is appropriate where parents and children aren't in direct contact.
+     * @param {string} mode be either 'statistical' or 'naive'. The former is appropriate where parents and children aren't in direct contact and a heuristic determination must be made
      */
     inferOrientations(fromBone, mode, override = false, depth = Infinity) {
         this._maybeInferOrientation(fromBone, mode, override, depth - 1);
         this.regenerateShadowSkeleton();
+    }
+
+    /**convenience function for overriding undesirable result of inferOrientations. 
+     * let's you manualy specify the direction the physical bone should point in relative to the bone frame
+     * the easiest way to use this is to just give "pointTo" as one of the bone children's position
+     */
+    setInternalOrientationFor(forBone, pointTo) {
+        if(forBone.getConstraint() != null) {
+            throw new Error("This function cannot be used on bones that have already had constraints defined. It's dangerous and complicated.")
+        }
+        let orientation = forBone.getIKBoneOrientation();
+        let normeddir = this.pool.any_Vec3(0,0,0).readFromTHREE(pointTo);
+        forBone.height = normeddir.mag();
+        normeddir.normalize();
+        let rotTo = Rot.fromVecs(EWBIK.YDIR, normeddir);        
+        orientation.quaternion.set(-rotTo.x, -rotTo.y, -rotTo.z, rotTo.w);
+        
+        if(forBone.bonegeo != null) {
+            this.makeBoneMesh(forBone, forBone?.bonegeo?.displayradius, 'cone');
+        }
+        forBone.setIKBoneOrientation(orientation);
+        orientation?.trackedBy?.mimic();        
     }
 
 
@@ -525,7 +562,8 @@ export class EWBIK extends Saveable {
 
 
     }
-    _maybeInferOrientation(fromBone, mode = 'plate', override = false, depth = Infinity) {
+    _maybeInferOrientation(fromBone, mode = 'statistical', override = false, depth = Infinity) {
+        if(depth == 0) return;
         let orientation = fromBone.getIKBoneOrientation();
         if (orientation.placeholder == true || override) {
             let sumVec = this.pool.any_Vec3(0, 0, 0);
@@ -551,9 +589,9 @@ export class EWBIK extends Saveable {
             fromBone.height = fromBone.parent.height;
             if (count > 0) {
                 normeddir = sumVec.div(count).normalize();
-                if (mode == 'cone')
+                if (mode == 'naive')
                     fromBone.height = Math.sqrt(sum_sqheight) / Math.sqrt(count);
-                if (mode == 'plate')
+                if (mode == 'statistical')
                     fromBone.height = minChild;
             }
 
@@ -753,6 +791,24 @@ export class EWBIK extends Saveable {
     }
 
 
+    _visible = true;
+    get visible() {
+        return this._visible;
+    }
+
+    /**
+     * determines whether or not to display any bone mesh or constraint hints from this EWBIK manager
+     * @param {Boolean} val
+     */
+    set visible(val) {
+        this._visible = val; 
+        for(let b of this.bones) {
+            if(b.bonegeo != null) {
+                b.bonegeo.visible = this._visible;
+            }
+        }
+    }
+
 
 
     /*canonical_id(obj) {
@@ -865,10 +921,11 @@ let betterbones = {
     setIKBoneOrientation(newOrientation) {
         if (this.orientation == null)
             this.orientation = newOrientation
-        else if (newOrientation != this.orientations) {
+        else if (newOrientation != this.orientation) {
             this.orientation.copy(newOrientation);
         }
         this.orientation.placeholder = false;
+        if(this.orientation.trackedBy != null) this.orientation.trackedBy.mimic();
     },
 
     getIKBoneOrientation() {

@@ -12,6 +12,7 @@ export class LimitCone extends Saveable {
     radiusCosine;
     radius;
 
+    /**@type {Kusudama}*/
     parentKusudama;
 
     tangentCircleCenterNext1;
@@ -55,7 +56,7 @@ export class LimitCone extends Saveable {
      * @param {Vec3} direction the cone points in
      * @param {Number} rad half angle of the cone opening
      */
-    constructor(direction, rad, ikd=`LimitCone-${LimitCone.totalInstances++}`, pool=noPool) {
+    constructor(direction, rad, parentKusudama, ikd=`LimitCone-${LimitCone.totalInstances++}`, pool=noPool) {
         super(ikd,'LimitCone', LimitCone.totalInstances, pool);
         this.tempVec1 = this.pool.new_Vec3(); 
         this.tempVec2 = this.pool.new_Vec3();
@@ -72,6 +73,41 @@ export class LimitCone extends Saveable {
 
         this.radius = Math.max(1e-12, rad);
         this.radiusCosine = Math.cos(rad);
+        this.parentKusudama = parentKusudama;
+    }
+
+    /**returns the cone after this one as per the parent kusudama */
+    getNextCone(){
+        if(this.parentKusudama) {
+            let thisidx = this.parentKusudama.limitCones.indexOf(this);
+            return this.parentKusudama.getLimitCone(thisidx+1); 
+        }
+        return null;
+    }
+
+    /**returns the cone prior to this one as per the parent kusudama */
+    getPreviousCone(){
+        if(this.parentKusudama) {
+            let thisidx = this.parentKusudama.limitCones.indexOf(this);
+            return this.parentKusudama.getLimitCone(thisidx-1); 
+        }
+        return null;
+    }
+
+    /**
+     * set
+     * @param {Number} xdir x component of the cone direction
+     * @param {Number} ydir y component of the cone direction
+     * @param {Number} zdir z component of the cone direction
+     * @param {Number} radius half angle of the cone apex
+     * @param {Boolean} updateTangents optional, default true, whether or not to automatically ask the parent kusudama to 
+     * update the tangent cones as a result of this modification
+     */
+    setComponents(xdir, ydir, zdir, radius, updateTangents = true) {
+        this.controlPoint.x = xdir; 
+        this.controlPoint.y = ydir;
+        this.controlPoint.z = zdir;
+        this.setRadius(radius, updateTangents);
     }
 
     /**
@@ -102,6 +138,8 @@ export class LimitCone extends Saveable {
         return isInBounds;
     }
 
+    tempInBounds = [false];
+
     /**
          * 
          * @param {LimitCone} next 
@@ -111,8 +149,8 @@ export class LimitCone extends Saveable {
     getClosestCollision(next, input) {
         let result = this.getOnGreatTangentTriangle(next, input);
         if (result == null) {
-            let inBounds = [false];
-            result = this.closestPointOnClosestCone(next, input, inBounds);
+            this.tempInBounds = [false];
+            result = this.closestPointOnClosestCone(next, input, this.tempInBounds);
         }
         return result;
     }
@@ -248,16 +286,16 @@ export class LimitCone extends Saveable {
         }
     }
 
+    
     /**
      * @param next @type { LimitCone}
      * @param input @type {Vec3}
      */
-
     closestCone(next, input) {
         if (input.dot(controlPoint) > input.dot(next.controlPoint))
-            return this.controlPoint.clone();
+            return this.pool.any_Vec3fv(this.controlPoint);
         else
-            return next.controlPoint.clone();
+            return this.pool.any_Vec3fv(next.controlPoint);
     }
 
     /**
@@ -434,9 +472,17 @@ updateTangentHandles(next) {
         return this.radiusCosine;
     }
 
-    setRadius(radius) {
+    setRadius(radius, updateTangents = true) {
         this.radius = parseFloat(radius);
         this.radiusCosine = Math.cos(radius);
+        if(updateTangents) {
+            this.requestTangentUpdate();
+        }
+    }
+
+    requestTangentUpdate() {
+        if(this.parentKusudama != null)
+            this.parentKusudama.updateTangentRadii();
     }
 
     getParentKusudama() {

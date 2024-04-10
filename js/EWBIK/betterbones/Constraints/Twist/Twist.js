@@ -7,6 +7,7 @@ import { IKNode, TrackingNode } from "../../../util/nodes/IKNodes.js";
 import { generateUUID } from "../../../util/uuid.js";
 const { Constraint, Limiting} = await import( "../Constraint.js");
 import { Saveable } from '../../../util/loader/saveable.js';
+import { Vector3 } from '../../../../three/three.module.js';
 
 
 export class Twist extends Limiting {
@@ -20,6 +21,7 @@ export class Twist extends Limiting {
     twist = new Rot(1,0,0,0); 
     workingVec = new Vec3(0,0,0);
     baseZ = 0;
+    twistAxis = new Vec3(0,1,0);
     
     static fromJSON(json, loader, pool, scene) {
         let result = new Twist(null, json.range, null, null, json.ikd, pool);
@@ -51,14 +53,16 @@ export class Twist extends Limiting {
      * 
      * @param {*} forBone
      * @param {Number} range an angle in radians (no larger than 2*PI), indicating how much freedom to rotate about the y-axis is allowed
-     * @param {IKNode} basis the reference basis to check the bone against. This is expected to be defined in the space of the bone's parent. This constraint will operate such that the transform returned by bone.getIKBoneOrientation() aligns with this basis. (Remember that the IKBoneOrientation of any bone doesn't necessarily have to align with the bone transform, as it is defined in the space of the bone transform). If you do not provide this, the constraint will initialize with whatever the current orientation of the bone is. You can change it by calling either optimize() or setCurrentAsReference();
+     * @param {IKNode} referenceBasis the reference basis to check the bone against. This is expected to be defined in the space of the bone's parent. This constraint will operate such that the transform returned by bone.getIKBoneOrientation() aligns with this basis. (Remember that the IKBoneOrientation of any bone doesn't necessarily have to align with the bone transform, as it is defined in the space of the bone transform). If you do not provide this, the constraint will initialize with whatever the current orientation of the bone is. You can change it by calling either optimize() or setCurrentAsReference();
+     * @param {Vec3|Vector3} twistAxis as an alternative to specifying the referenceBasis, you can specify a reference y-axis direction in oonjunction with a reference baseZ angle.
+     * @param {Number} baseZ the base angle against which range/2 on either side defines an allowable twist region
      * @param {function} visibilityCondition a callback function to determine whether to display this constraint. The callback will be provided with a reference to this constraint and its bone as arguments.
      * @param {*} ikd optional  unique string identifier
      * @param {*} pool 
      */
-    constructor(forBone, range=2*Math.PI-0.0001, inBasis = undefined, visibilityCondition=undefined, ikd = 'Twist-'+(Twist.totalInstances++), pool=noPool) {
-        let basis = inBasis;
-        if(inBasis == null && !Constraint.loadMode)
+    constructor(forBone, range=2*Math.PI-0.0001, referenceBasis = undefined, twistAxis = undefined, baseZ = undefined, visibilityCondition=undefined, ikd = 'Twist-'+(Twist.totalInstances++), pool=null) {
+        let basis = referenceBasis;
+        if(referenceBasis == null && !Constraint.loadMode)
             basis = new IKNode(null, null, undefined);
         super(forBone, basis, ikd, pool);
         
@@ -66,12 +70,13 @@ export class Twist extends Limiting {
         if(this.forBone) {
             this.forBone.springy = true;
         }
-        this.visibilityCondition = visibilityCondition;
+        
         this.display = new TwistConstraintDisplay(range, 1, this);
+        this.setVisibilityCondition(visibilityCondition);
         this.range = range; 
         this.coshalfhalfRange = Math.cos(0.25*range);
         if(visibilityCondition != null)
-            this.display.setVisibilityCondition(this.visibilityCondition);
+            this.display.setVisibilityCondition(visibilityCondition);
 
         this.zhintgeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,1)]);
         this.zhintmat_safe = new THREE.LineBasicMaterial({ color: new THREE.Color(0,0,1), linewidth: 3});
@@ -82,9 +87,17 @@ export class Twist extends Limiting {
         
         if(!Constraint.loadMode) {
             this.initTwistNodes();
-            if(inBasis == undefined && this.forBone != null) {
-                this.setCurrentAsReference();
-            }            
+            if(referenceBasis == undefined && this.forBone != null) {
+                if(twistAxis == undefined || baseZ == undefined) {
+                    this.setCurrentAsReference();
+                }
+             }   
+             if(baseZ != undefined) {
+                this.setBaseZ(baseZ);
+            }
+            if(twistAxis != undefined) {
+                this.setTwistAxis(twistAxis);
+            }         
         }        
     }
 
@@ -107,8 +120,9 @@ export class Twist extends Limiting {
             set(val) {this._visible = val}
         });
 
-        this.updateDisplay();
+        this.setCurrentAsReference()
     }
+    
 
     /**sets the reference basis of the bone this constraint is attached to as being whatever pose the bone is currently in
      * @return {Twist} this for chaining
@@ -129,7 +143,10 @@ export class Twist extends Limiting {
         this.__frame_calc_internal.adoptLocalValuesFromIKNode(this.frameCanonical);
         this.__bone_calc_internal.adoptLocalValuesFromIKNode(this.boneCanonical);
         this.__bone_calc_internal.setRelativeToParent(this.__frame_calc_internal);
-        TrackingNode.transferLocalToObj3d(this.frameCanonical.localMBasis, this.displayGroup);
+        this.twistAxis.set(this.frameCanonical.localMBasis.yHeading);
+        this.frameCanonical.localMBasis.rotation.getSwingTwist(this.pool.any_Vec3(0,1,0), this.swing, this.twist);
+        this.baseZ = this.twist.getAngle();
+        this.frameCanonical.localMBasis.writeToTHREE(this.displayGroup);
         this.frameCanonical.markDirty();
         this.updateDisplay();
         return this;
@@ -146,12 +163,12 @@ export class Twist extends Limiting {
         this.__frame_internal.localMBasis.rotation.setFromAxisAngle(this.pool.any_Vec3(0,1,0), baseZ);
         this.__frame_internal.markDirty();
         this.__frame_internal.localMBasis.lazyRefresh();
-        let yAlignRot = Rot.fromVecs(this.__frame_internal.localMBasis.getYHeading(), this.frameCanonical.localMBasis.getYHeading());
+        let yAlignRot = Rot.fromVecs(this.__frame_internal.localMBasis.getYHeading(), this.twistAxis);
         yAlignRot.applyAfter(this.__frame_internal.localMBasis.rotation, this.frameCanonical.localMBasis.rotation);
         this.frameCanonical.localMBasis.lazyRefresh();
         this.frameCanonical.markDirty();
         this.frameCanonical.updateGlobal();
-        TrackingNode.transferLocalToObj3d(this.frameCanonical.getGlobalMBasis(), this.displayGroup);
+        this.frameCanonical.getGlobalMBasis().writeToTHREE(this.displayGroup);
         this.__frame_internal.emancipate();
         this.__frame_internal.reset();
         this.__frame_internal.markDirty();
@@ -160,6 +177,42 @@ export class Twist extends Limiting {
         this.updateDisplay();
     }
 
+
+    /**sets the direction of the twist axis relative to the parent bone frame
+     * @param {Vec3|Vector3} vec the twist axis
+    */
+    setTwistAxis(vec) {
+        this.twistAxis.x = vec.x;
+        this.twistAxis.y = vec.y;
+        this.twistAxis.z = vec.z;
+        this.twistAxis.normalize();
+        this.frameCanonical.localMBasis.rotation.setFromVecs(this.pool.any_Vec3(0,1,0), this.twistAxis);
+        this.frameCanonical.localMBasis.lazyRefresh();
+        this.frameCanonical.markDirty();
+        this.setBaseZ(this.baseZ);
+    }
+
+    printInitializationString(doPrint=true, parname) {
+        let tag = "";
+        for(let [t, b] of Object.entries(this.forBone.parentArmature.bonetags)) {
+            if(b == this.forBone) {
+                tag = t; break;
+            }
+        }
+        parname = parname == null ? `armature.bonetags["${tag}"]` : parname;
+        let postPar = parname==null ? '' : `.forBone`;
+        let ta = this.twistAxis;
+        let result = `new Twist(${parname}, ${this.range}, undefined, 
+                armature.stablePool.any_Vec3(${ta.x}, ${ta.y}, ${ta.z}), 
+                ${this.baseZ}, ${this._visibilityCondition},
+                "${this.ikd}", armature.stablePool)`;
+        if(this.enabled == false) 
+            result += '.disable()';
+        result+=';';
+        if(doPrint) 
+            console.log(result);
+        else return result;
+    }
 
     getBaseZ() {
         return this.baseZ;
@@ -190,12 +243,12 @@ export class Twist extends Limiting {
     }
 
     updateDisplay() {        
-        this.display.updateGeo(this.range, this.forBone.height);
-        TrackingNode.transferLocalToObj3d(this.frameCanonical.localMBasis, this.displayGroup);
+        this.frameCanonical.localMBasis.writeToTHREE(this.displayGroup);
         if(this.display.parent == null && this.forBone?.parent != null)
             this.forBone.parent.add(this.displayGroup);
         if(this.display.parent == null)
             this.displayGroup.add(this.display);
+        this.display.updateGeo(this.range, this.forBone.height);
         this.updateZHint();
     }
 
@@ -247,7 +300,7 @@ export class Twist extends Limiting {
 
     
     updateZHint() {
-        /**This zhint code is a literal implementation of what the docstring explains, just to 
+        /**This zhint code is a literal implementation of what the class docstring explains, just to 
          * 1. get the literal z-axis coordinates and
          * 2. prove that it's true.
          * 
@@ -300,7 +353,7 @@ export class Twist extends Limiting {
     /**a callback function to determine whether to display this constraint */
     setVisibilityCondition(visibleCallback) {
         if (visibleCallback ==null) 
-            this._visibilityCondition = (forConstraint, forBone) => true;
+            this._visibilityCondition = (forConstraint, forBone) => false;
         else { 
             this._visibilityCondition = visibleCallback;
         }
@@ -308,7 +361,7 @@ export class Twist extends Limiting {
         return this;
     }
     _visibilityCondition(forConstraint, forBone) {
-        return true;
+        return false;
     }
 
     set visible(val) {
@@ -362,13 +415,13 @@ class TwistConstraintDisplay extends THREE.Mesh {
     /**a callback function to determine whether to display this constraint */
     setVisibilityCondition(visibleCallback) {
         if (visibleCallback ==null) 
-            this._visibilityCondition = (forConstraint, forBone) => true;
+            this._visibilityCondition = (forConstraint, forBone) => false;
         else { 
             this._visibilityCondition = visibleCallback;
         }
     }
     _visibilityCondition(forConstraint, forBone) {
-        return true;
+        return false;
     }
 
     set visible(val) {

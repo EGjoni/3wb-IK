@@ -117,6 +117,7 @@ export class IKPin extends Saveable{
 
     enable() {
         this.enabled = true;
+        this.targetNode.ensure();
         this.forBone?.parentArmature?.regenerateShadowSkeleton();
     }
 
@@ -172,6 +173,7 @@ export class IKPin extends Saveable{
     setPinWeight(weight) {
         const prevWeight = this.pinWeight;
         this.pinWeight = Math.max(weight, 0);
+        this.targetNode.ensure();
         this.forBone?.parentArmature.updateShadowSkelRateInfo();
         if(this.isEnabled()) {
             if(prevWeight <= 0 && this.pinWeight > 0) {
@@ -241,7 +243,7 @@ export class IKPin extends Saveable{
         this.xPriority = priorities[0];
 		this.yPriority = priorities[1];
 		this.zPriority = priorities[2];	
-			
+		this.targetNode.ensure();
         
         if(prevmodecode != this.modeCode) {
             this.forBone?.parentArmature?.regenerateShadowSkeleton();
@@ -417,6 +419,7 @@ export class IKPin extends Saveable{
      * positions this pin to precisely where its bone can reach it.
     */
     alignToBone() {
+        this.targetNode.ensure();
         this.targetNode.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());
         this.targetNode.project();
     }

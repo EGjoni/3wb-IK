@@ -52,7 +52,7 @@ export class ShadowNode extends IKNode{
         }
         else if(this.toTrack.parent.trackedBy == null) {
             this.adoptGlobalValuesFromObject3D(this.toTrack);
-            this.setParent(new ShadowNode(this.toTrack.parent, undefined, undefined, ikd));
+            this.setParent(new ShadowNode(this.toTrack.parent, undefined, this.pool));
             this.areGlobal = false;
         } else {
             this.setParent(this.toTrack.parent.trackedBy);
@@ -87,6 +87,15 @@ export class ShadowNode extends IKNode{
         return this;
     }
 
+    /**makes sure the shadowNode expectations are obeyes in case of topology modification */
+    ensure() {
+        if(this._toTrack.parent != this.parent?._toTrack) {
+            this.setTracked(this._toTrack);
+        } else if(this.parent != null) {
+            this.parent.ensure();
+        }
+    }
+
     /**Set the provided object3d as the one this ShadowNode tracks
      * @param {Object3D} obj3d
     */
@@ -96,7 +105,7 @@ export class ShadowNode extends IKNode{
         obj3d.trackedBy = this;
         this.adoptGlobalValuesFromObject3D(this.toTrack);
         if(obj3d.parent.trackedBy == null) {            
-            this.setParent(new ShadowNode(this.toTrack.parent, undefined, undefined, ikd));
+            this.setParent(new ShadowNode(this.toTrack.parent, undefined, this.pool));
         } else {
             this.setParent(this.toTrack.parent.trackedBy);
         }
@@ -135,6 +144,10 @@ export class ShadowNode extends IKNode{
      */
     project(linear = false) {
         //yeah I know "project" isn't the best name but, the next best option was kageShibariNoJutsu() so...
+        if(isNaN(this.localMBasis.translate.x) || isNaN(this.localMBasis.rotation.x) || isNaN(this.localMBasis.scale.x)) {
+            alert("NaN detected, check the debugger")
+            throw new Error("Projecting NaNs is bad.");
+        }
         this.toTrack.position.x = this.localMBasis.translate.x;
         this.toTrack.position.y = this.localMBasis.translate.y;
         this.toTrack.position.z = this.localMBasis.translate.z;

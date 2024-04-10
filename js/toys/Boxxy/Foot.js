@@ -46,6 +46,7 @@ export class Foot {
         this.foot.position.x = footPosition.x;
         this.foot.position.y = footPosition.y;
         this.foot.position.z = footPosition.z;
+        this.foot.visible = false;
         this.attachpoint = new Vec3(attachpoint.x, attachpoint.y, attachpoint.z);
         this.foot.updateMatrix();
         this.goal.add(this.goalmesh);
@@ -168,7 +169,11 @@ export class Foot {
     }
     plant() {
         this.isPlanted = true;
+        this.interpoler.endTime = Date.now();
         this.foot.material.color.set(this.plantedCol);
+        this.hips.projectToGround(this.footNode.origin(), this.thisFootPos);
+        this.footNode.translateTo(this.thisFootPos);
+        this.footNode.project();
     }
 
     addTo(scene) {
@@ -183,6 +188,9 @@ export class Foot {
     }
 
     update(t=-1) {
+        let projectionPoint = this.hips.projectToGround(this.interpoler.goal_globalTransform.translate, this.interpoler.goal_globalTransform.translate);
+        let groundNormal = projectionPoint.normal;
+        //groundNormal.
         if(t>= 0 && t<=1) {
             let travelVec = this.interpoler.goal_globalTransform.translate.subClone(this.interpoler.start_globalTransform.translate);
             let traveLen = travelVec.mag();
@@ -194,7 +202,7 @@ export class Foot {
             this.goal.visible = false;
         }
         else { 
-            this.goal.visible = true;
+            //this.goal.visible = true;
         }
         this.goalNode.project();
         this.footNode.project();

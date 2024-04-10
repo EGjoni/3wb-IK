@@ -420,6 +420,7 @@ export class IKTransform extends Saveable {
     }    
 
     setFromObj3d(object3d) {
+        object3d.updateMatrix();
         this.setFromMatrix4(object3d.matrix);
         this.lazyRefresh();
     }
@@ -500,6 +501,25 @@ export class IKTransform extends Saveable {
             );
         }
         return globalOutput;
+    }
+
+    writeToTHREE(obj3d) {
+        if(isNaN(this.translate.x) || isNaN(this.rotation.x) || isNaN(this.scale.x)) {
+            alert("NaN detected, check the debugger")
+            throw new Error("Projecting NaNs is bad.");
+        }
+        obj3d.position.x = this.translate.x;
+        obj3d.position.y = this.translate.y;
+        obj3d.position.z = this.translate.z;
+
+        obj3d.scale.x = this.scale.x;
+        obj3d.scale.y = this.scale.y;
+        obj3d.scale.z = this.scale.z;
+
+        obj3d.quaternion.x = -this.rotation.x;
+        obj3d.quaternion.y = -this.rotation.y;
+        obj3d.quaternion.z = -this.rotation.z;
+        obj3d.quaternion.w = this.rotation.w; 
     }
 
 

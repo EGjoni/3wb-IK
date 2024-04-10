@@ -34,7 +34,7 @@
         import { EWBIK } from "./js/EWBIK/EWBIK.js";
         import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
         import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
-        import { Rest, Twist } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
+        import { Rest, Twist, Kusudama } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
         import { getMeshDescendants, initEnvironment } from "enviro";
         addDebugFuncs(THREE);
         window.Rest = Rest;
@@ -209,8 +209,70 @@
             armature.l_leg_lower = armature.bonetags["J_Bip_L_LowerLeg"];
             armature.r_leg_lower = armature.bonetags["J_Bip_R_LowerLeg"];
             armature.c_head = armature.bonetags["J_Bip_C_Head"];
+            armature.c_hips = armature.bonetags["J_Bip_C_Hips"];
             armature.c_chest = armature.bonetags["J_Bip_C_Chest"];
+            armature.r_foot = armature.bonetags["J_Bip_R_Foot"];
+            armature.l_foot = armature.bonetags["J_Bip_L_Foot"];
             armature.upper_chest = armature.bonetags["J_Bip_C_UpperChest"];
+
+            //override the autoinferred orientation for the legs because this rig has weird tassles that throw it off
+            armature.setInternalOrientationFor(armature.r_leg_lower, armature.r_foot.position);
+            armature.setInternalOrientationFor(armature.l_leg_lower, armature.l_foot.position);
+
+            //snip the root bone (make it shorter).
+            armature.c_hips.parent.position.y = armature.c_hips.position.y -0.01;
+            armature.c_hips.position.y = 0.01;
+            armature.makeBoneMesh(armature.c_hips.parent, armature.c_hips.parent.boneRadius);
+
+            new Kusudama(armature.bonetags["J_Bip_L_UpperLeg"], (cnstrt, bone) => bone == contextBone, "Kusudama for J_Bip_L_UpperLeg", armature.stablePool)
+            .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.2505336783387944, -0.2645716928861982, -0.9312543666159987), 0.48411).parentKusudama
+            .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.3143631992559614, -0.7667395103803937, -0.5597198425776874), 0.69579).parentKusudama
+            .addLimitConeAtIndex(2, armature.stablePool.any_Vec3(0, -0.9578262852211515, 0.28734788556634544), 0.45589);
+            new Twist(armature.bonetags["J_Bip_L_UpperLeg"], 0.70009, undefined, 
+                armature.stablePool.any_Vec3(1.9041464198590058e-8, -0.9996624984362763, 0.025978630066681115), 
+                0, (cnstrt, bone) => bone == contextBone,
+                "Twist for J_Bip_L_UpperLeg", armature.stablePool);
+
+
+            new Kusudama(armature.bonetags["J_Bip_L_LowerLeg"], (t, b) => b==contextBone, "Kusudama for J_Bip_L_LowerLeg", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, -0.8984406832782645, 0.055822952043333464), 0.1).parentKusudama
+                .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0, 0.7518876717414535, 0.6592912323724746), 0.1);
+            new Twist(armature.bonetags["J_Bip_L_LowerLeg"], 0.34729, undefined, 
+                            armature.stablePool.any_Vec3(0, -0.9987182064357158, 0.050615651075934326), 
+                            0, (cnstrt, bone) => bone == contextBone,
+                            "Twist for J_Bip_L_LowerLeg", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_L_Foot"], (t, b) => b==contextBone, "Kusudama for J_Bip_L_Foot", armature.stablePool)
+            .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, -0.5256465905493974, -0.8507030397522946), 0.75224);
+            new Twist(armature.bonetags["J_Bip_L_Foot"], 1.78672, undefined, 
+                            armature.stablePool.any_Vec3(0, -0.5256465905493974, -0.8507030397522946), 
+                            6.19399, (cnstrt, bone) => bone == contextBone,
+                            "Twist for J_Bip_L_Foot", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_R_UpperLeg"], (cnstrt, bone) => bone == contextBone, "Kusudama for J_Bip_R_UpperLeg", armature.stablePool)
+            .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.2505336783387944, -0.2645716928861982, -0.9312543666159987), 0.48411).parentKusudama
+            .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.3143631992559614, -0.7667395103803937, -0.5597198425776874), 0.69579).parentKusudama
+            .addLimitConeAtIndex(2, armature.stablePool.any_Vec3(0, -0.9578262852211515, 0.28734788556634544), 0.45589);
+            new Twist(armature.bonetags["J_Bip_R_UpperLeg"], 0.70009, undefined, 
+                armature.stablePool.any_Vec3(-1.9041464198590058e-8, -0.9996624984362763, 0.025978630066681115), 
+                0, (cnstrt, bone) => bone == contextBone,
+                "Twist for J_Bip_R_UpperLeg", armature.stablePool);
+
+
+            new Kusudama(armature.bonetags["J_Bip_R_LowerLeg"], (t, b) => b==contextBone, "Kusudama for J_Bip_R_LowerLeg", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, -0.8984406832782645, 0.055822952043333464), 0.1).parentKusudama
+                .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0, 0.7518876717414535, 0.6592912323724746), 0.1);
+            new Twist(armature.bonetags["J_Bip_R_LowerLeg"], 0.34729, undefined, 
+                            armature.stablePool.any_Vec3(0, -0.9987182064357158, 0.050615651075934326), 
+                            0, (cnstrt, bone) => bone == contextBone,
+                            "Twist for J_Bip_R_LowerLeg", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_R_Foot"], (t, b) => b==contextBone, "Kusudama for J_Bip_R_Foot", armature.stablePool)
+            .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, -0.5256465905493974, -0.8507030397522946), 0.75224);
+            new Twist(armature.bonetags["J_Bip_R_Foot"], 1.78672, undefined, 
+                            armature.stablePool.any_Vec3(0, -0.5256465905493974, -0.8507030397522946), 
+                            6.19399, (cnstrt, bone) => bone == contextBone,
+                            "Twist for J_Bip_R_Foot", armature.stablePool);
 
 
             armature.l_arm_upp.rotateZ(0.5);
@@ -232,7 +294,7 @@
             armature.l_leg_lower.rotateX(-1.75);
 
             for (let b of armature.bones) {
-                if (b.parent instanceof THREE.Bone) {
+                if (b.getConstraint() == null) {
                     let restconst = new Rest(b);
                     if (b == armature.bonetags["J_Bip_C_Head"]) {
                         restconst.setPainfulness(0.7);
@@ -280,7 +342,7 @@
             }*/
 
             //armature.root = new IKPin(armature.bonetags["Root"]);
-            armature.hips = new IKPin(armature.bonetags["J_Bip_C_Hips"]);
+            //armature.hips = new IKPin(armature.bonetags["J_Bip_C_Hips"]);
             armature.head_pin = new IKPin(armature.c_head);
             //armature.c_uuperchest_pin = new IKPin(armature.upper_chest);
             armature.r_hand_pin = new IKPin(armature.bonetags["J_Bip_R_Hand"]);
