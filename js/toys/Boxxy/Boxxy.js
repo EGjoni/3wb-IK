@@ -179,15 +179,17 @@ export class Boxxy {
         this.downVec.normalize();
         this.hipClearanceDir.set(this.normedGravityDirection).mult(-1*this.hipClearance);
     }
-     
-    update(forwardVec, leftVec, doWalkery) {
-        this.frameCount++;
-        this.hipsNode.mimic().updateGlobal();
-        this.hipsNode.origin(this.hipPos);
-        this.left_foot.footNode.mimic().updateGlobal();
-        this.right_foot.footNode.mimic().updateGlobal();
-        this.projectionObj.hipPos.set(this.hipPos);
-        this.projectionObj.allDirty();
+
+    inferredUpdate(newPos) {
+        this.hipsNode.mimic();
+        this.velocity.set(newPos).sub(this.hipsNode.origin());
+        this.velocity.y = 0;
+        //if(this.velocity.mag() > 0)
+        //    debugger;
+        this.update(this.doWalkery);
+    }
+
+    controlledUpdate(forwardVec, leftVec, doWalkery) {
         
         let starty = this.hipPos.y;
         if(isKeyPressed('ShiftLeft')) {
@@ -222,16 +224,32 @@ export class Boxxy {
         this.velocity.mult(this.coeffr);
         this.velocity.add(this.acceleration);
         this.velocity.clamp(0, this.terminalVel);
+        this.impetizer.set(this.tiltceleration).add(this.yhead).normalize();
+        this.hipsNode.setGlobalOrientationTo(this.tempRot.setFromVecs(this.yhead, this.impetizer));//, impetizer);
+        this.tiltceleration.mult(this.coefftilt);
+        this.acceleration.mult(this.coerel);
+        this.update(doWalkery);
+    }
+     
+    update(doWalkery) {
+        this.frameCount++;
+        this.hipsNode.mimic().updateGlobal();
+        this.hipsNode.origin(this.hipPos);
+        this.left_foot.footNode.mimic().updateGlobal();
+        this.right_foot.footNode.mimic().updateGlobal();
+        this.projectionObj.hipPos.set(this.hipPos);
+        this.projectionObj.allDirty();
+        
+        
         //console.log(this.terminalVel);
         //console.log(this.velocity.mag());
         //this.velocity.writeToTHREE(this.temp3V1);
+       
+        
+        
         this.hipsNode.translateByGlobal(this.velocity);
         this.hipsNode.origin(this.goalPos);
         
-        this.impetizer.set(this.tiltceleration).add(this.yhead).normalize();
-        this.tiltceleration.mult(this.coefftilt);
-        this.acceleration.mult(this.coerel);
-        this.hipsNode.setGlobalOrientationTo(this.tempRot.setFromVecs(this.yhead, this.impetizer));//, impetizer);
         this.hipsNode.project();
         
 

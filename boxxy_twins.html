@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Three.js Skeleton Interaction</title>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "./js/three/three.module.js",
+                "orbitControls": "./js/three/jsm/OrbitControls.js",
+                "transformControls": "./js/penziltransform.js",
+                "gltf" : "./js/three/jsm/GLTFLoader.js",
+                "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
+                "vrm" : "./js/three/jsm/three-vrm.module.js",
+                "enviro" : "./js/environment.js"
+              }
+        }
+    </script>
+    
+    <script> 
+        const keyState = {};
+        function updateKeyState(event) {
+            const keyCode = event.code;
+            if (event.type === 'keydown') {
+                keyState[keyCode] = true;
+            } else if (event.type === 'keyup') {
+                keyState[keyCode] = false;
+            }
+        }
+
+        document.addEventListener('keydown', updateKeyState);
+        document.addEventListener('keyup', updateKeyState);
+        
+
+        function isKeyPressed(keyCode) {
+            return !!keyState[keyCode];
+        }
+    </script>
+</head>
+<body>
+    <!--<script type="module" src="./js/UIelements.js"></script>-->
+    <script src="js/sceneStuff.js"></script>
+    <script type = "module"> 
+        import * as THREE from 'three';
+        import {OrbitControls} from "./js/three/jsm/OrbitControls.js";
+        import { TransformControls } from 'transformControls';
+        import {Boxxy} from "./js/toys/Boxxy/Boxxy.js";
+        import { GLTFLoader } from 'gltf';
+        import { VRMLoaderPlugin } from 'vrm';
+        import { EWBIK } from "./js/EWBIK/EWBIK.js";
+        import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
+        import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
+        import { Rest, Twist, Kusudama } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
+        import {Vec3, Vec3Pool} from "./js/EWBIK/util/vecs.js";
+        window.Rest = Rest;
+        window.OrbitControls = OrbitControls;
+        window.TransformControls = TransformControls;
+        window.IKNode = IKNode;
+        window.TrackingNode = TrackingNode;
+        window.IKPin = IKPin;
+        window.axeshelper = new THREE.AxesHelper(1);
+        window.hipaxeshelper = new THREE.AxesHelper(1);
+        window.THREE = THREE;
+        
+
+        // Scene, camera, and renderer setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
+        window.camera = camera;
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        window.renderer = renderer;
+        renderer.setClearColor(0x000000, 0);
+        const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.5);
+        camera.position.z = -5; camera.position.y = 6;
+        renderer.autoClear = false;
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        scene.add(hemisphereLight);
+        scene.background = new THREE.Color(0x772200);
+        const dirLight = new THREE.DirectionalLight( 0x775522, 1 );
+        //dirLight.color.setHSL( 0.1, 1, 0.95 );
+        dirLight.position.set( 1, 1.75, -1 );
+        dirLight.position.multiplyScalar( 1 );
+        scene.add( dirLight );
+        
+
+
+        //let orbitControls = new OrbitControls(camera, renderer.domElement);
+        /*orbitControls.maxDistance = 8;
+        orbitControls.minDistance = 4;
+        orbitControls.target.y = 1;
+        orbitControls.enableDampening = true;
+        orbitControls.dampingFactor = 0.4;
+        window.orbitControls = orbitControls;
+        orbitControls.update();*/
+        let boxxy = null; //new Boxxy(0.87, 0.87);
+        window.contextBone = null;
+        window.meshLayer = 0;
+        window.boneLayer = 1;
+        window.scene = scene;
+        window.boxxy = boxxy;
+        window.frrate = 1/60;
+        window.frtime = window.frrate*1000;
+        const loader = new GLTFLoader();
+        const clock = new THREE.Clock();
+       
+        async function init() {
+            randCubes(0.8, 1.1, 2, 0.3, 10);
+            //groundPlane();
+            loader.register((parser) => {
+                return new VRMLoaderPlugin(parser);
+            });
+            window.armature = await loadModel({ x: 0, y: 0, z: 0 }, 0, ikify);
+            window.follower = await loadModel({ x: 0, y: 0, z: 0 }, 0, ikify);
+            let lhand = window.armature.bonetags["J_Bip_L_Hand"];
+            lhand.rotateZ(1.5);
+            window.leaderHand = new IKPin(lhand);
+            addSceneArmature(window.armature);
+            initControls(THREE, renderer);
+            armature.hip_pin.target_threejs.attach(leaderHand.target_threejs);
+            leaderHand.targetNode.setParent(armature.hip_pin.targetNode);
+            leaderHand.targetNode.translateTo(window.armature.hipPinNode.origin());
+            leaderHand.targetNode.translateByGlobal(noPool.new_Vec3(-0.3, 0.2, 0)).project();
+            armature.r_arm_upp.rotateZ(-1);
+
+            follower.hip_pin.setPinWeight(0.1);
+            follower.hip_pin.setDepthFalloff(0.95);
+            follower.head_pin.setPinWeight(0.2);
+            follower.l_arm_upp.rotateZ(1);
+            let frhand = window.follower.bonetags["J_Bip_R_Hand"];
+            frhand.rotateZ(-1.5);
+            frhand.rotateX(-0.5);
+            frhand.position.y+=0.03;
+            let follower_hand = new IKPin(frhand);
+            follower_hand.targetNode.translateTo(leaderHand.forBone.trackedBy.origin()).project(); 
+            leaderHand.forBone.attach(follower_hand.targetNode.toTrack);
+            //leaderHand.targetNode.toTrack.attach(follower_hand.targetNode.toTrack);
+            //follower_hand.targetNode.setParent(leaderHand.targetNode);
+            follower_hand.targetNode.setParent(leaderHand.forBone.trackedBy);
+            armature.boxxy.pool.finalize();
+            clock.start();
+            //window.bbox = new THREE.BoxHelper(groundCubes, 0xffff00 );
+            //window.bbox.update();
+            animate();
+        }
+
+        function ikify(inst) {
+            let armature = new EWBIK(inst.scene.children[0]);            
+            armature.setDefaultIterations(10);
+            armature.setDampening(1);
+            armature.c_hips = armature.bonetags["J_Bip_C_Hips"];
+            //snip the root bone (make it shorter).
+            armature.c_hips.parent.position.y = armature.c_hips.position.y -0.01;
+            armature.c_hips.position.y = 0.01;
+            armature.makeBoneMesh(armature.c_hips.parent, armature.c_hips.parent.boneRadius);
+            initPrettyBones(armature);
+            initHumanoidRestConstraints(armature);
+            makePinsList(1, armature.armatureObj3d, armature, false, false);
+            updateGlobalBoneLists();
+            initIK(armature);
+            //initPrettyBones(armature);
+            armature.regenerateShadowSkeleton(true);
+            return armature;
+        }
+
+        function initHumanoidRestConstraints(armature) {
+
+            armature.l_arm_upp = armature.bonetags["J_Bip_L_UpperArm"];
+            armature.r_arm_upp = armature.bonetags["J_Bip_R_UpperArm"];
+            armature.l_arm_lower = armature.bonetags["J_Bip_L_LowerArm"];
+            armature.r_arm_lower = armature.bonetags["J_Bip_R_LowerArm"];
+            armature.l_leg_upp = armature.bonetags["J_Bip_L_UpperLeg"];
+            armature.r_leg_upp = armature.bonetags["J_Bip_R_UpperLeg"];
+            armature.l_leg_lower = armature.bonetags["J_Bip_L_LowerLeg"];
+            armature.r_leg_lower = armature.bonetags["J_Bip_R_LowerLeg"];
+            armature.c_head = armature.bonetags["J_Bip_C_Head"];
+            armature.c_hips = armature.bonetags["J_Bip_C_Hips"];
+            armature.c_chest = armature.bonetags["J_Bip_C_Chest"];
+            armature.r_foot = armature.bonetags["J_Bip_R_Foot"];
+            armature.l_foot = armature.bonetags["J_Bip_L_Foot"];
+            armature.upper_chest = armature.bonetags["J_Bip_C_UpperChest"];
+
+            //override the autoinferred orientation for the legs because this rig has weird tassles that throw it off
+            armature.setInternalOrientationFor(armature.r_leg_lower, armature.r_foot.position);
+            armature.setInternalOrientationFor(armature.l_leg_lower, armature.l_foot.position);
+
+           
+            let rootrest = new Rest(armature.c_hips.parent);
+            rootrest.setPainfulness(0.99);
+            rootrest.setStockholmRate(0.99);
+            let hipRest = new Rest(armature.c_hips);
+            hipRest.setPainfulness(0.8);
+            hipRest.setStockholmRate(0.85);
+
+           
+            new Kusudama(armature.bonetags["J_Bip_L_UpperLeg"], (cnstrt, bone) => bone == contextBone, "Kusudama for J_Bip_L_UpperLeg", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.2505336783387944, -0.2645716928861982, -0.9312543666159987), 0.48411).parentKusudama
+                .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.3143631992559614, -0.7667395103803937, -0.5597198425776874), 0.69579).parentKusudama
+                .addLimitConeAtIndex(2, armature.stablePool.any_Vec3(0, -0.9578262852211515, 0.28734788556634544), 0.45589);
+            new Twist(armature.bonetags["J_Bip_L_UpperLeg"], 0.70009, undefined,
+                armature.stablePool.any_Vec3(1.9041464198590058e-8, -0.9996624984362763, 0.025978630066681115),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Twist for J_Bip_L_UpperLeg", armature.stablePool);
+
+
+            new Kusudama(armature.bonetags["J_Bip_L_LowerLeg"], (t, b) => b == contextBone, "Kusudama for J_Bip_L_LowerLeg", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, -0.8984406832782645, 0.055822952043333464), 0.1).parentKusudama
+                .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0, 0.7518876717414535, 0.6592912323724746), 0.1);
+            new Twist(armature.bonetags["J_Bip_L_LowerLeg"], 0.34729, undefined,
+                armature.stablePool.any_Vec3(0, -0.9987182064357158, 0.050615651075934326),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Twist for J_Bip_L_LowerLeg", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_L_Foot"], (t, b) => b == contextBone, "Kusudama for J_Bip_L_Foot", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, -0.5256465905493974, -0.8507030397522946), 0.75224);
+            new Twist(armature.bonetags["J_Bip_L_Foot"], 1.78672, undefined,
+                armature.stablePool.any_Vec3(0, -0.5256465905493974, -0.8507030397522946),
+                6.19399, (cnstrt, bone) => bone == contextBone,
+                "Twist for J_Bip_L_Foot", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_R_UpperLeg"], (cnstrt, bone) => bone == contextBone, "Kusudama for J_Bip_R_UpperLeg", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.2505336783387944, -0.2645716928861982, -0.9312543666159987), 0.48411).parentKusudama
+                .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.3143631992559614, -0.7667395103803937, -0.5597198425776874), 0.69579).parentKusudama
+                .addLimitConeAtIndex(2, armature.stablePool.any_Vec3(0, -0.9578262852211515, 0.28734788556634544), 0.45589);
+            new Twist(armature.bonetags["J_Bip_R_UpperLeg"], 0.70009, undefined,
+                armature.stablePool.any_Vec3(-1.9041464198590058e-8, -0.9996624984362763, 0.025978630066681115),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Twist for J_Bip_R_UpperLeg", armature.stablePool);
+
+
+            new Kusudama(armature.bonetags["J_Bip_R_LowerLeg"], (t, b) => b == contextBone, "Kusudama for J_Bip_R_LowerLeg", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, -0.8984406832782645, 0.055822952043333464), 0.1).parentKusudama
+                .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0, 0.7518876717414535, 0.6592912323724746), 0.1);
+            new Twist(armature.bonetags["J_Bip_R_LowerLeg"], 0.34729, undefined,
+                armature.stablePool.any_Vec3(0, -0.9987182064357158, 0.050615651075934326),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Twist for J_Bip_R_LowerLeg", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_R_Foot"], (t, b) => b == contextBone, "Kusudama for J_Bip_R_Foot", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, -0.5256465905493974, -0.8507030397522946), 0.75224);
+            new Twist(armature.bonetags["J_Bip_R_Foot"], 1.78672, undefined,
+                armature.stablePool.any_Vec3(0, -0.5256465905493974, -0.8507030397522946),
+                6.19399, (cnstrt, bone) => bone == contextBone,
+                "Twist for J_Bip_R_Foot", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_R_Shoulder"], (t, b) => b == contextBone, "Kusudama for J_Bip_R_Shoulder", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.9984947084783814, -0.05484812795959626, 0), 0.52645);
+            new Twist(armature.bonetags["J_Bip_R_Shoulder"], 0.29084, undefined,
+                armature.stablePool.any_Vec3(0.9891449243957724, -0.1469432493926892, 0),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_R_Shoulder", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_R_LowerArm"], (t, b) => b == contextBone, "Kusudama for J_Bip_R_LowerArm", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.9600705258759669, 0.1644617183058307, -0.22631157406579597), 0.1).parentKusudama
+                .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.8547829360660806, 0.16339882672516523, -0.49259207833164587), 0.1);
+            new Twist(armature.bonetags["J_Bip_R_LowerArm"], 1.7585, undefined,
+                armature.stablePool.any_Vec3(0.5218281678275412, 0.3762160660809324, -0.7656088001612293),
+                1.28, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_R_LowerArm", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_R_UpperArm"], (t, b) => b == contextBone, "Kusudama for J_Bip_R_UpperArm", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.9916964094100271, -0.11207984022434514, -0.06305823481945402), 1.14738);
+            new Twist(armature.bonetags["J_Bip_R_UpperArm"], 3.22615, undefined,
+                armature.stablePool.any_Vec3(0.9936739704965505, -0.11230334081233606, -3.443753094947278e-8),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_R_UpperArm", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_R_Hand"], (t, b) => b == contextBone, "Kusudama for J_Bip_R_Hand", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.5742044866868236, 0.8186183370537373, -0.012378437223462383), 0.92159).parentKusudama
+                .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.9114921689234482, -0.4108478087334832, -0.019649530531882186), 0.92159);
+            new Twist(armature.bonetags["J_Bip_R_Hand"], 0.40374, undefined,
+                armature.stablePool.any_Vec3(0.9911502251594227, -0.013045098600207283, 0.13210244724809925),
+                6.168005471576302, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_R_Hand", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_L_Shoulder"], (t, b) => b == contextBone, "Kusudama for J_Bip_L_Shoulder", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.9984947084783814, -0.05484812795959626, 0), 0.52645);
+            new Twist(armature.bonetags["J_Bip_L_Shoulder"], 0.29084, undefined,
+                armature.stablePool.any_Vec3(-0.9891449243957724, -0.1469432493926892, 0),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_L_Shoulder", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_L_LowerArm"], (t, b) => b == contextBone, "Kusudama for J_Bip_L_LowerArm", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.9600705258759669, 0.1644617183058307, -0.22631157406579597), 0.1).parentKusudama
+                .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.8547829360660806, 0.16339882672516523, -0.49259207833164587), 0.1);
+            new Twist(armature.bonetags["J_Bip_L_LowerArm"], 1.7585, undefined,
+                armature.stablePool.any_Vec3(-0.5218281678275412, 0.3762160660809324, -0.7656088001612293),
+                4.94507, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_L_LowerArm", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_L_UpperArm"], (t, b) => b == contextBone, "Kusudama for J_Bip_L_UpperArm", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.9916964094100271, -0.11207984022434514, -0.06305823481945402), 1.14738);
+            new Twist(armature.bonetags["J_Bip_L_UpperArm"], 3.22615, undefined,
+                armature.stablePool.any_Vec3(-0.9936739704965505, -0.11230334081233606, -3.443753094947278e-8),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_L_UpperArm", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_L_Hand"], (t, b) => b == contextBone, "Kusudama for J_Bip_L_Hand", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.5742044866868236, 0.8186183370537373, -0.012378437223462383), 0.92159).parentKusudama
+                .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.9114921689234482, -0.4108478087334832, -0.019649530531882186), 0.92159);
+            new Twist(armature.bonetags["J_Bip_L_Hand"], 0.40374, undefined,
+                armature.stablePool.any_Vec3(-0.9911502251594227, -0.013045098600207283, 0.13210244724809925),
+                6.168005471576302, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_L_Hand", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_C_Spine"], (t, b) => b == contextBone, "Kusudama for J_Bip_C_Spine", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-1.8374118504407591e-16, 0.9996360572455436, -0.026976898535312797), 0.41355);
+            new Twist(armature.bonetags["J_Bip_C_Spine"], 0.62953, undefined,
+                armature.stablePool.any_Vec3(-1.8374118504407587e-16, 0.9996360572455434, -0.02697689853531279),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_C_Spine", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_C_Chest"], (t, b) => b == contextBone, "Kusudama for J_Bip_C_Chest", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(2.7599758061079187e-16, 0.990869672460897, 0.1348231886480764), 0.54056);
+            new Twist(armature.bonetags["J_Bip_C_Chest"], 0.88355, undefined,
+                armature.stablePool.any_Vec3(2.759975806107918e-16, 0.9908696724608967, 0.13482318864807638),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_C_Chest", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_C_UpperChest"], (t, b) => b == contextBone, "Kusudama for J_Bip_C_UpperChest", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(8.575184161921516e-17, 0.9983219856621792, -0.05790693346676151), 0.47);
+            new Twist(armature.bonetags["J_Bip_C_UpperChest"], 1.25046, undefined,
+                armature.stablePool.any_Vec3(8.575184161921518e-17, 0.9983219856621794, -0.057906933466761526),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_C_UpperChest", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_C_Neck"], (t, b) => b == contextBone, "Kusudama for J_Bip_C_Neck", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-3.661705994390258e-9, 0.9917943192012539, -0.12784376558957108), 0.49117);
+            new Twist(armature.bonetags["J_Bip_C_Neck"], 1.21177, undefined,
+                armature.stablePool.any_Vec3(-3.6617059943902597e-9, 0.9917943192012544, -0.12784376558957114),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_C_Neck", armature.stablePool);
+
+
+            new Kusudama(armature.bonetags["J_Bip_C_Head"], (t, b) => b == contextBone, "Kusudama for J_Bip_C_Head", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.007645192954748523, 0.9768661054817858, -0.21371514449269452), 0.8);
+            new Twist(armature.bonetags["J_Bip_C_Head"], 1.3, undefined,
+                armature.stablePool.any_Vec3(0.007645192954748521, 0.9768661054817855, -0.21371514449269446),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_C_Head", armature.stablePool);
+            
+
+
+            for (let b of armature.bones) {
+                if (b.getConstraint() == null) {
+                    let restconst = new Rest(b);
+                }
+            }
+
+            armature.head_pin = new IKPin(armature.c_head);
+            armature.hip_pin = new IKPin(armature.c_hips);
+            armature.r_foot_pin = new IKPin(armature.bonetags["J_Bip_R_Foot"]);
+            armature.l_foot_pin = new IKPin(armature.bonetags["J_Bip_L_Foot"]);
+
+            window.hipsTracker = armature.hip_pin.target_threejs;  
+            armature.hipsTracker  = window.hipsTracker;
+            armature.hipPinNode = armature.hip_pin.targetNode;
+            armature.hip_pin.setPinWeight(0.1); 
+            armature.hip_pin.setDepthFalloff(0.9);
+            armature.head_pin.setPinWeight(0.4);
+            armature.hip_pin.alignToBone();
+            armature.head_pin.alignToBone();
+            armature.head_pin.target_threejs.position.y += 0.2;
+            armature.head_pin.targetNode.mimic();
+            armature.hipsTracker.attach(armature.head_pin.target_threejs);
+            armature.head_pin.targetNode.ensure();
+
+            armature.boxxy = new Boxxy(
+                0.95,
+                armature.c_hips, 
+                armature.bonetags["J_Bip_L_Foot"],
+                armature.l_leg_upp,
+                armature.bonetags["J_Bip_R_Foot"],
+                armature.r_leg_upp,
+                new Vec3Pool(3000)
+                );
+            
+            //armature.boxxy.hips.position.y *= 0.8;
+            armature.boxxy.addTo(scene, groundCubes); 
+            
+            armature.boxxy.hips.position.copy(armature.hip_pin.target_threejs.position);           
+            armature.boxxy.hipsNode.mimic();
+            armature.boxxy.hips.attach(armature.hip_pin.target_threejs); 
+            armature.visible = false;
+
+            
+            armature.boxxy.right_foot.foot.add(armature.r_foot_pin.target_threejs);
+            armature.boxxy.left_foot.foot.add(armature.l_foot_pin.target_threejs);
+            //armature.boxxy.hipClearance -=0.05;
+            armature.l_foot_pin.alignToBone();
+            armature.r_foot_pin.alignToBone();
+            armature.l_foot_pin.targetNode.translateByGlobal(new Vec3(0, 0.1, 0));//account for the platform boots with the furr
+            armature.r_foot_pin.targetNode.translateByGlobal(new Vec3(0, 0.1, 0));//account for the platform boots with the furr
+            armature.l_foot_pin.targetNode.project();
+            armature.r_foot_pin.targetNode.project();
+            
+            //armature.head_pin.target_threejs.add(axeshelper);
+            //armature.hip_pin.target_threejs.add(hipaxeshelper);
+            //armature.l_foot_pin.targetupdateWorldMatrix(); armature.r_foot_pin.updateWorldMatrix();
+            
+            //armature.boxxy.showHips(); armature.boxxy.showFeet();
+            //armature.l_foot_pin.ensure(); armature.r_foot_pin.ensure(); armature.hip_pin.ensure(); armature.head_pin.ensure();
+            armature.boxxy.preAlign();
+            window.goahead = true;
+            window.dowalk= true;
+                     
+        }
+        
+        //const groundCubesMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+        const groundCubesMat = new THREE.MeshLambertMaterial({color: 0x444444});
+        const groundCubes = [];//new THREE.Group();
+        window.groundCubes = groundCubes;
+        //scene.add(groundCubes);
+        function groundPlane(){
+            let planeGeo = new THREE.BoxGeometry(10, 0.01, 10);
+            let gp = new THREE.Mesh(planeGeo, groundCubesMat);
+            groundCubes.push(gp);
+            scene.add(gp);
+        }
+        function randCubes(heightDelta, sizeDelta, spacing, angleDelta, area) {
+            let maxdim = spacing*1.5;
+            let minDim = spacing;
+            for(let x = 0; x < area; x+=spacing) {
+                for(let z = 0; z<area; z+=spacing) {
+                    let minx = Math.max(Math.random()*sizeDelta*maxdim, minDim);
+                    let minz = Math.max(Math.random()*sizeDelta*maxdim, minDim);
+                    //let boxGeo = new THREE.SphereGeometry(Math.random()*minDim*heightDelta, 16, 16); 
+                    let boxGeo = new THREE.BoxGeometry(minx, Math.random()*minDim*heightDelta, minz);//new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //
+                    let boxMesh = new THREE.Mesh(boxGeo, groundCubesMat);
+                    boxMesh.position.x = x; boxMesh.position.z = z;
+                    boxMesh.rotateX((angleDelta/2) - Math.random()*angleDelta);
+                    boxMesh.rotateY((angleDelta/2) - Math.random()*angleDelta);
+                    boxMesh.rotateZ((angleDelta/2) - Math.random()*angleDelta);
+                    boxMesh.material.side = 0;
+                    groundCubes.push(boxMesh);
+                    
+                    boxMesh.position.x += -area/2;
+                    boxMesh.position.z += -area/2;
+                    boxMesh.position.y += -1;
+                    scene.add(boxMesh)
+                }
+            }
+            /**groundCubes.position.x = -area/2;
+            groundCubes.position.z = -area/2;
+            groundCubes.position.y = -2;*/
+        }
+        
+        
+        function delayAnimate() {
+            window.setTimeout(animate, window.frtime);
+        }
+
+        async function loadModel(position, loadId, onloaded) {
+            let vrm = await loader.loadAsync(
+                './vrmtests/testmodel.vrm',
+                (xhr, otherParam) => { },
+                (error) => { window.notifyStreamError(error, loadId) }
+            );
+            vrm.scene.updateMatrixWorld();
+            scene.add(vrm.scene);
+            scene.traverse((object) => {
+                if (object.isSkinnedMesh) {
+                  object.frustumCulled = false;
+                }
+              });
+            let rootBone1 = vrm.scene.children[0];
+            rootBone1.position.set(position.x, position.y, position.z);
+            return onloaded(vrm, loadId);
+        }
+        const forwardVec = new Vec3(0,0,1);
+        const leftVec = new Vec3(1,0,0);
+        window.forwardVec = forwardVec; window.leftVec = leftVec;
+        const tempVec = new Vec3(1,0,0);
+        const temp3v = new THREE.Vector3(0,0,0);
+        window.framecount = 0;
+        window.physicsUpdateCount = 0;
+        function animate() {
+            requestAnimationFrame(delayAnimate);
+            armature.c_hips.getWorldPosition(temp3v);
+            tempVec.readFromTHREE(temp3v);
+            //orbitControls.target.copy(boxxy.hips.position);
+            forwardVec.readFromTHREE(orbitControls.target); 
+            forwardVec.lerp(tempVec, 0.05);
+            forwardVec.writeToTHREE(orbitControls.target);
+            orbitControls.update();
+            let updateCount = clock.getDelta()/window.frrate;
+            tempVec.readFromTHREE(camera.position);
+            forwardVec.readFromTHREE(orbitControls.target);
+            forwardVec.sub(tempVec);
+            forwardVec.y = 0;
+            forwardVec.normalize();
+            tempVec.setComponents(0,1,0);
+            forwardVec.cross(tempVec, leftVec);
+            leftVec.normalize();
+            
+            /*if(window.framecount % 60) {
+                console.log(boxxy.hips.position.y.toFixed(5));
+                //console.log(`physics updates: ${window.physicsUpdateCount} in ${window.framecount} frames`);
+            }*/
+            window.framecount++;
+           
+                for(let i=0; i<updateCount; i++) {
+                    armature.boxxy.controlledUpdate(forwardVec, leftVec, i==0);
+                    if(window.dowalk) {
+                        window.follower.boxxy.inferredUpdate(window.follower.c_hips.trackedBy.origin());
+                    }
+                    window.physicsUpdateCount++;
+            }
+            
+            if(window.goahead) {
+                leaderHand.targetNode.translateTo(armature.c_hips.trackedBy.origin().lerp(follower.c_hips.trackedBy.origin(), 0.5)).project();
+                window.armature.solve();
+                window.follower.solve();
+            }
+            //console.log(acceleration);
+            window.render();
+        }
+        
+        init();
+        window.camera = camera;
+
+        window.render = function () {
+            camera.layers.set(0);
+            const currentBackground = scene.background;
+            const currentFog = scene.fog;
+
+            renderer.render(scene, camera);
+            /*renderer.clearDepth();
+            
+            scene.background = null;
+            scene.fog = null;
+            camera.layers.set(1);
+            renderer.render(scene, camera);
+            scene.background = currentBackground;
+            scene.fog = currentFog;*/
+
+        }
+        //animate();
+                
+    </script>
+    <style>
+        body {margin: 0;}
+        canvas {display: block;}
+    </style>
+</body>
