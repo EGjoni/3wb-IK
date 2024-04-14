@@ -515,6 +515,7 @@ export class IKNode extends Saveable {
             this.globalMBasis.lazyRefresh();
             for (let c of this.childNodes) c.markDirty();
         }
+        return this;
     }
 
     _exclusiveMarkDirty() {

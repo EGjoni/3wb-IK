@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Three.js Skeleton Interaction</title>
 
@@ -16,8 +17,8 @@
               }
         }
     </script>
-    
-    <script> 
+
+    <script>
         const keyState = {};
         function updateKeyState(event) {
             const keyCode = event.code;
@@ -30,28 +31,31 @@
 
         document.addEventListener('keydown', updateKeyState);
         document.addEventListener('keyup', updateKeyState);
-        
+
 
         function isKeyPressed(keyCode) {
             return !!keyState[keyCode];
         }
     </script>
 </head>
+
 <body>
+    <div class="clack" style="position:absolute; background:rgba(0, 0, 0, 0.329); color:white; font-size:1.5em;">WASD to move. Drag to orbit.</div>
     <!--<script type="module" src="./js/UIelements.js"></script>-->
     <script src="js/sceneStuff.js"></script>
-    <script type = "module"> 
+    <script type="module">
         import * as THREE from 'three';
-        import {OrbitControls} from "./js/three/jsm/OrbitControls.js";
+        import { OrbitControls } from "./js/three/jsm/OrbitControls.js";
         import { TransformControls } from 'transformControls';
-        import {Boxxy} from "./js/toys/Boxxy/Boxxy.js";
+        import { Boxxy } from "./js/toys/Boxxy/Boxxy.js";
         import { GLTFLoader } from 'gltf';
         import { VRMLoaderPlugin } from 'vrm';
         import { EWBIK } from "./js/EWBIK/EWBIK.js";
         import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
         import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
         import { Rest, Twist, Kusudama } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
-        import {Vec3, Vec3Pool} from "./js/EWBIK/util/vecs.js";
+        import { Vec3, Vec3Pool } from "./js/EWBIK/util/vecs.js";
+        import { Rot } from "./js/EWBIK/util/Rot.js"
         window.Rest = Rest;
         window.OrbitControls = OrbitControls;
         window.TransformControls = TransformControls;
@@ -61,34 +65,40 @@
         window.axeshelper = new THREE.AxesHelper(1);
         window.hipaxeshelper = new THREE.AxesHelper(1);
         window.THREE = THREE;
-        
+
 
         // Scene, camera, and renderer setup
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
         window.camera = camera;
-        
+
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         window.renderer = renderer;
         renderer.setClearColor(0x000000, 0);
-        const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.5);
+        const hemisphereLight = new THREE.HemisphereLight(0x333866, 0x000000, 4.1);
         camera.position.z = -5; camera.position.y = 6;
         renderer.autoClear = false;
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
         scene.add(hemisphereLight);
         scene.background = new THREE.Color(0x772200);
-        const dirLight = new THREE.DirectionalLight( 0x775522, 1 );
+        //scene.background = new THREE.Color(0x000000);
+        const dirLight = new THREE.DirectionalLight(0x775522, 1);
+        const plight = new THREE.PointLight();
+        plight.power = 5;
+        plight.decay = 0.15;
+        window.plight=plight;
         //dirLight.color.setHSL( 0.1, 1, 0.95 );
-        dirLight.position.set( 1, 1.75, -1 );
-        dirLight.position.multiplyScalar( 1 );
-        scene.add( dirLight );
-        
+        dirLight.position.set(1, 1.75, -1);
+        dirLight.position.multiplyScalar(1);
+        //scene.add(dirLight);
+        scene.add(plight);
+
 
 
         //let orbitControls = new OrbitControls(camera, renderer.domElement);
-        /*orbitControls.maxDistance = 8;
-        orbitControls.minDistance = 4;
+        
+        /*
         orbitControls.target.y = 1;
         orbitControls.enableDampening = true;
         orbitControls.dampingFactor = 0.4;
@@ -100,13 +110,13 @@
         window.boneLayer = 1;
         window.scene = scene;
         window.boxxy = boxxy;
-        window.frrate = 1/60;
-        window.frtime = window.frrate*1000;
+        window.frrate = 1 / 60;
+        window.frtime = window.frrate * 1000;
         const loader = new GLTFLoader();
         const clock = new THREE.Clock();
-       
+
         async function init() {
-            randCubes(0.8, 1.1, 2, 0.3, 10);
+            randCubes(0.7, 0.8, 3, 0.3, 18);
             //groundPlane();
             loader.register((parser) => {
                 return new VRMLoaderPlugin(parser);
@@ -115,6 +125,7 @@
             window.follower = await loadModel({ x: 0, y: 0, z: 0 }, 0, ikify);
             let lhand = window.armature.bonetags["J_Bip_L_Hand"];
             lhand.rotateZ(1.5);
+            lhand.rotateX(0.5);
             window.leaderHand = new IKPin(lhand);
             addSceneArmature(window.armature);
             initControls(THREE, renderer);
@@ -130,28 +141,39 @@
             follower.l_arm_upp.rotateZ(1);
             let frhand = window.follower.bonetags["J_Bip_R_Hand"];
             frhand.rotateZ(-1.5);
-            frhand.rotateX(-0.5);
-            frhand.position.y+=0.03;
+            frhand.rotateX(+0.5);
             let follower_hand = new IKPin(frhand);
-            follower_hand.targetNode.translateTo(leaderHand.forBone.trackedBy.origin()).project(); 
-            leaderHand.forBone.attach(follower_hand.targetNode.toTrack);
+            follower_hand.targetNode.translateTo(leaderHand.forBone.trackedBy.origin()).project();
+            follower_hand.targetNode.toTrack.position.z+=0.05;
+            follower_hand.targetNode.toTrack.rotateX(-0.5); follower_hand.targetNode.mimic();
+            leaderHand.forBone.attach(follower_hand.targetNode.toTrack);            
+            
             //leaderHand.targetNode.toTrack.attach(follower_hand.targetNode.toTrack);
             //follower_hand.targetNode.setParent(leaderHand.targetNode);
             follower_hand.targetNode.setParent(leaderHand.forBone.trackedBy);
+            follower_hand.targetNode.toTrack.position.y -= 0.05; follower_hand.targetNode.mimic();
             armature.boxxy.pool.finalize();
             clock.start();
             //window.bbox = new THREE.BoxHelper(groundCubes, 0xffff00 );
             //window.bbox.update();
+            orbitControls.maxDistance = 10;
+            orbitControls.minDistance = 8;
+            camera.position.y = armature.c_head.position.y+1;
+            window.frhand = frhand;
+            frhand.add(plight);
+            scene.attach(plight);
+            plight.position.y +=1;
+            frhand.attach(plight);
             animate();
         }
 
         function ikify(inst) {
-            let armature = new EWBIK(inst.scene.children[0]);            
+            let armature = new EWBIK(inst.scene.children[0]);
             armature.setDefaultIterations(10);
             armature.setDampening(1);
             armature.c_hips = armature.bonetags["J_Bip_C_Hips"];
             //snip the root bone (make it shorter).
-            armature.c_hips.parent.position.y = armature.c_hips.position.y -0.01;
+            armature.c_hips.parent.position.y = armature.c_hips.position.y - 0.01;
             armature.c_hips.position.y = 0.01;
             armature.makeBoneMesh(armature.c_hips.parent, armature.c_hips.parent.boneRadius);
             initPrettyBones(armature);
@@ -185,7 +207,7 @@
             armature.setInternalOrientationFor(armature.r_leg_lower, armature.r_foot.position);
             armature.setInternalOrientationFor(armature.l_leg_lower, armature.l_foot.position);
 
-           
+
             let rootrest = new Rest(armature.c_hips.parent);
             rootrest.setPainfulness(0.99);
             rootrest.setStockholmRate(0.99);
@@ -193,7 +215,7 @@
             hipRest.setPainfulness(0.8);
             hipRest.setStockholmRate(0.85);
 
-           
+
             new Kusudama(armature.bonetags["J_Bip_L_UpperLeg"], (cnstrt, bone) => bone == contextBone, "Kusudama for J_Bip_L_UpperLeg", armature.stablePool)
                 .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.2505336783387944, -0.2645716928861982, -0.9312543666159987), 0.48411).parentKusudama
                 .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.3143631992559614, -0.7667395103803937, -0.5597198425776874), 0.69579).parentKusudama
@@ -339,7 +361,7 @@
                 armature.stablePool.any_Vec3(0.007645192954748521, 0.9768661054817855, -0.21371514449269446),
                 0, (cnstrt, bone) => bone == contextBone,
                 "Kusudama for J_Bip_C_Head", armature.stablePool);
-            
+
 
 
             for (let b of armature.bones) {
@@ -353,10 +375,10 @@
             armature.r_foot_pin = new IKPin(armature.bonetags["J_Bip_R_Foot"]);
             armature.l_foot_pin = new IKPin(armature.bonetags["J_Bip_L_Foot"]);
 
-            window.hipsTracker = armature.hip_pin.target_threejs;  
-            armature.hipsTracker  = window.hipsTracker;
+            window.hipsTracker = armature.hip_pin.target_threejs;
+            armature.hipsTracker = window.hipsTracker;
             armature.hipPinNode = armature.hip_pin.targetNode;
-            armature.hip_pin.setPinWeight(0.1); 
+            armature.hip_pin.setPinWeight(0.1);
             armature.hip_pin.setDepthFalloff(0.9);
             armature.head_pin.setPinWeight(0.4);
             armature.hip_pin.alignToBone();
@@ -368,23 +390,23 @@
 
             armature.boxxy = new Boxxy(
                 0.95,
-                armature.c_hips, 
+                armature.c_hips,
                 armature.bonetags["J_Bip_L_Foot"],
                 armature.l_leg_upp,
                 armature.bonetags["J_Bip_R_Foot"],
                 armature.r_leg_upp,
                 new Vec3Pool(3000)
-                );
-            
+            );
+
             //armature.boxxy.hips.position.y *= 0.8;
-            armature.boxxy.addTo(scene, groundCubes); 
-            
-            armature.boxxy.hips.position.copy(armature.hip_pin.target_threejs.position);           
+            armature.boxxy.addTo(scene, groundCubes);
+
+            armature.boxxy.hips.position.copy(armature.hip_pin.target_threejs.position);
             armature.boxxy.hipsNode.mimic();
-            armature.boxxy.hips.attach(armature.hip_pin.target_threejs); 
+            armature.boxxy.hips.attach(armature.hip_pin.target_threejs);
             armature.visible = false;
 
-            
+
             armature.boxxy.right_foot.foot.add(armature.r_foot_pin.target_threejs);
             armature.boxxy.left_foot.foot.add(armature.l_foot_pin.target_threejs);
             //armature.boxxy.hipClearance -=0.05;
@@ -394,49 +416,49 @@
             armature.r_foot_pin.targetNode.translateByGlobal(new Vec3(0, 0.1, 0));//account for the platform boots with the furr
             armature.l_foot_pin.targetNode.project();
             armature.r_foot_pin.targetNode.project();
-            
+
             //armature.head_pin.target_threejs.add(axeshelper);
             //armature.hip_pin.target_threejs.add(hipaxeshelper);
             //armature.l_foot_pin.targetupdateWorldMatrix(); armature.r_foot_pin.updateWorldMatrix();
-            
+
             //armature.boxxy.showHips(); armature.boxxy.showFeet();
             //armature.l_foot_pin.ensure(); armature.r_foot_pin.ensure(); armature.hip_pin.ensure(); armature.head_pin.ensure();
             armature.boxxy.preAlign();
             window.goahead = true;
-            window.dowalk= true;
-                     
+            window.dowalk = true;
+
         }
-        
+
         //const groundCubesMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
-        const groundCubesMat = new THREE.MeshLambertMaterial({color: 0x444444});
+        const groundCubesMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
         const groundCubes = [];//new THREE.Group();
         window.groundCubes = groundCubes;
         //scene.add(groundCubes);
-        function groundPlane(){
+        function groundPlane() {
             let planeGeo = new THREE.BoxGeometry(10, 0.01, 10);
             let gp = new THREE.Mesh(planeGeo, groundCubesMat);
             groundCubes.push(gp);
             scene.add(gp);
         }
         function randCubes(heightDelta, sizeDelta, spacing, angleDelta, area) {
-            let maxdim = spacing*1.5;
+            let maxdim = spacing * 1.5;
             let minDim = spacing;
-            for(let x = 0; x < area; x+=spacing) {
-                for(let z = 0; z<area; z+=spacing) {
-                    let minx = Math.max(Math.random()*sizeDelta*maxdim, minDim);
-                    let minz = Math.max(Math.random()*sizeDelta*maxdim, minDim);
+            for (let x = 0; x < area; x += spacing) {
+                for (let z = 0; z < area; z += spacing) {
+                    let minx = Math.max(Math.random() * sizeDelta * maxdim, minDim);
+                    let minz = Math.max(Math.random() * sizeDelta * maxdim, minDim);
                     //let boxGeo = new THREE.SphereGeometry(Math.random()*minDim*heightDelta, 16, 16); 
-                    let boxGeo = new THREE.BoxGeometry(minx, Math.random()*minDim*heightDelta, minz);//new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //
+                    let boxGeo = new THREE.BoxGeometry(minx, Math.random() * minDim * heightDelta, minz);//new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //
                     let boxMesh = new THREE.Mesh(boxGeo, groundCubesMat);
                     boxMesh.position.x = x; boxMesh.position.z = z;
-                    boxMesh.rotateX((angleDelta/2) - Math.random()*angleDelta);
-                    boxMesh.rotateY((angleDelta/2) - Math.random()*angleDelta);
-                    boxMesh.rotateZ((angleDelta/2) - Math.random()*angleDelta);
+                    boxMesh.rotateX((angleDelta / 2) - Math.random() * angleDelta);
+                    boxMesh.rotateY((angleDelta / 2) - Math.random() * angleDelta);
+                    boxMesh.rotateZ((angleDelta / 2) - Math.random() * angleDelta);
                     boxMesh.material.side = 0;
                     groundCubes.push(boxMesh);
-                    
-                    boxMesh.position.x += -area/2;
-                    boxMesh.position.z += -area/2;
+
+                    boxMesh.position.x += -area / 2;
+                    boxMesh.position.z += -area / 2;
                     boxMesh.position.y += -1;
                     scene.add(boxMesh)
                 }
@@ -445,8 +467,8 @@
             groundCubes.position.z = -area/2;
             groundCubes.position.y = -2;*/
         }
-        
-        
+
+
         function delayAnimate() {
             window.setTimeout(animate, window.frtime);
         }
@@ -461,18 +483,19 @@
             scene.add(vrm.scene);
             scene.traverse((object) => {
                 if (object.isSkinnedMesh) {
-                  object.frustumCulled = false;
+                    object.frustumCulled = false;
                 }
-              });
+            });
             let rootBone1 = vrm.scene.children[0];
             rootBone1.position.set(position.x, position.y, position.z);
             return onloaded(vrm, loadId);
         }
-        const forwardVec = new Vec3(0,0,1);
-        const leftVec = new Vec3(1,0,0);
+        const forwardVec = new Vec3(0, 0, 1);
+        const leftVec = new Vec3(1, 0, 0);
         window.forwardVec = forwardVec; window.leftVec = leftVec;
-        const tempVec = new Vec3(1,0,0);
-        const temp3v = new THREE.Vector3(0,0,0);
+        const tempVec = new Vec3(1, 0, 0);
+        const tempVec2 = new Vec3(1, 0, 0);
+        const temp3v = new THREE.Vector3(0, 0, 0);
         window.framecount = 0;
         window.physicsUpdateCount = 0;
         function animate() {
@@ -480,43 +503,61 @@
             armature.c_hips.getWorldPosition(temp3v);
             tempVec.readFromTHREE(temp3v);
             //orbitControls.target.copy(boxxy.hips.position);
-            forwardVec.readFromTHREE(orbitControls.target); 
+            forwardVec.readFromTHREE(orbitControls.target);
             forwardVec.lerp(tempVec, 0.05);
             forwardVec.writeToTHREE(orbitControls.target);
             orbitControls.update();
-            let updateCount = clock.getDelta()/window.frrate;
+            let updateCount = clock.getDelta() / window.frrate;
             tempVec.readFromTHREE(camera.position);
             forwardVec.readFromTHREE(orbitControls.target);
             forwardVec.sub(tempVec);
             forwardVec.y = 0;
             forwardVec.normalize();
-            tempVec.setComponents(0,1,0);
+            tempVec.setComponents(0, 1, 0);
             forwardVec.cross(tempVec, leftVec);
             leftVec.normalize();
-            
+
             /*if(window.framecount % 60) {
                 console.log(boxxy.hips.position.y.toFixed(5));
                 //console.log(`physics updates: ${window.physicsUpdateCount} in ${window.framecount} frames`);
             }*/
             window.framecount++;
-           
-                for(let i=0; i<updateCount; i++) {
-                    armature.boxxy.controlledUpdate(forwardVec, leftVec, i==0);
-                    if(window.dowalk) {
-                        window.follower.boxxy.inferredUpdate(window.follower.c_hips.trackedBy.origin());
-                    }
-                    window.physicsUpdateCount++;
+
+            for (let i = 0; i < updateCount; i++) {
+                armature.boxxy.controlledUpdate(forwardVec, leftVec, i == 0);
+                if (window.dowalk) {
+                    window.follower.boxxy.inferredUpdate(window.follower.c_hips.trackedBy.origin());
+                }
+                window.physicsUpdateCount++;
             }
-            
-            if(window.goahead) {
+
+            if (window.goahead) {
                 leaderHand.targetNode.translateTo(armature.c_hips.trackedBy.origin().lerp(follower.c_hips.trackedBy.origin(), 0.5)).project();
+                glare(armature);
+                glare(follower);
+                
                 window.armature.solve();
                 window.follower.solve();
             }
             //console.log(acceleration);
             window.render();
         }
+
+        function glare(char) {
+            tempVec.set(char.c_head.getIKPin().targetNode.getGlobalMBasis().yHeading);
+            tempVec2.setComponents(0.008, 0.977, -0.214).normalize();
+            let temprot = Rot.fromVecs(tempVec, tempVec2);
+            Rot.fromSlerp(Rot.IDENTITY, temprot, 0.1, temprot);
+
+            char.c_head.getIKPin().targetNode.rotateByGlobal(temprot);//.updateGlobal().project();
+            char.c_head.getIKPin().targetNode.project();
         
+            tempVec.set(char.c_head.getIKPin().targetNode.getGlobalMBasis().zHeading).mult(-1);
+            tempVec2.readFromTHREE(camera.position).sub(char.c_head.getIKPin().targetNode.origin()).normalize();
+            temprot = Rot.fromVecs(tempVec, tempVec2);
+            char.c_head.getIKPin().targetNode.rotateByGlobal(Rot.fromSlerp(Rot.IDENTITY, temprot, 0.1, temprot));
+            char.c_head.getIKPin().targetNode.updateGlobal().project();
+        }
         init();
         window.camera = camera;
 
@@ -537,10 +578,15 @@
 
         }
         //animate();
-                
+
     </script>
     <style>
-        body {margin: 0;}
-        canvas {display: block;}
+        body {
+            margin: 0;
+        }
+
+        canvas {
+            display: block;
+        }
     </style>
 </body>
