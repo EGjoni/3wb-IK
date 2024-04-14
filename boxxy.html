@@ -131,7 +131,7 @@
             armature.makeBoneMesh(armature.c_hips.parent, armature.c_hips.parent.boneRadius);
             initPrettyBones(armature);
             initHumanoidRestConstraints(armature);
-            makePinsList(1, armature.armatureObj3d, armature, false);
+            makePinsList(1, armature.armatureObj3d, armature, false, false);
             updateGlobalBoneLists();
             initIK(armature);
             //initPrettyBones(armature);
@@ -261,6 +261,7 @@
             
             //boxxy.hips.position.y *= 0.8;
             boxxy.addTo(scene, groundCubes); 
+            
             boxxy.hips.position.copy(armature.hip_pin.target_threejs.position);           
             boxxy.hipsNode.mimic();
             boxxy.hips.attach(armature.hip_pin.target_threejs);            
@@ -282,7 +283,7 @@
             //armature.hip_pin.target_threejs.add(hipaxeshelper);
             //armature.l_foot_pin.targetupdateWorldMatrix(); armature.r_foot_pin.updateWorldMatrix();
             
-            //boxxy.show();
+            boxxy.showHips(); boxxy.showFeet();
             boxxy.pool.finalize();
             //armature.l_foot_pin.ensure(); armature.r_foot_pin.ensure(); armature.hip_pin.ensure(); armature.head_pin.ensure();
             boxxy.preAlign();

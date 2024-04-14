@@ -191,7 +191,7 @@ function updateGlobalBoneLists() {
     }
 }
 
-function makePinsList(pinSize, into = scene, armature, align = false, makeMeshHint= false) {
+function makePinsList(pinSize, into = scene, armature, align = false, domakemesh= false) {
     armature.pinsList = [];
     armature.targetsMeshList = [];
     let previouslySelected = selectedPin;
@@ -230,16 +230,16 @@ function makePinsList(pinSize, into = scene, armature, align = false, makeMeshHi
         if (b.getIKPin() != null) {
             let ikpin = b.getIKPin();
             
-            if (ikpin.targetNode.toTrack == null || makeMeshHint) {
+            if (ikpin.targetNode.toTrack == null || domakemesh) {
                 ikpin.hintMesh = makeMeshHint(ikpin);
                 ikpin.targetNode.setTracked(ikpin.hintMesh);
                 ikpin.alignToBone();
             } 
             if(align) {
                 ikpin.alignToBone();
-            } else {
+            } //else {
                 ikpin.ensure();
-            }
+            //}
             
             armature.pinsList.push(ikpin);
             armature.targetsMeshList.push(ikpin.targetNode.toTrack);
