@@ -191,7 +191,7 @@ function updateGlobalBoneLists() {
     }
 }
 
-function makePinsList(pinSize, into = scene, armature, align = false) {
+function makePinsList(pinSize, into = scene, armature, align = false, makeMeshHint= false) {
     armature.pinsList = [];
     armature.targetsMeshList = [];
     let previouslySelected = selectedPin;
@@ -230,7 +230,7 @@ function makePinsList(pinSize, into = scene, armature, align = false) {
         if (b.getIKPin() != null) {
             let ikpin = b.getIKPin();
             
-            if (ikpin.targetNode.toTrack == null) {
+            if (ikpin.targetNode.toTrack == null || makeMeshHint) {
                 ikpin.hintMesh = makeMeshHint(ikpin);
                 ikpin.targetNode.setTracked(ikpin.hintMesh);
                 ikpin.alignToBone();
@@ -272,10 +272,10 @@ async function doSolve(bone = null, interacted = false, preSolveCallback = null,
         if (a.ikReady) {
             if (autoSolve) {
                 /*null indicates we're solving the whole armature*/
-                await a.solve(null, undefined, 0, null, window.frameCount);
+                await a.solve(null, undefined, 0, null, undefined, undefined, window.frameCount);
             }
             else if (interacted && interactionSolve) {
-                await a.solve(bone, undefined, 0, null, window.frameCount);// callbacks);
+                await a.solve(bone, undefined, 0, null, undefined, undefined, window.frameCount);// callbacks);
             } else if (interacted && !interactionSolve) {
                 //this is just to display the amount of pain a bone is in when interacting without solving.
                 await a.noOp(bone);
@@ -318,7 +318,7 @@ function initControls(THREE, renderer) {
     window.THREE = THREE;
     raycaster = new THREE.Raycaster();
     raycaster.layers.enable(window.boneLayer);
-    mouse = new THREE.Vector2();
+    window.mouse = new THREE.Vector2();
     orbitControls = new OrbitControls(camera, renderer.domElement);
     orbitControls.startTarget = orbitControls.target.clone();
     orbitControls.targetOffset = new THREE.Vector3(0,0,0);

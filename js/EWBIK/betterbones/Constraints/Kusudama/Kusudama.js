@@ -10,6 +10,7 @@ import { Constraint, Limiting, LimitingReturnful } from "../Constraint.js";
 import { kusudamaFragShader, kusudamaVertShader } from "./shaders.js";
 import { LimitCone } from "./LimitCone.js";
 import { Saveable } from "../../../util/loader/saveable.js";
+import { LayerGroup } from "../Constraint.js";
 
 export class Kusudama extends Limiting {
 
@@ -70,6 +71,8 @@ export class Kusudama extends Limiting {
             }*/
             this.initKusuNodes()
         }
+        this.layers = new LayerGroup(this, (val)=>this.layerSet(val), 
+            (val)=>this.layersEnable(val), (val)=>this.layersDisable(val));
     }
 
     initKusuNodes() {
@@ -162,21 +165,22 @@ export class Kusudama extends Limiting {
         this.updateViolationHint();
     }
 
+    layerSet(val) {
+        this.shell.layers.set(val);
+    }
+
+    layersEnable(val) {
+        this.shell.layers.enable(val);
+    }
+
+    layersDisable(val) {
+        this.shell.layers.disable(val);
+    }
+
     inBoundsDisplay = [1.0];
     inBoundsConstrain = [1.0];
     updateViolationHint() {
-        /*this.__frame_calc_internal.adoptLocalValuesFromObject3D(this.forBone);
-        this.__bone_calc_internal.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
-        this.tempHeading.set(this.__bone_calc_internal.getGlobalMBasis().getYHeading());
-        this.frameCanonical.setVecToLocalOf(this.tempHeading, this.tempHeading);
         
-        let result = this.pointInLimits(this.tempHeading, this.inBoundsDisplay);*/
-        
-        /*this.desiredTracer.position.x = result.x; //this.tempHeading.x;
-        this.desiredTracer.position.y = result.y; //this.tempHeading.y;
-        this.desiredTracer.position.z = result.z; //this.tempHeading.z;
-        this.desiredTracer.layers.set(1);
-        this.desiredTracer.updateMatrix();*/
         if(this.getViolationStatus()) 
             this.shell.material.uniforms.shellColor.value = Kusudama.violationColor;
         else

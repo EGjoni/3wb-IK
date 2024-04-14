@@ -373,6 +373,7 @@ export class EWBIK extends Saveable {
         if (this.pendingSolve != null) {
             const doSolve = this.pendingSolve;
             this.pendingSolve = null;
+            if(this.shadowSkel == null) this.regenerateShadowSkeleton(true);
             if (bone == null || this.shadowSkel.isSolvable(bone)) {
                 if(frameNumber > this.lastFrameNumber) {
                     this.activeSolve = doSolve(this, bone, literal, iterations, stabilizingPasses, onComplete, debug_callbacks);                    

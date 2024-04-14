@@ -176,16 +176,21 @@ export class ShadowSkeleton {
                 this.lastRequested = null;
             } else {
                 const idx = this.boneWorkingBoneIndexMap.get(solveUntil);
-                if(literal) {
-                    this.lastRequestedEndIndex = idx;
-                    this.lastLiteral = true;
+                if(idx == null) {
+                    this.lastRequestedEndIndex = this.traversalArray.length - 1;
+                    this.lastRequested = -1; 
                 } else {
-                    const wb = this.traversalArray[idx];
-                    const root = wb.getRootSegment().wb_segmentRoot;
-                    this.lastRequestedEndIndex = this.boneWorkingBoneIndexMap.get(root.forBone);
-                    this.lastLiteral = false;
+                    if(literal) {
+                        this.lastRequestedEndIndex = idx;
+                        this.lastLiteral = true;
+                    } else {
+                        const wb = this.traversalArray[idx];
+                        const root = wb.getRootSegment().wb_segmentRoot;
+                        this.lastRequestedEndIndex = this.boneWorkingBoneIndexMap.get(root.forBone);
+                        this.lastLiteral = false;
+                    }
+                    this.lastRequested = solveUntil;
                 }
-                this.lastRequested = solveUntil;
             }
         }
         return this.lastRequestedEndIndex;

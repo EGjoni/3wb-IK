@@ -322,11 +322,15 @@ export class Boxxy {
         let leftTravelDist = 1/leftProposal.launch_transform.origin().dist(leftProposal.proposed_foot_transform.origin());
         let rightProposalBalanceScore = this.penalizeProposalByBalance(rightProposal, this.projectionObj.firstFootVec_proj);
         let rightTravelDist = 1/rightProposal.launch_transform.origin().dist(rightProposal.proposed_foot_transform.origin());
+        let leftCrossPenalty = this.penalizeProposalByDirection(leftProposal, this.left_foot);
+        let rightCrossPenalty = this.penalizeProposalByDirection(rightProposal, this.right_foot);
+
         let leftfatiguedelta = Math.max(0, leftProposal.fatigue - rightProposal.fatigue)+1;
         let rightfatiguedelta = Math.max(0, rightProposal.fatigue - leftProposal.fatigue)+1;
+
         let normedScores = this.normProposalScores(
-            ((this.princess_power*leftDiscomfort)+(leftProposalBalanceScore+1))*leftfatiguedelta,
-            ((this.princess_power*rightDiscomfort)+(rightProposalBalanceScore+1))*rightfatiguedelta);
+            ((this.princess_power*leftDiscomfort)+(leftProposalBalanceScore+1))*leftfatiguedelta*leftCrossPenalty,
+            ((this.princess_power*rightDiscomfort)+(rightProposalBalanceScore+1))*rightfatiguedelta*rightCrossPenalty);
         /*let normedScores = this.normProposalScores(
             leftTravelDist,
             rightTravelDist);*/
@@ -383,6 +387,15 @@ export class Boxxy {
         let thresh = Math.abs(this.balanceThreshold == 0 ? 0.000001 : this.balanceThreshold); //if it has that tight a threshold, it has no business on two legs.
         let balanceDist = balancePoint.dist(hipPos); //we've already projected onto the hip position on a plane perpendicular to the direction of gravity so this is fine
         return Math.max(0, (balanceDist/thresh)-1);
+    }
+
+    penalizeProposalByDirection(proposal, forfoot) {
+        let hipOnGround = this.projectionObj.hipOnGround;
+        let footOnGround = proposal.proposed_foot_transform.origin(); 
+        let footHeading = this.tempv.set(footOnGround).sub(hipOnGround);
+        let dotted = -1*footHeading.dot(forfoot.attachHeading);
+        dotted = Math.max(dotted, 0) + 1; 
+        return dotted * dotted * dotted;
     }
 
     /**returns true if the projections of both feet are planted equidistant and colinear to the projected center of mass, and the velocity is low enough that this will likely continue to be the case*/

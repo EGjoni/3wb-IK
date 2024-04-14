@@ -8,6 +8,7 @@ import { generateUUID } from "../../../util/uuid.js";
 const { Constraint, Limiting} = await import( "../Constraint.js");
 import { Saveable } from '../../../util/loader/saveable.js';
 import { Vector3 } from '../../../../three/three.module.js';
+import { LayerGroup } from '../Constraint.js';
 
 
 export class Twist extends Limiting {
@@ -83,7 +84,18 @@ export class Twist extends Limiting {
         this.zhintmat_ouch = new THREE.LineBasicMaterial({ color: new THREE.Color(0.9,0,0.3), linewidth: 3});
         this.zhint = new THREE.Line(this.zhintgeo, this.zhintmat_safe);
         this.displayGroup.add(this.zhint);
-        this.layers = new LayerGroup(this);      
+        this.layers = new LayerGroup(this, (val) => {
+            this.display.layers.set(val);
+            this.zhint.layers.set(val);
+        }, 
+        (val) => {
+            this.display.layers.enable(val);
+            this.zhint.layers.enable(val);
+        },
+        (val) => {
+            this.display.layers.disable(val);
+            this.zhint.layers.disable(val);
+        });      
         
         if(!Constraint.loadMode) {
             this.initTwistNodes();
@@ -369,25 +381,6 @@ export class Twist extends Limiting {
     }
     get visible() {
         return this.displayGroup.visible;
-    }
-}
-
-
-class LayerGroup {
-    constructor(forG) {
-        this.forG = forG;
-    }
-    set(val) {
-        this.forG.display.layers.set(val);
-        this.forG.zhint.layers.set(val);
-    }
-    enable(val) {
-        this.forG.display.layers.enable(val);
-        this.forG.zhint.layers.enable(val);
-    }
-    disable(val) {
-        this.forG.display.layers.disable(val);
-        this.forG.zhint.layers.disable(val);
     }
 }
 

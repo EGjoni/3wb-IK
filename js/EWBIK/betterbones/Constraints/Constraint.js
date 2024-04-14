@@ -620,6 +620,8 @@ export class ConstraintStack extends LimitingReturnful {
         }
         if(!Saveable.loadMode)
             this.initNodes();
+        this.layers = new LayerGroup(this, (val)=>this.layerSet(val), 
+            (val)=>this.layersEnable(val), (val)=>this.layersDisable(val));
     }
 
     initNodes() {
@@ -716,6 +718,22 @@ export class ConstraintStack extends LimitingReturnful {
     updateDisplay() {
         for(let c of this.allconstraints)
             c.updateDisplay();
+    }
+    
+    layerSet(val) {
+        for(let c of this.allconstraints) {
+            c.layers.set(val);
+        }
+    }
+    layersEnable(val) {
+        for(let c of this.allconstraints) {
+            c.layers.enable(val);
+        }
+    }
+    layersDisable(val) {
+        for(let c of this.allconstraints) {
+            c.layers.disable(val);
+        }
     }
 
     _visible = true;
@@ -1017,3 +1035,11 @@ export class ConstraintResult {
 }
 
 
+export class LayerGroup {
+    constructor(forG, onSet, onEnable, onDisable) {
+        this.forG = forG;
+        this.set = onSet;
+        this.onEnable = onEnable;
+        this.onDisable = onDisable;
+    }
+}

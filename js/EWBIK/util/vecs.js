@@ -308,6 +308,13 @@ export class Vec3 {
         this.dataBuffer[baseX+2] * v.dataBuffer[vbaseX+2];
     }
 
+    /**returns the projection of this vector onto the input vector*/
+    projectedOn(v, storeIn) {
+        let vmag = v.mag();
+        let dot = this.dot(v);
+        return storeIn.set(v).div(vmag).mult(dot/vmag);
+    }
+
     /**component wise divide this vec3 by the given vec3 
      * @param {Vec3} v vec3 to divide by
      * @return {Vec3} this vec3 for chaining

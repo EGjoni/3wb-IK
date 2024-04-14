@@ -76,6 +76,8 @@ export class ShadowNode extends IKNode{
         let curr = this;
         let prevCurr = this;
         while(curr != null && curr != mimicUntil) {
+            if(isNaN(curr.toTrack.quaternion.w)) 
+                curr.toTrack.quaternion.identity();
             curr.localMBasis.setFromObj3d(curr.toTrack);
             if(!markDescendantsDirty)
                 curr._exclusiveMarkDirty();

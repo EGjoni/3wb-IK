@@ -103,7 +103,7 @@ export class IKPin extends Saveable{
             this.target_threejs = this.targetNode.toTrack;
             this.hintMesh = this.target_threejs;
         }
-        this.targetNode.registerTrackChangeListener(this.onTargetNodeTrackChange);
+        this.targetNode.registerTrackChangeListener((nl)=>this.onTargetNodeTrackChange(nl));
         this.enabled = !disabled;
         this.forBone.setIKPin(this);
     }

@@ -10,6 +10,8 @@ import {
     Matrix4,
     Mesh,
     MeshBasicMaterial,
+    MeshLambertMaterial,
+    MeshStandardMaterial,
     Object3D,
     OctahedronGeometry,
     PlaneGeometry,
@@ -838,7 +840,7 @@ class TransformControlsGizmo extends Object3D {
 
         // shared materials
 
-        const gizmoMaterial = new MeshBasicMaterial({
+        const gizmoMaterial = new MeshStandardMaterial({
             depthTest: false,
             depthWrite: false,
             fog: false,
@@ -865,17 +867,21 @@ class TransformControlsGizmo extends Object3D {
 
         const matRed = gizmoMaterial.clone();
         matRed.color.setHex(0xFF0000);
+        matRed.emissive.setHex(0xCC3030);
         matRed.side = DoubleSide;
 
         const matRedArrow = gizmoMaterial.clone();
         matRedArrow.color.setHex(0xCC3030);
+        matRedArrow.emissive.setHex(0xCC3030);
 
         const matGreen = gizmoMaterial.clone();
         matGreen.color.setHex(0x00FF00);
+        matGreen.emissive.setHex(0x00FF00);
         matGreen.side = DoubleSide;
 
         const matGreenArrow = gizmoMaterial.clone();
         matGreenArrow.color.setHex(0x30CC09);
+        matGreenArrow.emissive.setHex(0x30CC09);
 
         const matBlue = gizmoMaterial.clone();
         matBlue.color.setHex(0x0000FF);
@@ -898,11 +904,13 @@ class TransformControlsGizmo extends Object3D {
         matBlueTransparent.opacity = 0.5;
 
         const matWhiteTransparent = gizmoMaterial.clone();
-        matWhiteTransparent.opacity = 0.25;
+        matWhiteTransparent.opacity = 0.45;
+        matWhiteTransparent.emissive.setHex(0xffffff);
 
         const matYellowTransparent = gizmoMaterial.clone();
         matYellowTransparent.color.setHex(0xFFD880);
-        matYellowTransparent.opacity = 0.5;
+        matYellowTransparent.emissive.setHex(0xFFFF80);
+        matYellowTransparent.opacity = 0.7;
 
         const matYellow = gizmoMaterial.clone();
         matYellow.color.setHex(0xFFD880);
@@ -928,7 +936,7 @@ class TransformControlsGizmo extends Object3D {
         lineGeometry2.translate(0, 0.25, 0);
 
         function CircleGeometry(radius) {
-            const geometry = new TorusGeometry(0.5, 0.005, 5, 50, 3 * Math.PI / 4);//new RingGeometry(radius + 0.01 , radius -0.01, 24, 24, 0.2, Math.PI / 2);            
+            const geometry = new TorusGeometry(0.5, 0.01, 5, 50, 3 * Math.PI / 4);//new RingGeometry(radius + 0.01 , radius -0.01, 24, 24, 0.2, Math.PI / 2);            
             geometry.rotateY(-Math.PI / 2);
             geometry.rotateX(Math.PI / 2);
             //geometry.rotateY(Math.PI / 2);

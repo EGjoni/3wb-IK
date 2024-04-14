@@ -534,14 +534,14 @@ ${wb.forBone.toString()}
                     if (wb.forBone == window.contextBone) {
                         let solveString = getdbgstring(wb);
                         //console.log(solveString);
-                        window.intersectsDisplay.innerText = solveString;
+                        //window.intersectsDisplay.innerText = solveString;
                     }
                 },
                 afterIteration: (wb) => {
                     if (wb.forBone == window.contextBone) {
                         let solveString = getdbgstring(wb);
                         //console.log(solveString);
-                        window.intersectsDisplay.innerText = `${solveString}`;
+                        //window.intersectsDisplay.innerText = `${solveString}`;
                     }
                 },
             });
@@ -626,7 +626,7 @@ ${wb.forBone.toString()}
                         let solveString = getdbgstring(wb);
                         wb.lastReturnfulResult.fullRotation.toConsole();
                         wb.lastReturnfulResult.fullRotation.length();
-                        window.intersectsDisplay.innerText = `${solveString}`;
+                        //window.intersectsDisplay.innerText = `${solveString}`;
                     }
                 }
             });
@@ -1223,21 +1223,21 @@ window.updateInfoPanel = async function (item) {
     let constraintStack = null;
 
     if (item instanceof THREE.Bone) {
-        intersectsDisplay.innerText = `
+        /*intersectsDisplay.innerText = `
         Bone: ${item.ikd}
         Stiffnes: ${item?.getStiffness()}
         Pain: ${item.parentArmature?.boneToStateMap?.get(item)?.readBonePain()?.toFixed(4)}
         Skeleton Total Pain: ${item.parentArmature?.shadowSkel?.lastTotalPain?.toFixed(4)}
         Skeleton Max Pain: ${item.parentArmature?.shadowSkel?.maxPain?.toFixed(4)}
-        `;
+        `;*/
         bone = item;
         pin = bone.getIKPin();
         if (bone.getConstraint() != null) constraintStack = bone.getConstraint();
         armature = bone.parentArmature;
     } else if (item instanceof IKPin) {
-        intersectsDisplay.innerText = `
+        /*intersectsDisplay.innerText = `
         Name: ${item.ikd}
-        `;
+        `;*/
         pin = item;
         bone = pin.forBone;
         if (bone.getConstraint() != null) constraintStack = bone.getConstraint();

@@ -65,13 +65,16 @@ export class Foot {
         this.foot.position.y = footPosition.y;
         this.foot.position.z = footPosition.z;
         this.foot.visible = false;
-        this.attachpoint = this.pool.new_Vec3(attachpoint.x, attachpoint.y, attachpoint.z)
+        
         this.thisFootPos.set(footPosition);
         this.foot.updateMatrix();
         this.goal.add(this.goalmesh);
         this.goal.position.copy(this.foot.position);
         this.goalmesh.position.y -= 0.01;
         let hipPos = this.hips.hips.position;//.origin();
+        this.attachpoint = this.pool.new_Vec3(attachpoint.x, attachpoint.y, attachpoint.z)
+        this.attachHeading = this.pool.new_Vec3(0,0,0);
+        this.attachHeading.set(this.attachpoint).sub(this.tempv.readFromTHREE(hipPos)).normalize();
         this.lineGeometry.setFromPoints([
             new THREE.Vector3(
                 hipPos.x+this.attachpoint.x, 
@@ -95,6 +98,7 @@ export class Foot {
         this.tempZVec = this.pool.new_Vec3(0,0,1);
         this.thisFootPos = this.pool.new_Vec3(0,0,0);
         this.otherFootPos = this.pool.new_Vec3(0,0,0);
+        
         this.projectionObj = new ProjectionsObj(
             this.thisFootPos, 
             this.otherFootPos,
