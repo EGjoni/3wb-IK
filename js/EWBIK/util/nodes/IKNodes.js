@@ -75,7 +75,7 @@ export class IKNode extends Saveable {
         return this;
     }
 
-    constructor(globalMBasis, parent, ikd = 'IKNode-' + (IKNode.totalNodes++), pool = noPool) {
+    constructor(globalMBasis, parent, ikd = 'IKNode-' + (IKNode.totalNodes++), pool = globalVecPool) {
         super(ikd, new.target.name, new.target.totalNodes, pool);
         if(!Saveable.loadMode) {
             if (globalMBasis == null) {
@@ -132,6 +132,30 @@ export class IKNode extends Saveable {
         return result;
     }
 
+    alignGlobalsTo(inputGlobalMBasis) {
+        this.updateGlobal();
+        if (this.getParentAxes() != null) {
+            this.getGlobalMBasis().adoptValues(inputGlobalMBasis);
+            this.getParentAxes().getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
+        } else {
+            this.getLocalMBasis().adoptValues(inputGlobalMBasis);
+        }
+        this.markDirty();
+        return this;
+    }
+
+    setGlobalOrientationTo(rotation) {
+        this.updateGlobal();
+        if (this.getParentAxes() != null) {
+            this.getGlobalMBasis().rotateTo(rotation);
+            this.getParentAxes().getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
+        } else {
+            this.getLocalMBasis().rotateTo(rotation);
+        }
+        this.markDirty();
+        return this;
+    }
+
     /**updates the local values of this transform such that its worldspace values match
      * the worldspace values of the provided object 3d
      */
@@ -168,12 +192,7 @@ export class IKNode extends Saveable {
     }
 
     adoptGlobalValuesFromIKNode(node, updateLocal = true) {
-        this.globalMBasis.adoptValues(node);
-        if (this.parent != null && updateLocal) {
-            this.parent.setTransformToLocalOf(this.globalMBasis, this.localMBasis);
-        }
-        this.markDirty();
-        return this;
+        return this.adoptGlobalValuesFromIKTransform(node.getGlobalMBasis(), update);
     }
 
     adoptGlobalValuesFromIKTransform(transform, updateLocal = true) {
@@ -211,9 +230,9 @@ export class IKNode extends Saveable {
     }
 
 
-    origin() {
+    origin(storeIn) {
         this.updateGlobal();
-        return this.pool.new_Vec3().set(this.getGlobalMBasis().getOrigin());
+        return this.getGlobalMBasis().origin(storeIn);
     }
 
     getGlobalclone() {
@@ -265,29 +284,7 @@ export class IKNode extends Saveable {
         node.markDirty();
     }
 
-    alignGlobalsTo(inputGlobalMBasis) {
-        this.updateGlobal();
-        if (this.getParentAxes() != null) {
-            this.getGlobalMBasis().adoptValues(inputGlobalMBasis);
-            this.getParentAxes().getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
-        } else {
-            this.getLocalMBasis().adoptValues(inputGlobalMBasis);
-        }
-        this.markDirty();
-        return this;
-    }
-
-    setGlobalOrientationTo(rotation) {
-        this.updateGlobal();
-        if (this.getParentAxes() != null) {
-            this.getGlobalMBasis().rotateTo(rotation);
-            this.getParentAxes().getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
-        } else {
-            this.getLocalMBasis().rotateTo(rotation);
-        }
-        this.markDirty();
-        return this;
-    }
+    
 
     setLocalOrientationTo(rotation) {
         this.getLocalMBasis().rotateTo(rotation);
@@ -416,7 +413,7 @@ export class IKNode extends Saveable {
     translateByGlobal(translate) {
         if (this.getParentAxes() !== null) {
             this.updateGlobal();
-            this.translateTo(translate.addClone(this.origin()));
+            this.translateTo(this.origin().add(translate));
         } else {
             this.getLocalMBasis().translateBy(translate);
         }
@@ -556,7 +553,7 @@ export class IKNode extends Saveable {
 
         return (
             this.getGlobalMBasis().rotation.equals(ax.globalMBasis.rotation) &&
-            this.getGlobalMBasis().getOrigin().equals(ax.origin_)
+            this.getGlobalMBasis().origin().equals(ax.origin_)
         );
     }
 
@@ -745,7 +742,7 @@ export class TrackingNode extends IKNode {
      * 
      * @param {Object3D} toTrack 
      */
-    constructor(toTrack, ikd = 'TrackingNode-' + (TrackingNode.totalNodes++), forceOrthoNormality = true, pool = noPool) {
+    constructor(toTrack, ikd = 'TrackingNode-' + (TrackingNode.totalNodes++), forceOrthoNormality = true, pool = globalVecPool) {
         super(undefined, undefined, ikd, pool);
         this.toTrack = toTrack;
         

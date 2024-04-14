@@ -51,7 +51,7 @@ export class Kusudama extends Limiting {
         return req;
     }
 
-    constructor(forBone = null, visibilityCondition = undefined, ikd = 'Kusudama-' + (Kusudama.totalInstances++), pool = noPool) {
+    constructor(forBone = null, visibilityCondition = undefined, ikd = 'Kusudama-' + (Kusudama.totalInstances++), pool = globalVecPool) {
         let basis = new IKNode(undefined, undefined, undefined, pool)
         super(forBone, basis, ikd, pool);
         this.ikd = ikd;

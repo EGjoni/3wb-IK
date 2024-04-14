@@ -7,7 +7,7 @@ console.log("hmmm?");
 import { IKPin } from "./EWBIK/betterbones/IKpin.js";
 import { CallbacksSequence } from "./EWBIK/CallbacksSequence.js"
 import { Bone, Vector3 } from "three";
-import { NoPool, Vec3, Vec3Pool, any_Vec3 } from "./EWBIK/util/vecs.js";
+import {  Vec3, Vec3Pool, any_Vec3 } from "./EWBIK/util/vecs.js";
 import { Rot } from "./EWBIK/util/Rot.js";
 import { ConvexGeometry } from "convexGeo";
 import { ChainRots, BoneRots, RayDrawer } from "./EWBIK/util/debugViz/debugViz.js";

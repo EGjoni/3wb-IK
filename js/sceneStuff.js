@@ -234,15 +234,13 @@ function makePinsList(pinSize, into = scene, armature, align = false) {
                 ikpin.hintMesh = makeMeshHint(ikpin);
                 ikpin.targetNode.setTracked(ikpin.hintMesh);
                 ikpin.alignToBone();
+            } 
+            if(align) {
+                ikpin.alignToBone();
             } else {
-                if(ikpin.hintMesh == null) {
-                    ikpin.hintMesh = makeMeshHint(ikpin);
-                    ikpin.targetNode.setTracked(ikpin.hintMesh);
-                }
-                if(align) {
-                    ikpin.alignToBone();
-                }
+                ikpin.ensure();
             }
+            
             armature.pinsList.push(ikpin);
             armature.targetsMeshList.push(ikpin.targetNode.toTrack);
         }
@@ -322,12 +320,14 @@ function initControls(THREE, renderer) {
     raycaster.layers.enable(window.boneLayer);
     mouse = new THREE.Vector2();
     orbitControls = new OrbitControls(camera, renderer.domElement);
+    orbitControls.startTarget = orbitControls.target.clone();
+    orbitControls.targetOffset = new THREE.Vector3(0,0,0);
     orbitControls.target.y = 1;
-    orbitControls.update();
+    //orbitControls.update();
     window.orbitControls = orbitControls;
 
     //camera.rotateX(0.65);
-    orbitControls.addEventListener('change', render);
+    //orbitControls.addEventListener('change', render);
 
     boneCtrls = new TransformControls(camera, renderer.domElement);
     boneCtrls.space = 'local';

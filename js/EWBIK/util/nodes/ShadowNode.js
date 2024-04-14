@@ -29,8 +29,9 @@ export class ShadowNode extends IKNode{
     static totalShadowNodes = 0;
     static ShadowNodeRoot = null;
     id = 'ShadowNode-' + ShadowNode.totalShadowNodes;
+    __trackChangeListeners = null;
 
-    constructor(toTrack, ikd, pool = noPool) {
+    constructor(toTrack, ikd, pool = globalVecPool) {
         if(toTrack.trackedBy != null) {
             throw new Error(`Designated Object3d is already tracked by ${toTrack.trackedBy.ikd}`);
         }
@@ -100,6 +101,7 @@ export class ShadowNode extends IKNode{
      * @param {Object3D} obj3d
     */
     setTracked(obj3d) {
+        this.fireTrackChangeListeners(obj3d);
         this._toTrack.trackedBy = null;
         this._toTrack = obj3d;
         obj3d.trackedBy = this;
@@ -127,6 +129,33 @@ export class ShadowNode extends IKNode{
         return this;
     }
 
+    fireTrackChangeListeners(willTrack) {
+        if(this.__trackChangeListeners == null || willTrack == this.toTrack) return;
+        for(let l of this.__trackChangeListeners) {
+            l(this, this.toTrack, willTrack);
+        }
+    }
+
+
+    /**register a callback to be notified if this ShadowNode changes the THREE.Object3D it purports to track
+     * the callback will be provided with a reference to this node, the tracked object prior to untracking, and the new object to be tracked.
+     * In that order. THe change will not actually occur until after all callbacks have fired, so don't try to use it to intervene.
+    */
+    registerTrackChangeListener(newListener) {
+        if(this.__trackChangeListeners == null) {
+            this.__trackChangeListeners = new Set();
+        }
+        this.__trackChangeListeners.add(newListener);
+        return this;
+    }
+
+    removeTrackChangeListener(newListener) {
+        if(this.__trackChangeListeners != null) {
+            this.__trackChangeListeners.remove(newListener);
+        }
+        return this;
+    }
+
     /**
      * temporarily adopts the global values of whatever this ShadowNode is tracking without bothering to 
      * mimic the ancestors. This node will be marked as non-dirty after the update
@@ -144,10 +173,10 @@ export class ShadowNode extends IKNode{
      */
     project(linear = false) {
         //yeah I know "project" isn't the best name but, the next best option was kageShibariNoJutsu() so...
-        if(isNaN(this.localMBasis.translate.x) || isNaN(this.localMBasis.rotation.x) || isNaN(this.localMBasis.scale.x)) {
+        /*if(isNaN(this.localMBasis.translate.x) || isNaN(this.localMBasis.rotation.x) || isNaN(this.localMBasis.scale.x)) {
             alert("NaN detected, check the debugger")
             throw new Error("Projecting NaNs is bad.");
-        }
+        }*/
         this.toTrack.position.x = this.localMBasis.translate.x;
         this.toTrack.position.y = this.localMBasis.translate.y;
         this.toTrack.position.z = this.localMBasis.translate.z;

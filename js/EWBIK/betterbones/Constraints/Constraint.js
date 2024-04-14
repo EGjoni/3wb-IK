@@ -26,6 +26,8 @@ export class Constraint extends Saveable {
     tempOutRot = Rot.IDENTITY.clone();
     enabled = true;
     _visible = true;
+    cachedLeeways = {};
+    cachedGiveups = {};
 
     /**@return {JSON} a json object by which this constraint may later be loaded*/
     toJSON() {
@@ -138,6 +140,30 @@ export class Constraint extends Saveable {
         this.inBasis = null;
     }
 
+    /**sets the cached per iteration leeway to the value requested. 
+     * returns true if the cache needs updating, false otherwise. 
+     * Cache is expectd to be updating by classes extending this one.*/
+    setPerIterationLeewayCache(iterations) {
+        if(this.cachedLeeways[iterations] == null || this.cachedGiveups[iterations] == null) return true;
+        else {
+            this.giveup = this.cachedGiveups[iterations];
+            this.leewayCache = this.cachedLeeways[iterations];
+            return false;
+        }
+    }
+
+    /**invalidates the leeway cache, indicating this constraint needs to recompute them the next time it's used*/
+    invalidateCache() {
+        if(this.leewayCache == null) return; //indicates cache has already been invalidated
+        this.giveup = null;
+        this.leewayCache = null;
+        for(let [i, r] of Object.entries(this.cachedGiveups)) {
+            this.cachedGiveups[i] = null;
+        }
+        for(let [i, r] of Object.entries(this.cachedLeeways)) {
+            this.cachedLeeways[i] = null;
+        }
+    }
     
 
     remove() {
@@ -403,7 +429,10 @@ export class Returnful extends Constraint {
       */
      setPreferenceLeeway (radians = this.baseRadians) {
          this.lastCalled = 0;
-         this.baseRadians = radians; 
+         this.baseRadians = radians;
+         let newLeeway = this.painfulness * radians;
+         if(newLeeway != this.preferenceLeeway)
+            this.invalidateCache();
          this.preferenceLeeway = this.painfulness * radians;
      }
  
@@ -427,15 +456,18 @@ export class Returnful extends Constraint {
          return this.stockholmRate;
      }
      
-     updatePerIterationLeewayCache(iterations) {
-         this.giveup = Math.floor(iterations*this.stockholmRate);
-         this.leewayCache = new Array(Math.floor(this.giveup));
-         let max = this.preferenceLeeway;
-         for(let i = 0; i<this.giveup; i++) {
-             let t = 1-(i/this.giveup); 
-             let angle = max * t;
-             this.leewayCache[i] = Math.cos(angle*0.5);
-         }
+     setPerIterationLeewayCache(iterations) {
+        if(!super.setPerIterationLeewayCache(iterations)) return;
+        this.giveup = Math.floor(iterations*this.stockholmRate);
+        this.leewayCache = new Array(Math.floor(this.giveup));
+        let max = this.preferenceLeeway;
+        for(let i = 0; i<this.giveup; i++) {
+            let t = 1-(i/this.giveup); 
+            let angle = max * t;
+            this.leewayCache[i] = Math.cos(angle*0.5);
+        }
+        this.cachedLeeways[iterations] = this.leewayCache;
+        this.cachedGiveups[iterations] = this.giveup;
      }
      
      /**
@@ -518,10 +550,12 @@ export class LimitingReturnful extends Returnful {
 
 export class ConstraintStack extends LimitingReturnful {
     static totalInstances = -1;
+    preferenceLeeway = Math.PI*2;
+    stockholmRate = 1;
     allconstraints = new Set(); //all constraints
     returnfulled = new Set(); //only the constraints that extend Returnful
     limiting = new Set(); //only the constraints that orientation
-    giveup = 9999;
+    giveup = null;
 
 
 
@@ -584,8 +618,6 @@ export class ConstraintStack extends LimitingReturnful {
         if(this.forBone != null && this.parentConstraint == null) {
             this.forBone.setConstraint(this); 
         }
-        this.stockholmRate = null;
-        this.preferenceLeeway = Math.PI*2;
         if(!Saveable.loadMode)
             this.initNodes();
     }
@@ -727,7 +759,7 @@ export class ConstraintStack extends LimitingReturnful {
 
     /**
      * @param {Number} val specifies the maximum angle in radians that this constraint is allowed give pullback values of.
-     * this should be multiplied by the panfulness and used to calculate the pullback per iteration cache later
+     * this should be multiplied by the painfulness and used to calculate the pullback per iteration cache later
      */
 
     setPreferenceLeeway(radians = this.baseRadians) {
@@ -738,15 +770,17 @@ export class ConstraintStack extends LimitingReturnful {
             c.setPreferenceLeeway(this.getPreferenceLeeway()*(c.getPainfulness()));
         }
     }
+    
 
-    updatePerIterationLeewayCache(iterations) {
+    setPerIterationLeewayCache(iterations) {
+        //super.setPerIterationLeewayCache(iterations)
         this.giveup = Math.floor(this.stockholmRate  ? iterations*this.stockholmRate : iterations); 
         this.leewayCache = new Array(Math.floor(this.giveup));
         let max = this.preferenceLeeway;
 
         let maxChildGiveup = 0;
         for(let c of this.returnfulled) {
-            c.updatePerIterationLeewayCache(iterations);
+            c.setPerIterationLeewayCache(iterations);
             maxChildGiveup = Math.max(this.giveup, c.giveup);     
         }
         this.giveup = Math.min(this.giveup, maxChildGiveup);        
@@ -756,11 +790,13 @@ export class ConstraintStack extends LimitingReturnful {
             if(c.isEnabled());
             for(let i = 0; i<this.leewayCache.length; i++) {
                 let t = 1-(i/this.giveup); 
-                if(this.stockholmRate == null) t = 1;
+                if(this.stockholmRate == null || this.stockholmRate == 1) t = 1;
                 let angle = max * t;
                 this.leewayCache[i] = Math.min(Math.cos(angle*0.5), c.leewayCache[i] ?? 1);
             }
         }
+        this.cachedLeeways[iterations] = this.leewayCache;
+        this.cachedGiveups[iterations] = this.giveup;
     }
 
     getAcceptableRotation(currentState, currentBoneOrientation, desiredRotation, calledBy, cosHalfReturnfullness, angleReturnfullness) {
@@ -902,12 +938,12 @@ export class ConstraintResult {
     __raw_preCallDiscomfort = null;
     __raw_postCallDiscomfort = null;
     last_iteration = 0;
-    pool = noPool;
+    pool = globalVecPool;
     forConstraint = null;
     wasChecked = false;
 
-    constructor(forConstraint, pool = noPool) {
-        this.pool = noPool; 
+    constructor(forConstraint, pool = globalVecPool) {
+        this.pool = globalVecPool; 
         this.forConstraint = forConstraint;
     }
     reset(iteration) {

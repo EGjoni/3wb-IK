@@ -6,7 +6,7 @@ export class ShadowSkeleton {
     /**@type {[ShadowNode]}*/
     targetList = []; //a list of all active targets everywhere on the armature
     commonAncestor = null; //the ShadowNode that everything being solved for has in common (for efficiency when solving otherwise shallow things deep in the node hierarchy)
-
+    lastLiteral = false;
     /**
      * 
      * @param {EWBIK} parentArmature a reference to the vector pool this shadow skeleton should make use of for internal calculations
@@ -40,7 +40,7 @@ export class ShadowSkeleton {
      * just updates the pain info of each bone for visualization purposes*/
     noOp(fromBone, iterations, onComplete, callbacks = null) {
         this.alignSimAxesToBoneStates();
-        //this.pullBack(iterations, solveFrom, false, null);
+        //this.pullBack(iterations, solveUntil, false, null);
         const endOnIndex = this.getEndOnIndex();
         this.updateReturnfulnessDamps(iterations);
         this.accumulatingPain = 0;
@@ -74,16 +74,16 @@ export class ShadowSkeleton {
       * Set to 1 for maximum stability while following constraints. 
       * Set to higher than 1 for negligible benefit at considerable cost. 
       * Set to -1 to indicate constraints can be broken on the last iteration of a solver call
-      * @param solveFrom optional, if given, the solver will only solve for the segment the given bone is on (and any of its descendant segments
+      * @param solveUntil optional, if given, the solver will only solve to the segment the given bone is on (and any of its descendant segments
       * @param notifier a (potentially threaded) function to call every time the solver has updated the transforms for a given bone. 
       * Called once per solve, per bone. NOT once per iteration.
       */
 
-    solve(iterations, stabilizationPasses, solveFrom, onComplete, callbacks = null) {
+    solve(iterations, stabilizationPasses, solveUntil, literal = false, onComplete, callbacks = null) {
         //if(window.perfing) performance.mark("shadowSkelSolve start");
         this.alignSimAxesToBoneStates();
-        const endOnIndex = this.getEndOnIndex(solveFrom)
-        //this.pullBack(iterations, solveFrom, false, null);
+        const endOnIndex = this.getEndOnIndex(solveUntil, literal)
+        //this.pullBack(iterations, solveUntil, false, null);
         this.updateReturnfulnessDamps(iterations);
 
         for (let i = 0; i < iterations; i++) {
@@ -95,10 +95,10 @@ export class ShadowSkeleton {
         this.updateBoneStates(onComplete, callbacks);        
     }
 
-    pullBackAll(iterations, solveFrom, onComplete, callbacks = null, currentIteration) {
+    pullBackAll(iterations, solveUntil, literal, onComplete, callbacks = null, currentIteration) {
         if (this.traversalArray?.length == 0) return;
         this.alignSimAxesToBoneStates();
-        const endOnIndex = this.getEndOnIndex(solveFrom);
+        const endOnIndex = this.getEndOnIndex(solveUntil, literal);
         this.updateReturnfulnessDamps(iterations);
         this.accumulatingPain = 0;
         this.maxPain = 0;
@@ -120,7 +120,7 @@ export class ShadowSkeleton {
        * Set to 1 for maximum stability while following constraints. 
        * Set to higher than 1 for negligible benefit at considerable cost. 
        * Set to -1 to indicate constraints can be broken on the last iteration of a solver call
-       * @param solveFrom optional, if given, the solver will only solve for the segment the given bone is on (and any of its descendant segments
+       * @param solveUntil optional, if given, the solver will only solve for the segment the given bone is on (and any of its descendant segments
        * @param notifier a (potentially threaded) function to call every time the solver has updated the transforms for a given bone. 
        * Called once per solve, per bone. NOT once per iteration.
        */
@@ -163,23 +163,29 @@ export class ShadowSkeleton {
     }
 
     /**
-       * lazy lookup. Get the traversal array index for the root of the pinned segment the working bone corresponding to this bonestate resides on, 
+       * lazy lookup. Get the traversal array index for the root of the pinned segment the working bone corresponding to the input bonestate resides on, 
        * but only if it's different than the last one that was tracked.
-       * @param solveFrom
+       * @param solveUntil
+       * @param literal if true, will end on the literal bone (inclusive) instead of the chain start.
        * @return
        */
-    getEndOnIndex(solveFrom) {
-        if (solveFrom != this.lastRequested) {
-            if (solveFrom == null) {
+    getEndOnIndex(solveUntil, literal = false) {
+        if (solveUntil != this.lastRequested || this.lastLiteral == literal) {
+            if (solveUntil == null) {
                 this.lastRequestedEndIndex = this.traversalArray.length - 1;
                 this.lastRequested = null;
             } else {
-                console.log("new solve from: " + solveFrom.ikd);
-                const idx = this.boneWorkingBoneIndexMap.get(solveFrom);
-                const wb = this.traversalArray[idx];
-                const root = wb.getRootSegment().wb_segmentRoot;
-                this.lastRequestedEndIndex = this.boneWorkingBoneIndexMap.get(root.forBone);
-                this.lastRequested = solveFrom;
+                const idx = this.boneWorkingBoneIndexMap.get(solveUntil);
+                if(literal) {
+                    this.lastRequestedEndIndex = idx;
+                    this.lastLiteral = true;
+                } else {
+                    const wb = this.traversalArray[idx];
+                    const root = wb.getRootSegment().wb_segmentRoot;
+                    this.lastRequestedEndIndex = this.boneWorkingBoneIndexMap.get(root.forBone);
+                    this.lastLiteral = false;
+                }
+                this.lastRequested = solveUntil;
             }
         }
         return this.lastRequestedEndIndex;
@@ -198,13 +204,6 @@ export class ShadowSkeleton {
     }
 
 
-    /**wrapper for conditional debugging */
-    /*conditionalNotify(doNotify, notifier) {
-        if (doNotify) {
-            this.alignBoneStatesToSimAxes(notifier);
-        }
-    }*/
-
     alignSimAxesToBoneStates() {
         this.commonAncestor.tempAdoptTrackedGlobal();
         for(let t of this.targetList) {
@@ -220,25 +219,12 @@ export class ShadowSkeleton {
     }
 
     updateBoneStates(onComplete, callbacks) {
-        //if (notifier == null) {
         for (let i = 0; i < this.traversalArray.length; i++) {
             const wb = this.traversalArray[i];
-            //const bs = wb.forBone;
-            //const ts = bs.getFrameTransform();
-            //bs._setCurrentPain(wb.getOwnPain());
-            //wb.simLocalAxes.localMBasis.translate.toArray(ts.translation);
-            //wb.simLocalAxes.localMBasis.rotation.normalize();
-            //wb.simLocalAxes.localMBasis.rotation.toArray(ts.rotation);
             callbacks?.afterSolve(wb);
             if(onComplete)
                 onComplete(wb);
         }
-        /*} else {
-            for (let i = 0; i < this.traversalArray.length; i++) {
-                this.alignBone(this.traversalArray[i]);
-                notifier(this.traversalArray[i].forBone);
-            }
-        }*/
     }
 
     buildArmaturSegmentHierarchy() {
@@ -307,7 +293,7 @@ export class ShadowSkeleton {
     /**doesn't solve for anything, just updates the pain info of each bone for debugging*/
     debug_noOp(fromBone, iterations, onComplete, callbacks = null, ds) {
         this.alignSimAxesToBoneStates();
-        //this.pullBack(iterations, solveFrom, false, null);
+        //this.pullBack(iterations, solveUntil, false, null);
         const endOnIndex = this.getEndOnIndex();
         ds.endOnIndex = endOnIndex;
         this.updateReturnfulnessDamps(iterations);
@@ -351,18 +337,18 @@ export class ShadowSkeleton {
       * Set to 1 for maximum stability while following constraints. 
       * Set to higher than 1 for negligible benefit at considerable cost. 
       * Set to -1 to indicate constraints can be broken on the last iteration of a solver call
-      * @param solveFrom optional, if given, the solver will only solve for the segment the given bone is on (and any of its descendant segments
+      * @param solveUntil optional, if given, the solver will only solve for the segment the given bone is on (and any of its descendant segments
       * @param notifier a (potentially threaded) function to call every time the solver has updated the transforms for a given bone. 
       * Called once per solve, per bone. NOT once per iteration.
       * This can be used to take advantage of parallelism, so that you can update your Bone transforms while this is still writing into the skelState TransformState list
       */
 
-    debug_solve(iterations, stabilizationPasses, solveFrom, onComplete, callbacks = null, ds = this.debugState) {
+    debug_solve(iterations, stabilizationPasses, solveUntil, onComplete, callbacks = null, ds = this.debugState) {
         ds.completedSolve = false; ds.completedIteration=false;
         if (ds.currentStep == 0) {
             this.alignSimAxesToBoneStates();
         }
-        const endOnIndex = ds.endOnIndex == null ? this.getEndOnIndex(solveFrom) : ds.endOnIndex;
+        const endOnIndex = ds.endOnIndex == null ? this.getEndOnIndex(solveUntil) : ds.endOnIndex;
         ds.endOnIndex = endOnIndex;
         this.updateReturnfulnessDamps(iterations);
 
@@ -379,7 +365,7 @@ export class ShadowSkeleton {
        * Set to 1 for maximum stability while following constraints. 
        * Set to higher than 1 for negligible benefit at considerable cost. 
        * Set to -1 to indicate constraints can be broken on the last iteration of a solver call
-       * @param solveFrom optional, if given, the solver will only solve for the segment the given bone is on (and any of its descendant segments
+       * @param solveUntil optional, if given, the solver will only solve for the segment the given bone is on (and any of its descendant segments
        * @param notifier a (potentially threaded) function to call every time the solver has updated the transforms for a given bone. 
        * Called once per solve, per bone. NOT once per iteration.
        * This can be used to take advantage of parallelism, so that you can update your Bone transforms while this is still writing into the skelState TransformState list

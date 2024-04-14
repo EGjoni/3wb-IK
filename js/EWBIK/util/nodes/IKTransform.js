@@ -111,7 +111,7 @@ export class IKTransform extends Saveable {
      * @param {Ray or Vec3} y y direction heading or ray
      * @param {Ray or Vec3} z z direction heading or ray
      */
-    constructor(origin=null, x = null, y = null, z = null, ikd = 'IKTransform-'+(IKTransform.totalTransforms++), pool= noPool) {
+    constructor(origin=null, x = null, y = null, z = null, ikd = 'IKTransform-'+(IKTransform.totalTransforms++), pool= globalVecPool) {
         super(ikd, 'IKTransform', IKTransform.totalTransforms, pool);
         this.translate = this.pool.new_Vec3(0,0,0);
         this.scale = this.pool.new_Vec3(1,1,1);
@@ -535,10 +535,9 @@ export class IKTransform extends Saveable {
 		this.lazyRefresh();
 	}
 
-    getLocalOfVec(inVec) {
-        const result = inVec.clone();
-        this.setVecToLocalOf(inVec, result);
-        return result;  
+    getLocalOfVec(inVec, outVec = this.pool.any_Vec3()) {
+        this.setVecToLocalOf(inVec, outVec);
+        return outVec;  
     }
 
     getLocalOfRotation(inRot, outRot) {		
@@ -550,10 +549,12 @@ export class IKTransform extends Saveable {
 
     translateBy(vec) {
         this.translate.add(vec);
+        this.lazyRefresh();
     }
 
     translateTo(vec) {
         this.translate.set(vec);
+        this.lazyRefresh();
     }
 
     /**doesn't actually refresh, just indicates a need to.
@@ -632,8 +633,12 @@ export class IKTransform extends Saveable {
         this.state &= ~(IKTransform.raysDirty | IKTransform.headingsDirty);
     }
 
-    getOrigin() {
-        return this.translate;
+    /**
+     * 
+     * @returns a pooled vector with the values of this.translate. Optionally just recycles a vector you provide
+     */
+    origin(storeIn = this.pool.any_Vec3()) {
+        return storeIn.set(this.translate);
     }
 
     toString(headings = true) {

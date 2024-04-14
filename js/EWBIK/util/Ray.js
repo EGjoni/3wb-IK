@@ -1,9 +1,10 @@
 
+import { Vector3 } from "../../three/three.module.js";
 import { Vec3, Vec3Pool, any_Vec3} from "./vecs.js";
 
 export class Ray {
     
-    constructor(p1, p2, pool = noPool) {
+    constructor(p1, p2, pool = globalVecPool) {
         this.pool = pool;
         this.workingVector = this.pool.new_Vec3();
         this.p1 = this.pool.new_Vec3();
@@ -30,13 +31,8 @@ export class Ray {
         return 2;
     }
     
-    alignTo(target) {
-        this.p1.set(target.p1);
-        this.p2.set(target.p2);
-    }
-
-    heading() {
-        return this.setToHeading(this.workingVector);
+    heading(storeIn = this.pool.any_Vec3()) {
+        return this.setToHeading(storeIn);
     }
 
     setHeading(setTo) {
@@ -80,10 +76,14 @@ export class Ray {
     mag() {
         return this.heading().mag();
     }
+    magSq() {
+        return this.heading().magSq();
+    }
     setMag(newMag) {
         let dir = this.heading();
         dir.setMag(newMag);
         this.setHeading(dir);
+        return this;
     }
     scaledProjection(input) {
         this.workingVector.set(input);
@@ -95,15 +95,30 @@ export class Ray {
 
         return (this.workingVector.dot(heading) / (headingMag * workingVectorMag)) * (workingVectorMag / headingMag);
     }
+
+    /**interprets this ray as defining a plane facing the in direction of p2-p1. Finds the projection of the given vector onto that plane*/
+    planeProject(v, result = this.pool.any_Vec3()) {
+        let N = this.workingVector.set(this.p2).sub(this.p1);
+        let dotVN = (v.x-this.p1.x) * N.x + (v.y-this.p1.y) * N.y + (v.z-this.p1.z) * N.z;
+        // Magnitude (length) of N, squared, to avoid taking a square root
+        let magN2 = N.magSq();
+        // No need to normalize N due to this being a ratio
+        let dist = dotVN / magN2;
+        result.set(v).sub(N.mult(dist));
+        return result;
+    }
+
     div(divisor) {
         this.p2.sub(this.p1);
         this.p2.div(divisor);
         this.p2.add(this.p1);
+        return this;
     }
     mult(scalar) {
         this.p2.sub(this.p1);
         this.p2.mult(scalar);
         this.p2.add(this.p1);
+        return this;
     }
     getMultipledBy(scalar) {
         let result = this.heading();
@@ -129,6 +144,7 @@ export class Ray {
         this.p2.add(this.workingVector);
         this.workingVector.mult(-1);
         this.p1.add(this.workingVector);
+        return this;
     }
 
     intersectsPlane(ta, tb, tc, pool) {
@@ -179,6 +195,13 @@ export class Ray {
 		return result;
 	}
 
+    /**like closestPointToRay3D, but constrains the result to be on the ray */
+    closestPointToSegment3D(r, result=any_Vec3(0,0,0)) {
+		this.closestPointToRay3D(r, result); 
+        result.bound(r.p1, r.p2);
+		return result;
+	}
+
 
 
 	/**
@@ -226,13 +249,18 @@ export class Ray {
         let temp = this.p1;
         this.p1 = this.p2;
         this.p2 = temp;
+        return this;
     }
     
-    pointWith(r) {
+    /**negates (or doesn't negate) this ray so that its heading had a positive dot product with the heading of the provided vector*/
+    pointWithRay(r) {
         if (this.heading().dot(r.heading()) < 0) this.reverse();
+        return this;
     }
-    pointWith(heading) {
+    /**negates (or doesn't negate) this ray so that its heading had a positive dot product with the heading of the provided ray*/
+    pointWithVec(heading) {
         if (this.heading().dot(heading) < 0) this.reverse();
+        return this;
     }
     getRayScaledBy(scalar) {
         return new Ray(this.p1, this.getMultipledBy(scalar));
@@ -258,8 +286,12 @@ export class Ray {
         x*=scaleBy; y*=scaleBy; z*=scaleBy;
         x+=x1; y+=y1; z+=z1;
         this.p2.setComponents(x,y,z);
+        return this;
     }
 
+    /**sets the provided vector to the negative of this ray's heading and returns the vector
+     * @return {Vec3|Vector3}
+     */
     setToInvertedTip(vec) {
         const p1x = this.p1.x, p1y = this.p1.y, p1z = this.p1.z;
         const p2x = this.p2.x, p2y = this.p2.y, p2z = this.p2.z;
@@ -268,47 +300,63 @@ export class Ray {
         vec.z = (p1z - p2z) + p1z;
         return vec;
     }
+
+    /** contracts this ray toward its midpoint such that its ends up being the provided percent of its original length*/
     contractTo(percent) {
         let halfPercent = 1 - ((1 - percent) / 2);
         this.p1.lerp(this.p2, halfPercent);
         this.p2.lerp(this.p1, halfPercent);
+        return this;
     }
+    /**translates this entire ray so so that p1 is the provided location, then rturns this ray for chaining */
     translateTo(newLocation) {
         this.workingVector.set(this.p2);
         this.workingVector.sub(this.p1);
         this.workingVector.add(newLocation);
         this.p2.set(this.workingVector);
         this.p1.set(newLocation);
+        return this;
     }
+    /**translates the entire ray so that p2 matches the input location, then returns the ray for chaining */
     translateTipTo(newLocation) {
         this.workingVector.set(newLocation);
         let transBy = this.workingVector.sub(this.p2);
         this.translateBy(transBy);
+        return this;
     }
     translateBy(toAdd) {
         this.p1.add(toAdd);
         this.p2.add(toAdd);
+        return this;
     }
+
     normalize() {
         this.mag(1);
+        return this;
     }
+    /**adopts the values of the input ray and returns this ray for chaining */
     set(r) {
         this.p1.set(r.p1);
         this.p2.set(r.p2);
+        return this;
     }
 
+    /**sets p2 and return this ray for chainging */
     setP2(p2) {
         this.p2.x = p2.x;
         this.p2.y = p2.y;
         this.p2.z = p2.z;
         this.p2.type = p2.type;
+        return this;
     }
     
+    /**sets p1 and returns this ray for chaining */
     setP1(p1) {
         this.p1.x = p1.x;
         this.p1.y = p1.y;
         this.p1.z = p1.z;
         this.p1.type = p1.type;
+        return this;
     }
 
     /**stores the backing vectors of this ray into the provided VectorNArray */

@@ -1,7 +1,7 @@
 const THREE = await import('three')
 import { Bone , Object3D} from 'three';
 import { Rot } from "../../../util/Rot.js";
-import { NoPool, Vec3, any_Vec3} from "../../../util/vecs.js";
+import {  Vec3, any_Vec3} from "../../../util/vecs.js";
 import { Ray } from "../../../util/Ray.js";
 import { IKNode, TrackingNode } from "../../../util/nodes/IKNodes.js";
 import { IKTransform } from '../../../util/nodes/IKTransform.js';

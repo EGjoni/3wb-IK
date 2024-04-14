@@ -3,6 +3,8 @@
 
 
 export class Vec3 {
+    static failedNormalizeCount = 0;
+    static failLoudly = true;
     baseIdx = 0;
     dataBuffer = null;
     dims = 3;
@@ -248,10 +250,54 @@ export class Vec3 {
         }
         return this;
     }
+    /**
+     * Do not confuse with "bound"
+     * forces all of the components to be >= to the min val and <= to the max val.
+     * 
+     * @param {Number} min 
+     * @param {Number} max 
+     */
     clampComponents(min, max) {
         this.x = Math.max(Math.min(max, this.x), min);
         this.y = Math.max(Math.min(max, this.y), min);
         this.z = Math.max(Math.min(max, this.z), min);
+        return this;
+    }
+
+    /**
+     * Do not confuse with "clamp"
+     * creates a bounding box from the provided vectors. If the vector is outside of the box, forces it onto the boundary of the box
+     * @param {Vec3 | Vector3} v1 
+     * @param {Vec3 | Vector3} v2 
+     * @param {Boolean} invertBuund if provided with a truthy value, will clamp bound the vector to be OUTSIDE of the box.
+     */
+    bound(v1, v2, invertBound = false) {
+        var maxval = Math.max(v1.x, v2.x);
+        var minval = Math.min(v1.x, v2.x);
+        function maybeInvert () {
+            if(!invertBound) return;
+            let t = maxval; 
+            maxval = minval;
+            minval = t;
+        }
+        maybeInvert();
+        this.x = Math.max(Math.min(maxval, this.x), minval);
+        maxval = Math.max(v1.y, v2.y); minval = Math.min(v2.y, v1.y); maybeInvert();
+        this.y = Math.max(Math.min(maxval, this.y), minval);
+        maxval = Math.max(v1.z, v2.z); minval = Math.min(v2.z, v1.z); maybeInvert();
+        this.z = Math.max(Math.min(maxval, this.z), minval);
+        return this;
+    }
+    /* creates a bounding box from the provided vectors. returns true if this vector is in the box, false otherwise */
+    isInBounds(v1, v2) {
+        let maxval = Math.max(v1.x, v2.x);
+        let minval = Math.min(v1.x, v2.x);
+        if(this.x < minval || this.x > maxval) return false;
+        maxval = Math.max(v1.y, v2.y); minval = Math.min(v2.y, v1.y);
+        if(this.y < minval || this.y > maxval) return false;
+        maxval = Math.max(v1.z, v2.z); minval = Math.min(v2.z, v1.z);
+        if(this.z < minval || this.z > maxval) return false;
+        return true;
     }
 
     dot(v) {
@@ -384,10 +430,23 @@ export class Vec3 {
         return result;
     }
 
-    normalize() {
+
+    /**normalizes the vector, or sets it to (0,1,0) if it has 0 length and errorOnZeroMag is false.
+     * @param {Boolean} errorOnZeroMag default determined by Vec3.failLoudly. Change that static variable or provide an argument of 'true' to throw an error instead of setting to (0,1,0) on zero magnitude case.
+    */
+    normalize(errorOnZeroMag = Vec3.failLoudly) {
         const baseX = this.baseIdx;
         const x = this.dataBuffer[baseX], y = this.dataBuffer[baseX+1], z = this.dataBuffer[baseX+2];
-        const invmag = 1/Math.sqrt(x*x + y*y + z*z);
+        const magsq = x*x + y*y + z*z
+        if(magsq == 0) {
+            Vec3.failedNormalizeCount++;
+            if(errorOnZeroMag) {
+                throw new Error("Tried to normalize a vector with zero magnitude");
+            }
+            this.dataBuffer[baseX+1] = 1;
+            return this;
+        }
+        const invmag = 1/Math.sqrt(magsq);
         this.dataBuffer[baseX] *= invmag;
         this.dataBuffer[baseX+1] *= invmag;
         this.dataBuffer[baseX+2] *= invmag;
@@ -490,7 +549,6 @@ export class Vec3Pool {
     reclaimedPool = []; //stores vecs that were previously
     inProgressPool = [];
     persistentBuffer;
-    tempSize = 30000;
     tempPool = null;// new Array(this.tempSize);
     tempBuffer; //= new Float64Array(tempSize * 3);
     isFinalized = false;
@@ -739,7 +797,6 @@ export class Vec3Pool {
     }
 }
 
-window.globalVecPool = new Vec3Pool(10000);
 
 /**
  * ephemeral vector from components
@@ -749,7 +806,7 @@ window.globalVecPool = new Vec3Pool(10000);
  * @returns {Vec3} an ephemeral vector from the default pool, or creates a new one if there is no pool
  */
 export function any_Vec3(x=0, y=0, z=0) {
-    return globalVecPool.temp_acquire(x, y, z);
+    return __tempVecPool.temp_acquire(x, y, z);
 }
 
 /**
@@ -758,7 +815,7 @@ export function any_Vec3(x=0, y=0, z=0) {
  * @returns {Vec3} an ephemeral vector from the default pool, or creates a new one if there is no pool
  */
 export function any_Vec3fv(v) {
-    return globalVecPool.temp_acquirefv(v);
+    return __tempVecPool.temp_acquirefv(v);
 }
 
 export class NoPool {
@@ -767,20 +824,23 @@ export class NoPool {
         return new Vec3(x, y, z);
     }
     any_Vec3(x=0, y=0, z=0) {
-        return new Vec3(x, y, z); 
+        return __tempVecPool.any_Vec3(x, y, z);
     }
 
     new_Vec3fv(v) {
         return new Vec3(v.x, v.y, v.z); 
     }
-
     any_Vec3fv(v) {
-        return new Vec3(v.x, v.y, v.z); 
+        return __tempVecPool.any_Vec3fv(v); 
     }
+
     releaseTemp() {
         
     }
 }
 
-
+//I feel like anyone can spare 120kb for this convenience. 
+const __tempVecPool = new Vec3Pool(5000);
+__tempVecPool.finalize(); 
 window.noPool = new NoPool();
+window.globalVecPool = window.noPool;

@@ -51,14 +51,15 @@
         import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
         import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
         import { Rest, Twist, Kusudama } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
-        import {Vec3} from "./js/EWBIK/util/vecs.js";
+        import {Vec3, Vec3Pool} from "./js/EWBIK/util/vecs.js";
         window.Rest = Rest;
         window.OrbitControls = OrbitControls;
         window.TransformControls = TransformControls;
         window.IKNode = IKNode;
         window.TrackingNode = TrackingNode;
         window.IKPin = IKPin;
-        window.axeshelper = new THREE.AxesHelper(2);
+        window.axeshelper = new THREE.AxesHelper(1);
+        window.hipaxeshelper = new THREE.AxesHelper(1);
         window.THREE = THREE;
         
 
@@ -103,10 +104,10 @@
         window.frtime = window.frrate*1000;
         const loader = new GLTFLoader();
         const clock = new THREE.Clock();
-
+       
         async function init() {
-            randCubes(0.7, 1.2, 2, 0.3, 20);
-            //randCubes(0.000001, 16, 2, 0, 1);
+            randCubes(0.8, 1.1, 2, 0.3, 10);
+            //groundPlane();
             loader.register((parser) => {
                 return new VRMLoaderPlugin(parser);
             });
@@ -114,6 +115,8 @@
             addSceneArmature(window.armature);
             initControls(THREE, renderer);
             clock.start();
+            //window.bbox = new THREE.BoxHelper(groundCubes, 0xffff00 );
+            //window.bbox.update();
             animate();
         }
 
@@ -128,7 +131,7 @@
             armature.makeBoneMesh(armature.c_hips.parent, armature.c_hips.parent.boneRadius);
             initPrettyBones(armature);
             initHumanoidRestConstraints(armature);
-            makePinsList(1, armature.armatureObj3d, armature, true);
+            makePinsList(1, armature.armatureObj3d, armature, false);
             updateGlobalBoneLists();
             initIK(armature);
             //initPrettyBones(armature);
@@ -228,69 +231,77 @@
                 }
             }
 
-            
-            armature.r_foot_pin = new IKPin(armature.bonetags["J_Bip_R_Foot"]);//, rightHeelOffset);
-            armature.l_foot_pin = new IKPin(armature.bonetags["J_Bip_L_Foot"]);//, leftHeelOffset);
+            armature.head_pin = new IKPin(armature.c_head);
+            armature.hip_pin = new IKPin(armature.c_hips);
+            armature.r_foot_pin = new IKPin(armature.bonetags["J_Bip_R_Foot"]);
+            armature.l_foot_pin = new IKPin(armature.bonetags["J_Bip_L_Foot"]);
+
+            window.hipsTracker = armature.hip_pin.target_threejs;  
+            armature.hipsTracker  = window.hipsTracker;
+            armature.hipPinNode = armature.hip_pin.targetNode;
+            armature.hip_pin.setPinWeight(0.1); 
+            armature.hip_pin.setDepthFalloff(0.9);
+            armature.head_pin.setPinWeight(0.4);
+            armature.hip_pin.alignToBone();
+            armature.head_pin.alignToBone();
+            armature.head_pin.target_threejs.position.y += 0.2;
+            armature.head_pin.targetNode.mimic();
+            armature.hipsTracker.attach(armature.head_pin.target_threejs);
+            armature.head_pin.targetNode.ensure();
 
             boxxy = new Boxxy(
-                0.99,
+                0.95,
                 armature.c_hips, 
                 armature.bonetags["J_Bip_L_Foot"],
                 armature.l_leg_upp,
                 armature.bonetags["J_Bip_R_Foot"],
-                armature.r_leg_upp
+                armature.r_leg_upp,
+                new Vec3Pool(3000)
                 );
             
             //boxxy.hips.position.y *= 0.8;
-            boxxy.addTo(scene, [groundCubes]); 
-            //boxxy.hips.position.y+=0.75;
-            //headNode.position.y += 0.75;           
+            boxxy.addTo(scene, groundCubes); 
+            boxxy.hips.position.copy(armature.hip_pin.target_threejs.position);           
             boxxy.hipsNode.mimic();
-            window.hippinNode = new THREE.Object3D(); 
-            boxxy.hips.add(hippinNode);            
+            boxxy.hips.attach(armature.hip_pin.target_threejs);            
             window.boxxy = boxxy; 
             armature.visible = false;
 
-
-            /*for (let b of armature.bones) {
-                if (b.parent instanceof THREE.Bone) {
-                    let twistConst = new Twist(b, 1.1).setVisibilityCondition((twist, bone) => { return bone == window.contextBone });
-                    twistConst.layers.set(window.boneLayer);
-                }
-            }*/
-
-            //armature.root = new IKPin(armature.bonetags["Root"]);
-            //armature.hips = new IKPin(armature.bonetags["J_Bip_C_Hips"], boxxy.hipsNode);
             
-            //armature.c_uuperchest_pin = new IKPin(armature.upper_chest);
-            //armature.r_hand_pin = new IKPin(armature.bonetags["J_Bip_R_Hand"]);
-            //armature.l_hand_pin = new IKPin(armature.bonetags["J_Bip_L_Hand"]);
-            //let rightHeelOffset = new THREE.Object3D();
-            //let leftHeelOffset = new THREE.Object3D();
-            //rightHeelOffset.position.y = 0.1;
-            //leftHeelOffset.position.y = 0.1;
-            boxxy.right_foot.foot.add(armature.l_foot_pin.target_threejs);
-            boxxy.left_foot.foot.add(armature.r_foot_pin.target_threejs);
-            boxxy.hipClearance -=0.05;
+            boxxy.right_foot.foot.add(armature.r_foot_pin.target_threejs);
+            boxxy.left_foot.foot.add(armature.l_foot_pin.target_threejs);
+            //boxxy.hipClearance -=0.05;
             armature.l_foot_pin.alignToBone();
             armature.r_foot_pin.alignToBone();
-            armature.hippin = new IKPin(armature.c_hips, hippinNode);
-            armature.hippin.setPinWeight(0.1); 
-            armature.hippin.setDepthFalloff(0.9);
-            armature.hippin.alignToBone();
-            let headNode = new THREE.Object3D(); 
-            armature.c_head.add(headNode);
-            headNode.updateMatrixWorld();
-            boxxy.hips.attach(headNode);
-            armature.head_pin = new IKPin(armature.c_head, headNode);
-            armature.head_pin.alignToBone();
-            armature.hippin.targetNode.toTrack.add(axeshelper)
+            armature.l_foot_pin.targetNode.translateByGlobal(new Vec3(0, 0.1, 0));//account for the platform boots with the furr
+            armature.r_foot_pin.targetNode.translateByGlobal(new Vec3(0, 0.1, 0));//account for the platform boots with the furr
+            armature.l_foot_pin.targetNode.project();
+            armature.r_foot_pin.targetNode.project();
             
+            //armature.head_pin.target_threejs.add(axeshelper);
+            //armature.hip_pin.target_threejs.add(hipaxeshelper);
+            //armature.l_foot_pin.targetupdateWorldMatrix(); armature.r_foot_pin.updateWorldMatrix();
+            
+            //boxxy.show();
+            boxxy.pool.finalize();
+            //armature.l_foot_pin.ensure(); armature.r_foot_pin.ensure(); armature.hip_pin.ensure(); armature.head_pin.ensure();
+            boxxy.preAlign();
+            window.goahead = true;
+            window.dowalk= true;
+                     
         }
-
+        
+        //const groundCubesMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
         const groundCubesMat = new THREE.MeshLambertMaterial({color: 0x444444});
-        const groundCubes = new THREE.Group();
-        scene.add(groundCubes);
+        const groundCubes = [];//new THREE.Group();
+        window.groundCubes = groundCubes;
+        //scene.add(groundCubes);
+        function groundPlane(){
+            let planeGeo = new THREE.BoxGeometry(10, 0.01, 10);
+            let gp = new THREE.Mesh(planeGeo, groundCubesMat);
+            groundCubes.push(gp);
+            scene.add(gp);
+        }
         function randCubes(heightDelta, sizeDelta, spacing, angleDelta, area) {
             let maxdim = spacing*1.5;
             let minDim = spacing;
@@ -298,18 +309,25 @@
                 for(let z = 0; z<area; z+=spacing) {
                     let minx = Math.max(Math.random()*sizeDelta*maxdim, minDim);
                     let minz = Math.max(Math.random()*sizeDelta*maxdim, minDim);
-                    let boxGeo = new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //new THREE.BoxGeometry(minx, Math.random()*minDim*heightDelta, minz);
+                    //let boxGeo = new THREE.SphereGeometry(Math.random()*minDim*heightDelta, 16, 16); 
+                    let boxGeo = new THREE.BoxGeometry(minx, Math.random()*minDim*heightDelta, minz);//new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //
                     let boxMesh = new THREE.Mesh(boxGeo, groundCubesMat);
                     boxMesh.position.x = x; boxMesh.position.z = z;
                     boxMesh.rotateX((angleDelta/2) - Math.random()*angleDelta);
                     boxMesh.rotateY((angleDelta/2) - Math.random()*angleDelta);
                     boxMesh.rotateZ((angleDelta/2) - Math.random()*angleDelta);
-                    groundCubes.add(boxMesh);
+                    boxMesh.material.side = 0;
+                    groundCubes.push(boxMesh);
+                    
+                    /*boxMesh.position.x = -area/2;
+                    boxMesh.position.z = -area/2;*/
+                    boxMesh.position.y = -1;
+                    scene.add(boxMesh)
                 }
             }
-            groundCubes.position.x = -area/2;
+            /**groundCubes.position.x = -area/2;
             groundCubes.position.z = -area/2;
-            groundCubes.position.y = -5;
+            groundCubes.position.y = -2;*/
         }
         
         
@@ -336,12 +354,16 @@
         }
         const forwardVec = new Vec3(0,0,1);
         const leftVec = new Vec3(1,0,0);
+        window.forwardVec = forwardVec; window.leftVec = leftVec;
         const tempVec = new Vec3(1,0,0);
         const temp3v = new THREE.Vector3(0,0,0);
+        window.framecount = 0;
+        window.physicsUpdateCount = 0;
         function animate() {
             requestAnimationFrame(delayAnimate);
             armature.c_hips.getWorldPosition(temp3v);
             tempVec.readFromTHREE(temp3v);
+            //orbitControls.target.copy(boxxy.hips.position);
             forwardVec.readFromTHREE(orbitControls.target); 
             forwardVec.lerp(tempVec, 0.05);
             forwardVec.writeToTHREE(orbitControls.target);
@@ -356,10 +378,21 @@
             forwardVec.cross(tempVec, leftVec);
             leftVec.normalize();
             
-            for(let i=0; i<updateCount; i++) {
-                boxxy.update(forwardVec, leftVec);
+            /*if(window.framecount % 60) {
+                console.log(boxxy.hips.position.y.toFixed(5));
+                //console.log(`physics updates: ${window.physicsUpdateCount} in ${window.framecount} frames`);
+            }*/
+            window.framecount++;
+            if(window.dowalk) {
+                for(let i=0; i<updateCount; i++) {
+                    boxxy.update(forwardVec, leftVec, i==0);
+                    window.physicsUpdateCount++;
+                }
             }
-            window.armature.solve();
+            
+            if(window.goahead) {
+                window.armature.solve();
+            }
             //console.log(acceleration);
             window.render();
         }

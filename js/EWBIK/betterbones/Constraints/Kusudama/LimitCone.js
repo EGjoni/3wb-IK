@@ -1,5 +1,5 @@
 const THREE = await import('three');
-import { NoPool, Vec3} from "../../../util/vecs.js";
+import {  Vec3} from "../../../util/vecs.js";
 import { Rot } from "../../../util/Rot.js";
 import { Ray } from "../../../util/Ray.js";
 import { Saveable } from "../../../util/loader/saveable.js";
@@ -56,7 +56,7 @@ export class LimitCone extends Saveable {
      * @param {Vec3} direction the cone points in
      * @param {Number} rad half angle of the cone opening
      */
-    constructor(direction, rad, parentKusudama, ikd=`LimitCone-${LimitCone.totalInstances++}`, pool=noPool) {
+    constructor(direction, rad, parentKusudama, ikd=`LimitCone-${LimitCone.totalInstances++}`, pool=globalVecPool) {
         super(ikd,'LimitCone', LimitCone.totalInstances, pool);
         this.tempVec1 = this.pool.new_Vec3(); 
         this.tempVec2 = this.pool.new_Vec3();

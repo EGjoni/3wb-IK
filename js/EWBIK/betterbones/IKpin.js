@@ -75,7 +75,7 @@ export class IKPin extends Saveable{
      * @param {Object3D or IKNode} targetNode The IKNode Object3D instance serving as this pin's target. If not provided, one will be created and pre aligned to the bone. 
      * @param {boolean} disabled if true, will register the pin without activating it (meaning the effector bone won't attempt to solve for the pin). You can manually enable the pin by calling pin.enable()
      */
-    constructor(forBone, targetNode, disabled = false, ikd = 'IKPin-'+(IKPin.totalInstances++), pool=noPool) {
+    constructor(forBone, targetNode, disabled = false, ikd = 'IKPin-'+(IKPin.totalInstances++), pool=globalVecPool) {
         super(ikd, 'IKPin', IKPin.totalInstances, pool);
         if(forBone.getIKPin() != null) {
             throw Error("The provided Bone already has an IKPin set.");
@@ -101,13 +101,29 @@ export class IKPin extends Saveable{
                 this.targetNode = targetNode;
             }
             this.target_threejs = this.targetNode.toTrack;
+            this.hintMesh = this.target_threejs;
         }
+        this.targetNode.registerTrackChangeListener(this.onTargetNodeTrackChange);
         this.enabled = !disabled;
         this.forBone.setIKPin(this);
     }
 
     isEnabled() {
         return this.enabled;
+    }
+
+    /**makes sure the three.js object this pin purports to track is the same one tracked by the internal EWBIK scene node object
+     * @param {Boolean} agreeWithNode default true, which makes this conform to the EWBIK scene node. set to false to force the node to point to what this pin purports.
+     */
+    ensure(agreeWithNode = true) {
+        this.targetNode.ensure();
+        if(agreeWithNode || this.target_threejs == null) {
+            this.target_threejs = this.targetNode.toTrack;            
+            this.targetNode.project();
+        } else {
+            this.targetNode.setTracked(this.target_threejs);
+        }
+        this.targetNode.mimic();
     }
 
     toggle() {
@@ -117,7 +133,7 @@ export class IKPin extends Saveable{
 
     enable() {
         this.enabled = true;
-        this.targetNode.ensure();
+        this.ensure();
         this.forBone?.parentArmature?.regenerateShadowSkeleton();
     }
 
@@ -435,6 +451,13 @@ export class IKPin extends Saveable{
 
     onChange() {
         this.solveFromHere();
+    }
+
+
+    onTargetNodeTrackChange(node, previousTracked, newTracked) {
+        if(node == this.targetNode) {
+            this.target_threejs = newTracked;
+        }
     }
 
 }

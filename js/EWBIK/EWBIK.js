@@ -1,7 +1,7 @@
 const THREE = await import('three');
 import { ShadowSkeleton } from "./solver/ShadowSkeleton.js"
 import { IKTransform } from "./util/nodes/IKTransform.js";
-import { Vec3, any_Vec3, Vec3Pool, NoPool } from "./util/vecs.js";
+import { Vec3, any_Vec3, Vec3Pool } from "./util/vecs.js";
 import { CallbacksSequence } from "./CallbacksSequence.js";
 import { Rot } from "./util/Rot.js";
 import { IKNode, TrackingNode } from "./util/nodes/IKNodes.js";
@@ -207,8 +207,7 @@ export class EWBIK extends Saveable {
     initNodes(armatureNode, pool) {
         
         if(this.armatureNode == null) {
-            this.armatureNode = this.armatureObj3d.trackedBy; //new ShadowNode(this.armatureObj3d, this.armatureObj3d.ikd, false, noPool); //wouldn't wanna lose this guy.
-        } else {
+            this.armatureNode = this.armatureObj3d.trackedBy;
             this.armatureNode = armatureNode
         }
         if (this.armatureObj3d != null) {
@@ -347,8 +346,6 @@ export class EWBIK extends Saveable {
     }
 
     
-
-
     /**
      * automatically solves the IK system of this armature from the given bone using
      * the given parameters.
@@ -356,14 +353,19 @@ export class EWBIK extends Saveable {
      * @param {Bone} bone optional, if given, the solver will only solve for the segment the given bone is on (and any of its descendant segments). Otherwise, the solver will solve for all segments.
      * @param {Number} iterations  number of iterations to run. Set this to null or -1 if you want to use the armature's default.
      * @param stabilizingPasses number of stabilization passes to run. Set this to -2 if you want to use the armature's default. -1 tells it to break constraints if need be, 0 means no stabilization, 1 means a single (very cheap) stabilization pass which may increase grindiness in extreme poses. Greater than 1 reduces grindiness, but at signifcant cost.
-     * @param {CallbacksSequence} callbacks to snoop on solver state
+     * @param {Bone} stopOn defaults to null, an optional ancestor bone to stop solving by. Note that any children of this ancestore bone will still be solved for.
+     * @param {Function} onComplete callback to fire when the solve has completed. Defaults to an internal callback that updates the Three.js transformations to match the solver, but your are free to specify your own. The callback is called once per bone per solve request, not once per iteration.
+     * @param {CallbacksSequence} debug_callbacks to snoop on solver state
      * @param {Number} frameNumber entirely optional and for convenience. If you're counting frames, you can provide the frame number you're on here to make sure the solver doesn't get called more than once per frame.
      * this will cause any solve requests beyond the first one in a frame to be ignored. Please be mindful that -- due to the limits of javascript 64-bit integers,
-     * any animation running at 120 frames per second will integer overflow after approximately 4.9 million years, and you should not use this feature if you intend to run your animation for longer than that.
+     * any animation running at 120 frames per second will integer overflow after approximately 4.9 million years, and so this feature is not appropriate for animations intended to run longer than that.
      */
-    async solve(bone, iterations = this.getDefaultIterations(), stabilizingPasses = this.getDefaultStabilizingPassCount(), callbacks, frameNumber = this.lastFrameNumber+1) {
-        this.pendingSolve = async function (armature, bone, iterations, stabilizingPasses, callbacks) {
-            return await armature.__solve(bone, iterations, stabilizingPasses, callbacks);
+    async solve(bone, iterations = this.getDefaultIterations(), stabilizingPasses = this.getDefaultStabilizingPassCount(), stopOn = null, onComplete = (wb) => this.alignBoneToSolverResult(wb), debug_callbacks, frameNumber = this.lastFrameNumber+1) {
+        let literal = stopOn != null;
+        debug_callbacks?.__initStep((callme, wb) => this.stepWiseUpdateResult(callme, wb));
+        if(stopOn != null) bone = stopOn;
+        this.pendingSolve = async function (armature, bone, literal, iterations, stabilizingPasses, onComplete, debug_callbacks) {
+            return await armature.__solve(bone, literal, iterations, stabilizingPasses, onComplete, debug_callbacks);
         };
         if (this.lastFrameNumber >= frameNumber) {
                 this.activeSolve = this.pendingSolve;
@@ -373,7 +375,7 @@ export class EWBIK extends Saveable {
             this.pendingSolve = null;
             if (bone == null || this.shadowSkel.isSolvable(bone)) {
                 if(frameNumber > this.lastFrameNumber) {
-                    this.activeSolve = doSolve(this, bone, iterations, stabilizingPasses, callbacks);                    
+                    this.activeSolve = doSolve(this, bone, literal, iterations, stabilizingPasses, onComplete, debug_callbacks);                    
                 }
                 this.lastFrameNumber = frameNumber;
             }
@@ -403,22 +405,25 @@ export class EWBIK extends Saveable {
      * the given parameters.
      * 
      * @param {Bone} bone optional, if given, the solver will only solve for the segment the given bone is on (and any of its descendant segments). Otherwise, the solver will solve for all segments.
+     * @param {Boolean} literal optional, default faule, if true, the bone above will be treated as a literal stopping point, meaning no ancestors prior to it will be solved for, even if this results in an incomplete segment
      * @param {Number} iterations  number of iterations to run. Set this to null or -1 if you want to use the armature's default.
      * @param stabilizingPasses number of stabilization passes to run. Set this to -2 if you want to use the armature's default. -1 tells it to break constraints if need be, 0 means no stabilization, 1 means a single (very cheap) stabilization pass which may increase grindiness in extreme poses. Greater than 1 reduces grindiness, but at signifcant cost.
-     * @param {CallbacksSequence} callbacks to snoop on solver state
-     */
-    async __solve(bone, iterations = this.getDefaultIterations(), stabilizingPasses = this.getDefaultStabilizingPassCount(), callbacks) {
-
+     * @param {Function} onComplete callback to fire when the solve has completed. Defaults to an internal callback that updates the Three.js transformations to match the solver, but your are free to specify your own. The callback is called once per bone per solve request, not once per iteration.
+     * @param {CallbacksSequence} debug_callbacks to snoop on solver state
+     **/
+    async __solve(bone, literal, iterations = this.getDefaultIterations(), stabilizingPasses = this.getDefaultStabilizingPassCount(), onComplete=(wb) => this.alignBoneToSolverResult(wb), debug_callbacks) {
         if (this.dirtyShadowSkel)
             this._regenerateShadowSkeleton();
         if (this.dirtyRate)
             this._updateShadowSkelRateInfo(iterations);
-        callbacks?.__initStep((callme, wb) => this.stepWiseUpdateResult(callme, wb));
+        
         this.shadowSkel.solve(
             iterations == -1 ? this.getDefaultIterations() : iterations,
             stabilizingPasses == -2 ? this.getDefaultStabilizingPassCount : stabilizingPasses,
             bone,
-            (wb) => this.alignBoneToSolverResult(wb), callbacks);
+            literal,
+            onComplete, 
+            debug_callbacks);
         this.stablePool.releaseTemp();
         this.volatilePool.releaseTemp();
         return true;
@@ -529,7 +534,7 @@ export class EWBIK extends Saveable {
         let orientation = forBone.getIKBoneOrientation();
         let normeddir = this.pool.any_Vec3(0,0,0).readFromTHREE(pointTo);
         forBone.height = normeddir.mag();
-        normeddir.normalize();
+        normeddir.normalize(false);
         let rotTo = Rot.fromVecs(EWBIK.YDIR, normeddir);        
         orientation.quaternion.set(-rotTo.x, -rotTo.y, -rotTo.z, rotTo.w);
         
@@ -588,7 +593,7 @@ export class EWBIK extends Saveable {
             let normeddir = sumVec;
             fromBone.height = fromBone.parent.height;
             if (count > 0) {
-                normeddir = sumVec.div(count).normalize();
+                normeddir = sumVec.div(count).normalize(false);
                 if (mode == 'naive')
                     fromBone.height = Math.sqrt(sum_sqheight) / Math.sqrt(count);
                 if (mode == 'statistical')
@@ -697,18 +702,33 @@ export class EWBIK extends Saveable {
             elem[property] = dashsplit.join('-');
             i++;
         }
-
     }
 
+    /**
+     * For basic use you shouldn't need to call this function, as most of the external things you are 
+     * likely to call will take care of setting it for you.
+     * But if you are doing anything more advanced or messing with the system internals, then this is here
+     * because the dampening and comfort calculations get a performance boost by caching some values that 
+     * change under the following criteria:
+     * 1. the dampening used per iteration
+     * 2. the stiffness of a bone
+     * 3. the painfulness of a constraint
+     * 4. the structure of the skeleton
+     * 
+     * For this reason, this function gets called once after changing any of those things.     * 
+     * 
+     * @param {Boolean} force if true, will forcibly update the cache
+     * @param {Number} iterations the number of iterations intended. The rates for all previously cached iterations will be updated
+     */
     updateShadowSkelRateInfo(force = false, iterations = this.previousIterations) {
         this.dirtyRate = true;
-        this.previousIterations = parseInt(iterations);
         this.pendingSolve = null; //invalidate any pending solve
         if (force) this._updateShadowSkelRateInfo(iterations);
     }
 
     _updateShadowSkelRateInfo(iterations = this.previousIterations) {
         this.armatureNodeUpdated = false;
+        this.previousIterations = parseInt(iterations);
         this.shadowSkel.updateRates(iterations);
         this.previousIterations = iterations;
         this.dirtyRate = false;

@@ -278,7 +278,7 @@ class WorkingBone {
         /** @type {BoneState} */
         this.forBone = forBone;
         forBone.wb = this;
-        this.pool = chain?.stablePool ?? noPool;
+        this.pool = chain?.stablePool ?? globalVecPool;
         if(this.forBone.trackedBy == null) this.forBone.trackedBy = new ShadowNode(this.forBone, undefined, this.pool);
         if(this.forBone.getIKBoneOrientation().trackedBy == null) new ShadowNode(this.forBone.getIKBoneOrientation(), undefined, this.pool);
         this.workingRay = new Ray(this.pool.new_Vec3(0,0,0), this.pool.new_Vec3(0,0,0), this.pool);
@@ -656,7 +656,7 @@ class WorkingBone {
         //if(window.perfing) performance.mark("updateReturnfullnessDamp start");
         if(this.maybeSpringy()) {
             this.constraint.setPreferenceLeeway(this.stiffdampening);
-            this.constraint.updatePerIterationLeewayCache(iterations);
+            this.constraint.setPerIterationLeewayCache(iterations);
             /**
              * determine maximum pullback that would still allow the solver to converge if applied once per pass 
              */

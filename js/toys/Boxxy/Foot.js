@@ -7,29 +7,43 @@ import { IKNode } from "../../EWBIK/util/nodes/IKNodes.js";
 import { ShadowNode } from "../../EWBIK/util/nodes/ShadowNode.js";
 const THREE = await import("three");
 import {Rot} from "../../EWBIK/util/Rot.js";
+import {Boxxy, ProjectionsObj, Proposal } from "./Boxxy.js";
 
 export class Foot {
 
+    footProjArrow = new THREE.ArrowHelper(
+        new THREE.Vector3(0,-1,0),
+        1);
     footgeometry = new THREE.BoxGeometry(0.05, 0.05, 0.15);
     predictiongeometry = new THREE.BoxGeometry(0.05, 0.025, 0.15);
+    startgeometry = new THREE.BoxGeometry(0.05, 0.025, 0.15);
     unplantedCol = 0xaaaa00;
     plantedCol = 0xff0000;
     plantedmaterial = new THREE.MeshLambertMaterial({ color: this.plantedCol});
     //unplantedmaterial = new THREE.MeshLambertMaterial({ color: this.unplantedCol}); 
     goalmaterial = new THREE.MeshBasicMaterial({color:0x00ff00});
+    startmaterial = new THREE.MeshBasicMaterial({color:0x0022ff});
     foot = new THREE.Mesh(this.footgeometry, this.plantedmaterial);
     goal = new THREE.Object3D();
     goalmesh = new THREE.Mesh(this.predictiongeometry, this.goalmaterial);
+    start = new THREE.Mesh(this.startgeometry, this.startmaterial);
     lineGeometry = new THREE.BufferGeometry();
     lineMaterial = new THREE.LineBasicMaterial({ color: 0x008888 });
-    
+    closestToGravityHipDir = null;
+    hipOnInterfootProjPlane = null; 
+    otherFootPos = null;
+    thisFootPos = null;
+    future_hipPos = null;
+    moveProposal = null;
+    /**@type {IKTransform} internal transform used for computing candidate rebalance results*/
+    rebalanceTransform = null;
     
 
     /**@type {Interpolator} */
     interpoler = null; 
 
     /**@type {IKTransform}*/
-    startTransform = new IKTransform();
+    startTransform = null;
     
     otherFoot = null;
     hips = null;
@@ -39,18 +53,24 @@ export class Foot {
     /**@type {ShadowNode} */
     goalNode = null;
 
+    projectionObj = null;
+
     constructor(otherFoot, hips, footPosition, attachpoint, isPlanted=true) {
         this.otherFoot = otherFoot;
         this.hips = hips;
+        this.pool = this.hips.pool;
+        this.initPooledVecs();
         this.isPlanted = isPlanted;
         this.foot.position.x = footPosition.x;
         this.foot.position.y = footPosition.y;
         this.foot.position.z = footPosition.z;
         this.foot.visible = false;
-        this.attachpoint = new Vec3(attachpoint.x, attachpoint.y, attachpoint.z);
+        this.attachpoint = this.pool.new_Vec3(attachpoint.x, attachpoint.y, attachpoint.z)
+        this.thisFootPos.set(footPosition);
         this.foot.updateMatrix();
         this.goal.add(this.goalmesh);
-        this.goalmesh.position.y -= 0.07;
+        this.goal.position.copy(this.foot.position);
+        this.goalmesh.position.y -= 0.01;
         let hipPos = this.hips.hips.position;//.origin();
         this.lineGeometry.setFromPoints([
             new THREE.Vector3(
@@ -62,24 +82,101 @@ export class Foot {
         this.legline = new THREE.Mesh(this.lineGeometry, this.lineMaterial);
         this.legline.name = "leg line";
         this.goal.visible = false;
+        this.start.visible = false; 
+        this.foot.visible = false;
+        this.showGoal = false;
+        
     } 
 
+    initPooledVecs() {
+        this.startTransform =  IKTransform.newPooled(this.pool);
+        this.tempv = this.pool.new_Vec3(0,0,0);
+        this.tempYVec = this.pool.new_Vec3(0,1,0);
+        this.tempZVec = this.pool.new_Vec3(0,0,1);
+        this.thisFootPos = this.pool.new_Vec3(0,0,0);
+        this.otherFootPos = this.pool.new_Vec3(0,0,0);
+        this.projectionObj = new ProjectionsObj(
+            this.thisFootPos, 
+            this.otherFootPos,
+            this.hips.hipPos,
+            this.pool
+        );
+        let proj = this.projectionObj; 
+        this.future_hipPos = proj.future_hipPos;
+        this.future_hipPos_proj = proj.future_hipPos_proj; 
+        this.closestToGravityHipDir = proj.closestToGravityHipDir;
+        this.hipOnInterfootProjPlane = proj.hipOnInterfootProjPlane;         
+        this.thisGroundProjectedFootPos = proj.firstFootVec_proj;
+        this.thisGroundProjectedFootNormal = proj.firstFootVec_norm;        
+        this.otherProjectedFootPos = proj.otherFootVec_proj;
+        this.moveProposal = new Proposal(this.pool);
+        this.rebalanceTransform = IKTransform.newPooled(this.pool);
+    }
     /**the position the foot would like to be in when standing idle */
     setattachpoint(pos) {
         this.attachpoint.setComponents(pos.x, pos.y, pos.z);
     }
 
     getRestDeviation() {
-        return this.footNode.origin().dist(this.attachpoint.addClone(this.hips.closestToInterFootRay));
+        return this.footNode.origin().dist(this.attachpoint.addClone(this.hips.hipOnInterfootProjPlane));
     }
 
     getHipDistance() {
         return this.footNode.origin().dist(this.hips.hipsNode.origin());
     }
 
+    /**Should only be called when both feet are planted.
+     * Asks this foot what it would accompish if it were allowed to leave the ground,
+     * foot will respond with a proposal object the hips to evaluate.
+     */
+    getUnplantProposal() {
+
+    }
+
+    
+
+    /**updates the proposal for this foot.
+     * the proposal is an object containing the following properties:
+     * {
+     * launch_transform: IKTransform, //indicates the starting position/orientation the foot launched from,
+     * current_foot_transform: IKTransform, //indicates the current position/orientation of the foot. 
+     * //the two variables above should always be identical if one foot is always on the ground
+     * mid_stride: bool, //currently always false, but if true is ever supported, current foot position and launch position will differ 
+     * proposed_foot_transform: IKTransform; //indicates the proposed position/orientation of the foot
+     * expected_discomfort: float, //indicates the expected comfort of the armature should the proposal be adopted
+     * fatigue: int, //indicating the number of times this foot has been lifted.
+     * presumed_clearance_point: Vec3 //probably not used by feet, but other proposals make use of this to score hip clearance
+     * presumed_hip_transform: IKtransform, same situation as above
+     * }
+    */
+    generateProposal(byTime) {
+        this.projectionObj.hipsProjDirty = true; this.footProjDirty = true;
+        this.moveProposal.reset().unlock();
+        this.moveProposal.launch_transform.adoptValues(this.startTransform);
+        this.moveProposal.current_foot_transform.adoptValues(this.startTransform);
+        this.moveProposal.mid_stride = false;
+        this.moveProposal.proposed_foot_transform.adoptValues(this.getRebalanceTransform(byTime));
+        this.moveProposal.presumed_hip_transform.adoptValues(this.hips.hipsNode.getGlobalMBasis());
+        this.tempv.set(this.hipOnInterfootProjPlane).add(this.hips.hipClearanceDir);
+        this.moveProposal.presumed_hip_transform.translateTo(this.tempv);
+        this.moveProposal.presumed_clearance_point.set(this.hipOnInterfootProjPlane);
+        let expected_discomfort = this.hips.penalizeProposalByHipAndFoot(
+                                    this.moveProposal.lock(), 
+                                    this.moveProposal.proposed_foot_transform.origin(), this.otherFootPos);
+        this.moveProposal.unlock().expected_discomfort = expected_discomfort;
+        return this.moveProposal.lock();
+    }
+
     unPlant(stepDuration) {
         this.isPlanted = false;
         this.currentStepDuration = stepDuration;
+        let projInfo = this.hips.projectToGround(this.hipToFoot.p2, this.hipToFoot.p2);
+        let normal = projInfo.normal;
+
+        this.moveProposal.unlock().mid_stride = true;
+        this.moveProposal.fatigue = Math.max(this.moveProposal.fatigue, this.otherFoot.moveProposal.fatigue);
+        this.moveProposal.fatigue++;
+        this.moveProposal.lock();
         this.tweakGoalForBalance();
         this.interpoler.setGoal(this.goalNode.getGlobalMBasis(),(...p)=> this.update(...p), (...p)=> this.plant(...p));
         this.interpoler.begin(stepDuration);
@@ -108,19 +205,32 @@ export class Foot {
     }
 
 
-    otherToCenter = new Ray(new Vec3(), new Vec3());
-    hipToFoot = new Ray(new Vec3(), new Vec3());
+    otherToCenter = new Ray(any_Vec3(), any_Vec3());
+    hipToFoot = new Ray(any_Vec3(), any_Vec3());
     tweakGoalForBalance() {
+        //debugger;
         let framesRemaining = this.interpoler.getRemainingFrames(window.frtime);
-        let remainingTime = this.interpoler.getRemainingTime();        
-        this.hipToFoot.p2.set(this.getRebalanceOffset(remainingTime).add(this.footNode.origin()));
-        this.hipToFoot.p1.set(this.futureHipsPos).add(this.attachpoint);
+        let remainingTime = this.interpoler.getRemainingTime();
+        let rebalanceTransform = this.getRebalanceTransform(remainingTime); 
+        this.interpoler.goal_globalTransform.adoptValues(rebalanceTransform);
+        this.goalNode.alignGlobalsTo(rebalanceTransform);
+        this.goalNode.project();
+        this.rebalanceTransform.origin(this.hipToFoot.p2);//.add(this.footPos);
+        this.hipToFoot.p1.set(this.projectionObj.future_hipPos).add(this.attachpoint);
         let tries = 0;     
+        let legLengthSq = this.hips.legLength * this.hips.legLength;
+        let projNorm = this.projectionObj.firstFootVec_norm;
         
-        while(this.hips.legLength < this.hipToFoot.mag() && tries < 50) {
+        while(legLengthSq < this.hipToFoot.magSq() && tries < 5) {
             this.hipToFoot.setMag(this.hips.legLength);
-            this.hips.projectToGround(this.hipToFoot.p2, this.hipToFoot.p2);
+            let projInfo = this.hips.projectToGround(this.hipToFoot.p2, this.hipToFoot.p2);
+            projNorm = projInfo.normal;
             tries++;
+        }
+        if(tries > 0) {
+            let hipPointingDirection = this.hips.hipsNode.getGlobalMBasis().getZHeading();
+            let proposedRotation = this.getNormalAlignedRotation(projNorm, hipPointingDirection);
+            this.interpoler.goal_globalTransform.rotateTo(proposedRotation);
         }
         //console.log(this.hipToFoot.mag());
         this.goalNode.translateTo(this.hipToFoot.p2); 
@@ -128,38 +238,37 @@ export class Foot {
         this.goalNode.project();
     }
 
-    tweakGoalForComfort() {
-        
-        this.hipToFoot.p2.set(this.getRebalanceOffset(remainingTime).add(this.footNode.origin()));
-        this.hipToFoot.p1.set(this.futureHipsPos).add(this.attachpoint);
-        let projectedAttach = new Vec3();
-        this.hips.projectToGround(this.hipToFoot.p1, projectedAttach);
-        this.hipToFoot.p2.lerp(projectedAttach, 0.1);   
-        this.goalNode.translateTo(this.hipToFoot.p2); 
-        this.interpoler.goal_globalTransform.adoptValues(this.goalNode.getGlobalMBasis());
-        this.goalNode.project();
-    }
 
+    
 
-    closestToGroundRay = new Vec3(0,0,0);
-    closestToInterFootRay = new Vec3(0,0,0); 
-    otherFootPos = new Vec3(0,0,0);
-    thisFootPos = new Vec3(0,0,0);
-    futureHipsPos = new Vec3(0,0,0);
-
-    /**returns a vector indicating the direction and amount this foot would need to be offset 
-     * in order to balance the hips between this foot and the other foot. 
-     * 
+    /**
      * @param {Number} byTime how many milliseconds into the future to anticipate (by accounting for velocity);
+     * @param {Number} attempts how many attempts to make at finding a naively reachablesolution
+     * @return {IKTransform} a transform indicating where on the ground this foot would need to be in order to balance the hips between this foot and the other foot.
     */
-    getRebalanceOffset(byTime=0) {
-        this.otherFootPos.set(this.otherFoot.footNode.getGlobalMBasis().translate);
-        this.thisFootPos.set(this.footNode.getGlobalMBasis().translate);
-        this.hips.getProjections(byTime, this.thisFootPos, this.otherFootPos, this.futureHipsPos, this.closestToGroundRay, this.closestToInterFootRay);
-        this.otherToCenter.setP1(this.otherFootPos); 
-        this.otherToCenter.setP2(this.closestToInterFootRay);
+    getRebalanceTransform(byTime=0, startPos) {
+        this.otherFoot.footNode.origin(this.otherFootPos);
+        this.hips.getProjections(byTime, this.projectionObj);
+        this.otherToCenter.setP1(this.projectionObj.otherFootVec_proj); 
+        this.otherToCenter.setP2(this.projectionObj.hipOnOtherFootPlane);
+        this.hips.gravPlaneProjectThrough(this.otherToCenter.p1, this.projectionObj.hipOnOtherFootPlane, this.otherToCenter.p2);
         this.otherToCenter.scaleBy(2);
-        return this.otherToCenter.p2.subClone(this.thisFootPos);
+        this.hipToFoot.p1.set(this.projectionObj.future_hipPos).add(this.attachpoint);
+        this.hipToFoot.p2.set(this.otherToCenter.p2);
+        let legLengthSq = this.hips.legLength * this.hips.legLength;
+        if(legLengthSq < this.hipToFoot.magSq()) {
+            this.hipToFoot.setMag(this.hips.legLength);
+        }
+        this.hips.gravPlaneProjectThrough(this.otherToCenter.p1, this.projectionObj.hipOnOtherFootPlane, this.otherToCenter.p2);
+        let projInfo = this.hips.projectToGround(this.hipToFoot.p2, this.hipToFoot.p2);
+        this.projectionObj.firstFootVec_proj.set(this.hipToFoot.p2);
+        this.projectionObj.firstFootVec_norm.readFromTHREE(projInfo.normal);
+        let hipPointingDirection = this.hips.hipsNode.getGlobalMBasis().getZHeading();
+        let proposedRotation = this.getNormalAlignedRotation(projInfo.normal, hipPointingDirection);
+        this.rebalanceTransform.setToIdentity();
+        this.rebalanceTransform.translateTo(this.hipToFoot.p2); 
+        this.rebalanceTransform.rotateTo(proposedRotation);
+        return this.rebalanceTransform; 
     }
 
     /**panic and try to hurry up the foot planting within the provided number of milliseconds */
@@ -169,63 +278,107 @@ export class Foot {
     }
     plant() {
         this.isPlanted = true;
+        this.moveProposal.unlock().mid_stride = false;
+        this.moveProposal.lock();
         this.interpoler.endTime = Date.now();
         this.foot.material.color.set(this.plantedCol);
-        this.hips.projectToGround(this.footNode.origin(), this.thisFootPos);
-        this.footNode.translateTo(this.thisFootPos);
+        //let rebalanceTransform = this.getRebalanceTransform(0); 
+        //this.interpoler.goal_globalTransform.adoptValues(rebalanceTransform);
+        this.interpoler.start_globalTransform.adoptValues(this.interpoler.goal_globalTransform);
+        this.startNode.adoptGlobalValuesFromIKTransform(this.interpoler.start_globalTransform);
+        this.startNode.project(); 
+        this.footNode.alignGlobalsTo(this.interpoler.goal_globalTransform);
         this.footNode.project();
     }
 
     addTo(scene) {
         scene.add(this.foot);
         scene.add(this.goal);
+        scene.add(this.start);
         scene.add(this.legline);
-        this.footNode = new ShadowNode(this.foot);
-        this.goalNode = new ShadowNode(this.goal);
+        this.footNode = new ShadowNode(this.foot, undefined, this.pool);
+        this.goalNode = new ShadowNode(this.goal, undefined, this.pool);
+        this.startNode = new ShadowNode(this.start, undefined, this.pool);
         this.footNode.mimic();
         this.goalNode.mimic();
+        this.startNode.mimic();
+        
         this.interpoler = new Interpolator(this.footNode);
+        this.interpoler.setGoal(this.footNode.getGlobalMBasis());
     }
 
-    update(t=-1) {
-        let projectionPoint = this.hips.projectToGround(this.interpoler.goal_globalTransform.translate, this.interpoler.goal_globalTransform.translate);
-        let groundNormal = projectionPoint.normal;
-        //groundNormal.
+    tempRot1 = new Rot(1,0,0,0);
+    tempRot2 = new Rot(1,0,0,0);
+    tempRot3 = new Rot(1,0,0,0);
+    tempRot4 = new Rot(1,0,0,0);
+
+    /**returns a global rotation aligned with its y-heading in the provided normal direction and its z-heading the provided pointing direction.
+     * don't worry about normalization, it's taken care of.
+    */
+    getNormalAlignedRotation(normalDirection, pointingDirection) {
+        let pointingRot = this.tempRot1.setComponents(1,0,0,0);
+        let normalRot = this.tempRot2.setComponents(1,0,0,0);
+        let pd = pointingDirection;
+        let nd = normalDirection;
+        this.tempYVec.setComponents(0,1,0);
+        this.tempZVec.setComponents(0,0,1);
+        if(pointingDirection != null)
+            pointingRot.setFromVecs(this.tempZVec, this.pool.any_Vec3(pd.x, pd.y, pd.z).normalize());
+        pointingRot.applyToVec(this.tempYVec);
+        if(normalDirection != null)
+            normalRot.setFromVecs(this.tempYVec, this.pool.any_Vec3(nd.x, nd.y, nd.z).normalize());
+        
+        return normalRot.applyAfter(pointingRot, this.tempRot3);
+    }
+
+    update(t=-1) {        
+        //add some lift to the foot if it's midstride
         if(t>= 0 && t<=1) {
-            let travelVec = this.interpoler.goal_globalTransform.translate.subClone(this.interpoler.start_globalTransform.translate);
+            let currentInterp = this.interpoler.interpolated_Transform.origin();
+            let travelVec = this.interpoler.start_globalTransform.origin().sub(this.interpoler.goal_globalTransform.origin());
             let traveLen = travelVec.mag();
             let midY = travelVec.y/2; 
-            let tquad = ((0.25-((0.5-t)*(0.5-t)))*traveLen) + midY;
-            this.footNode.translateByGlobal(new Vec3(0,tquad/2,0));
+            let subT = (0.25-((0.5-t)*(0.5-t)))
+            let tquad = (subT*traveLen) + midY;            
+            this.interpoler.interpolated_Transform.translateTo(this.pool.any_Vec3(currentInterp.x,currentInterp.y + (tquad/1.5),currentInterp.z));
         }
         if(this.isPlanted) {
             this.goal.visible = false;
         }
         else { 
-            //this.goal.visible = true;
+            this.goal.visible = true && this.showGoal;
         }
-        this.goalNode.project();
+
+        //this.footProjArrow.setLength(arrowDir.mag());
+        //this.footProjArrow.setDirection(arrowDir.normalize());
+        //this.footNode.alignGlobalsTo(this.interpoler.interpolated_Transform);
         this.footNode.project();
-        let hipPos = this.hips.hipsNode.origin();
+        this.goalNode.project();
+        this.startNode.project();
+        /*let hipPos = this.hips.hipsNode.origin();
         let hipLocalized = this.hips.hipsNode.getGlobalOfVec(this.attachpoint);
-        let footPos = this.footNode.origin();
-        this.lineGeometry.setFromPoints([
+        let footPos = this.footNode.origin();*/
+        /*this.lineGeometry.setFromPoints([
             new THREE.Vector3(hipLocalized.x, hipLocalized.y, hipLocalized.z),
             new THREE.Vector3(this.thisFootPos.x, this.thisFootPos.y, this.thisFootPos.z)
-        ]);
+        ]);*/
     }
 }
 
 export class Interpolator {
-    start_globalTransform = new IKTransform();
-    goal_globalTransform = new IKTransform();
-    interpolated_Transform = new IKTransform();
+    start_globalTransform = null;
+    goal_globalTransform = null;
+    interpolated_Transform = null;
     current = null;
     startTime = null;
     endTime = null;
     smoothingFunction = null;
-    constructor(ik_node) {
+    constructor(ik_node, pool) {
         this.current = ik_node;
+        this.pool = pool; 
+        this.start_globalTransform = IKTransform.newPooled(this.pool);
+        this.goal_globalTransform = IKTransform.newPooled(this.pool);
+        this.interpolated_Transform = IKTransform.newPooled(this.pool);
     }
 
 
@@ -269,14 +422,17 @@ export class Interpolator {
             this.interpolated_Transform.adoptValues(this.start_globalTransform);
             this.interpolated_Transform.translate.lerp(this.goal_globalTransform.translate, t);
             Rot.fromSlerp(this.interpolated_Transform.rotation, this.goal_globalTransform.rotation, t, this.interpolated_Transform.rotation);
-            for(let i = 0; i<this.interpolated_Transform.skewMatrix_e.length; i++) {
-                this.interpolated_Transform.skewMatrix_e[i] = this.lerp(this.start_globalTransform.skewMatrix_e[i], this.goal_globalTransform.skewMatrix_e[i], t);
-            };
+            if(!(this.start_globalTransform.isOrthogonal && this.goal_globalTransform.isOrthogonal)) {
+                for(let i = 0; i<this.interpolated_Transform.skewMatrix_e.length; i++) {
+                    this.interpolated_Transform.skewMatrix_e[i] = this.lerp(this.start_globalTransform.skewMatrix_e[i], this.goal_globalTransform.skewMatrix_e[i], t);
+                };
+            }
             this.interpolated_Transform.scale.lerp(this.goal_globalTransform.scale, t);        
             this.interpolated_Transform.lazyRefresh();
             this.interpolated_Transform.recompose();
+            if(this.onTick != null) 
+                this.onTick(t, this.current, this.start_globalTransform, this.goal_globalTransform);
             this.current.adoptGlobalValuesFromIKTransform(this.interpolated_Transform);
-            if(this.onTick != null) this.onTick(t, this.current, this.start_globalTransform, this.goal_globalTransform);
         }
         if(t >= 1) 
             this.onComplete(this.current, this.start_globalTransform, this.goal_globalTransform);
