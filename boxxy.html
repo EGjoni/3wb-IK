@@ -320,9 +320,9 @@
                     boxMesh.material.side = 0;
                     groundCubes.push(boxMesh);
                     
-                    /*boxMesh.position.x = -area/2;
-                    boxMesh.position.z = -area/2;*/
-                    boxMesh.position.y = -1;
+                    boxMesh.position.x += -area/2;
+                    boxMesh.position.z += -area/2;
+                    boxMesh.position.y += -1;
                     scene.add(boxMesh)
                 }
             }
