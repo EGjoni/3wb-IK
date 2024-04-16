@@ -722,17 +722,17 @@ export class ConstraintStack extends LimitingReturnful {
     
     layerSet(val) {
         for(let c of this.allconstraints) {
-            c.layers.set(val);
+            c.layers?.set(val);
         }
     }
     layersEnable(val) {
         for(let c of this.allconstraints) {
-            c.layers.enable(val);
+            c.layers?.enable(val);
         }
     }
     layersDisable(val) {
         for(let c of this.allconstraints) {
-            c.layers.disable(val);
+            c.layers?.disable(val);
         }
     }
 

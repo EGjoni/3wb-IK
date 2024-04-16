@@ -163,6 +163,7 @@ export class Boxxy {
         this.normedGravityRay = new Ray(this.pool.any_Vec3(), this.pool.any_Vec3(), this.pool);
         this.normedGravityRay.setHeading(this.normedGravityDirection);
         this.tempRay = new Ray(this.pool.any_Vec3(), this.pool.any_Vec3(), this.pool);
+        this.prevPos = this.pool.new_Vec3();
     }
 
     get hipClearance() {return this._hipClearance;}
@@ -182,11 +183,12 @@ export class Boxxy {
 
     inferredUpdate(newPos) {
         this.hipsNode.mimic();
-        this.velocity.set(newPos).sub(this.hipsNode.origin());
+        this.velocity.set(newPos).sub(this.prevPos);
         this.velocity.y = 0;
         //if(this.velocity.mag() > 0)
         //    debugger;
         this.update(this.doWalkery);
+        this.hipsNode.origin(this.prevPos);
     }
 
     controlledUpdate(forwardVec, leftVec, doWalkery) {
@@ -633,6 +635,7 @@ export class Boxxy {
         this.ensureHipClearance(0);
         this.left_foot.plant();
         this.right_foot.plant();
+        this.hipsNode.origin(this.prevPos);
     }
 
     /**does a couple of plant and update passes to prealign to the ground */
