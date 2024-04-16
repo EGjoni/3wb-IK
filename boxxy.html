@@ -168,6 +168,27 @@
             hipRest.setPainfulness(0.8);
             hipRest.setStockholmRate(0.85);
 
+            new Kusudama(armature.bonetags["J_Bip_C_Spine"], (t, b) => b == contextBone, "Kusudama for J_Bip_C_Spine", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 0.99, 0.12), 0.41355);
+            new Twist(armature.bonetags["J_Bip_C_Spine"], 0.62953, undefined,
+                armature.stablePool.any_Vec3(-1.8374118504407587e-16, 0.9996360572455434, -0.02697689853531279),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_C_Spine", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_C_Chest"], (t, b) => b == contextBone, "Kusudama for J_Bip_C_Chest", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 0.990869672460897, 0.2), 0.54056);
+            new Twist(armature.bonetags["J_Bip_C_Chest"], 0.88355, undefined,
+                armature.stablePool.any_Vec3(2.759975806107918e-16, 0.9908696724608967, 0.13482318864807638),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_C_Chest", armature.stablePool);
+
+            new Kusudama(armature.bonetags["J_Bip_C_UpperChest"], (t, b) => b == contextBone, "Kusudama for J_Bip_C_UpperChest", armature.stablePool)
+                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 0.983219856621792, 0.15790693346676151), 0.47);
+            new Twist(armature.bonetags["J_Bip_C_UpperChest"], 1.25046, undefined,
+                armature.stablePool.any_Vec3(8.575184161921518e-17, 0.9983219856621794, -0.057906933466761526),
+                0, (cnstrt, bone) => bone == contextBone,
+                "Kusudama for J_Bip_C_UpperChest", armature.stablePool);
+
             new Kusudama(armature.bonetags["J_Bip_L_UpperLeg"], (cnstrt, bone) => bone == contextBone, "Kusudama for J_Bip_L_UpperLeg", armature.stablePool)
             .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.2505336783387944, -0.2645716928861982, -0.9312543666159987), 0.48411).parentKusudama
             .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.3143631992559614, -0.7667395103803937, -0.5597198425776874), 0.69579).parentKusudama
@@ -226,8 +247,28 @@
 
 
             for (let b of armature.bones) {
-                if (b.getConstraint() == null) {
+                if (b.getConstraint() == null || b.name.indexOf("J_Bip_C") != -1) {
                     let restconst = new Rest(b);
+                    if (b == armature.bonetags["J_Bip_C_Head"]) {
+                        restconst.setPainfulness(0.95);
+                        restconst.setStockholmRate(0.8);
+                    }
+                    if (b == armature.bonetags["J_Bip_C_Neck"]) {
+                        restconst.setPainfulness(0.9);
+                        restconst.setStockholmRate(0.8);
+                    }
+                    if (b == armature.bonetags['J_Bip_C_Chest']) {
+                        restconst.setPainfulness(0.8);
+                        restconst.setStockholmRate(0.8);
+                    }
+                    if (b == armature.bonetags['J_Bip_C_UpperChest']) {
+                        restconst.setPainfulness(0.8);
+                        restconst.setStockholmRate(0.8);
+                    }
+                    if (b.name.indexOf("J_Sec") != -1) {
+                        restconst.setPainfulness(0.15);
+                        restconst.setStockholmRate(0.5);
+                    }
                 }
             }
 
@@ -290,7 +331,7 @@
 
             let J_Sec_Hair2_03_pin = new IKPin(armature.bonetags["J_Sec_Hair2_03"]);
             J_Sec_Hair2_03_pin.setPinWeight(0.171);
-            J_Sec_Hair2_03_pin.setXPriority(0.000);
+            J_Sec_Hair2_03_pin.setXPriority(0.300);
             J_Sec_Hair2_03_pin.setYPriority(0.553);
             J_Sec_Hair2_03_pin.setZPriority(0.000);
             J_Sec_Hair2_03_pin.setDepthFalloff(0.829);
@@ -303,7 +344,7 @@
             J_Sec_Hair3_03_pin.setYPriority(0.433);
             J_Sec_Hair3_03_pin.setZPriority(0.000);
             J_Sec_Hair3_03_pin.setDepthFalloff(0.521);
-            armature.c_chest.attach(J_Sec_Hair3_03_pin.target_threejs);
+            armature.upper_chest.attach(J_Sec_Hair3_03_pin.target_threejs);
             J_Sec_Hair3_03_pin.ensure();
 
             let J_Sec_Hair3_04_pin = new IKPin(armature.bonetags["J_Sec_Hair3_04"]);
@@ -311,22 +352,22 @@
             J_Sec_Hair3_04_pin.setXPriority(0.5);
             J_Sec_Hair3_04_pin.setYPriority(0.505);
             J_Sec_Hair3_04_pin.setZPriority(0.000);
-            J_Sec_Hair3_04_pin.setDepthFalloff(0.000);
+            J_Sec_Hair3_04_pin.setDepthFalloff(0.750);
             armature.bonetags["J_Bip_L_Shoulder"].attach(J_Sec_Hair3_04_pin.target_threejs);
             J_Sec_Hair3_04_pin.ensure();
 
             let J_Sec_Hair3_05_pin = new IKPin(armature.bonetags["J_Sec_Hair3_05"]);
             J_Sec_Hair3_05_pin.setPinWeight(0.25);
             J_Sec_Hair3_05_pin.setXPriority(0.5);
-             J_Sec_Hair3_05_pin.setYPriority(0.5);
-             J_Sec_Hair3_05_pin.setZPriority(0.0);
-             J_Sec_Hair3_05_pin.setDepthFalloff(0.75);
+            J_Sec_Hair3_05_pin.setYPriority(0.5);
+            J_Sec_Hair3_05_pin.setZPriority(0.0);
+            J_Sec_Hair3_05_pin.setDepthFalloff(0.75);
             armature.bonetags["J_Bip_R_Shoulder"].attach(J_Sec_Hair3_05_pin.target_threejs);
             J_Sec_Hair3_05_pin.ensure();
 
             let J_Sec_Hair3_09_pin = new IKPin(armature.bonetags["J_Sec_Hair3_09"]);
             J_Sec_Hair3_09_pin.setPinWeight(0.25);
-            J_Sec_Hair3_09_pin.setXPriority(0.0);
+            J_Sec_Hair3_09_pin.setXPriority(0.03);
             J_Sec_Hair3_09_pin.setYPriority(0.5);
             J_Sec_Hair3_09_pin.setZPriority(0.0);
             J_Sec_Hair3_09_pin.setDepthFalloff(0.75);
@@ -335,7 +376,7 @@
 
             let J_Sec_Hair3_10_pin = new IKPin(armature.bonetags["J_Sec_Hair3_10"]);
             J_Sec_Hair3_10_pin.setPinWeight(0.25);
-            J_Sec_Hair3_10_pin.setXPriority(0.000);
+            J_Sec_Hair3_10_pin.setXPriority(0.030);
             J_Sec_Hair3_10_pin.setYPriority(0.5);
             J_Sec_Hair3_10_pin.setZPriority(0.000);
             J_Sec_Hair3_10_pin.setDepthFalloff(0.750);
@@ -344,82 +385,82 @@
 
             let J_Sec_Hair2_19_pin = new IKPin(armature.bonetags["J_Sec_Hair2_19"]);
             J_Sec_Hair2_19_pin.setPinWeight(0.614);
-            J_Sec_Hair2_19_pin.setXPriority(0.000);
-            J_Sec_Hair2_19_pin.setYPriority(0.018);
+            J_Sec_Hair2_19_pin.setXPriority(0.0);
+            J_Sec_Hair2_19_pin.setYPriority(0.0);
             J_Sec_Hair2_19_pin.setZPriority(0.000);
             J_Sec_Hair2_19_pin.setDepthFalloff(0.923);
-            armature.c_chest.attach(J_Sec_Hair2_19_pin.target_threejs);
+            armature.bonetags["J_Bip_C_Neck"].attach(J_Sec_Hair2_19_pin.target_threejs);
             J_Sec_Hair2_19_pin.ensure();
 
             let J_Sec_Hair3_19_pin = new IKPin(armature.bonetags["J_Sec_Hair3_19"]);
             J_Sec_Hair3_19_pin.setPinWeight(0.784);
-            J_Sec_Hair3_19_pin.setXPriority(0.000);
-            J_Sec_Hair3_19_pin.setYPriority(0.095);
+            J_Sec_Hair3_19_pin.setXPriority(0.0);
+            J_Sec_Hair3_19_pin.setYPriority(0.0);
             J_Sec_Hair3_19_pin.setZPriority(0.000);
             J_Sec_Hair3_19_pin.setDepthFalloff(0.832);
-            armature.c_chest.attach(J_Sec_Hair3_19_pin.target_threejs);
+            armature.bonetags["J_Bip_C_Neck"].attach(J_Sec_Hair3_19_pin.target_threejs);
             J_Sec_Hair3_19_pin.ensure();
 
             let J_Sec_Hair4_19_pin = new IKPin(armature.bonetags["J_Sec_Hair4_19"]);
             J_Sec_Hair4_19_pin.setPinWeight(0.490);
-            J_Sec_Hair4_19_pin.setXPriority(0.000);
+            J_Sec_Hair4_19_pin.setXPriority(0.210);
             J_Sec_Hair4_19_pin.setYPriority(0.000);
             J_Sec_Hair4_19_pin.setZPriority(0.000);
             J_Sec_Hair4_19_pin.setDepthFalloff(0.000);
-            armature.c_chest.attach(J_Sec_Hair4_19_pin.target_threejs);
+            armature.bonetags["J_Bip_C_UpperChest"].attach(J_Sec_Hair4_19_pin.target_threejs);
             J_Sec_Hair4_19_pin.ensure();
 
             let J_Sec_Hair2_20_pin = new IKPin(armature.bonetags["J_Sec_Hair2_20"]);
             J_Sec_Hair2_20_pin.setPinWeight(0.614);
-            J_Sec_Hair2_20_pin.setXPriority(0.000);
-            J_Sec_Hair2_20_pin.setYPriority(0.018);
+            J_Sec_Hair2_20_pin.setXPriority(0.0);
+            J_Sec_Hair2_20_pin.setYPriority(0.0);
             J_Sec_Hair2_20_pin.setZPriority(0.000);
             J_Sec_Hair2_20_pin.setDepthFalloff(0.923);
-            armature.c_chest.attach(J_Sec_Hair2_20_pin.target_threejs);
+            armature.bonetags["J_Bip_C_Neck"].attach(J_Sec_Hair2_20_pin.target_threejs);
             J_Sec_Hair2_20_pin.ensure();
 
             let J_Sec_Hair3_20_pin = new IKPin(armature.bonetags["J_Sec_Hair3_20"]);
             J_Sec_Hair3_20_pin.setPinWeight(0.784);
-            J_Sec_Hair3_20_pin.setXPriority(0.000);
-            J_Sec_Hair3_20_pin.setYPriority(0.095);
+            J_Sec_Hair3_20_pin.setXPriority(0.00);
+            J_Sec_Hair3_20_pin.setYPriority(0.0);
             J_Sec_Hair3_20_pin.setZPriority(0.000);
             J_Sec_Hair3_20_pin.setDepthFalloff(0.832);
-            armature.c_chest.attach(J_Sec_Hair3_20_pin.target_threejs);
+            armature.bonetags["J_Bip_C_Neck"].attach(J_Sec_Hair3_20_pin.target_threejs);
             J_Sec_Hair3_20_pin.ensure();
 
             let J_Sec_Hair4_20_pin = new IKPin(armature.bonetags["J_Sec_Hair4_20"]);
             J_Sec_Hair4_20_pin.setPinWeight(0.490);
-            J_Sec_Hair4_20_pin.setXPriority(0.000);
+            J_Sec_Hair4_20_pin.setXPriority(0.2101);
             J_Sec_Hair4_20_pin.setYPriority(0.000);
             J_Sec_Hair4_20_pin.setZPriority(0.000);
             J_Sec_Hair4_20_pin.setDepthFalloff(0.000);
-            armature.c_chest.attach(J_Sec_Hair4_20_pin.target_threejs);
+            armature.bonetags["J_Bip_C_UpperChest"].attach(J_Sec_Hair4_20_pin.target_threejs);
             J_Sec_Hair4_20_pin.ensure();
 
             let J_Sec_Hair5_04_pin = new IKPin(armature.bonetags["J_Sec_Hair5_04"]);
             J_Sec_Hair5_04_pin.setPinWeight(0.500);
-            J_Sec_Hair5_04_pin.setTargetPriorities(0);
+            J_Sec_Hair5_04_pin.setTargetPriorities(0.03, 0.5, 0);
             J_Sec_Hair5_04_pin.setDepthFalloff(0.000);
             armature.c_chest.attach(J_Sec_Hair5_04_pin.target_threejs);
-            J_Sec_Hair5_04_pin.ensure(); 
-            
+            J_Sec_Hair5_04_pin.ensure();
+
             let J_Sec_Hair6_10_pin = new IKPin(armature.bonetags["J_Sec_Hair6_10"]);
             J_Sec_Hair6_10_pin.setPinWeight(0.500);
-            J_Sec_Hair6_10_pin.setTargetPriorities(0);
+            J_Sec_Hair6_10_pin.setTargetPriorities(0.03, 0.5, 0);
             J_Sec_Hair6_10_pin.setDepthFalloff(0.000);
             armature.c_chest.attach(J_Sec_Hair6_10_pin.target_threejs);
             J_Sec_Hair6_10_pin.ensure();
-                        
+
             let J_Sec_Hair6_09_pin = new IKPin(armature.bonetags["J_Sec_Hair6_09"]);
             J_Sec_Hair6_09_pin.setPinWeight(0.500);
-            J_Sec_Hair6_09_pin.setTargetPriorities(undefined);
+            J_Sec_Hair6_09_pin.setTargetPriorities(0.03, 0.5, 0);
             J_Sec_Hair6_09_pin.setDepthFalloff(0.000);
             armature.c_chest.attach(J_Sec_Hair6_09_pin.target_threejs);
-            J_Sec_Hair6_09_pin.ensure(); 
-            
+            J_Sec_Hair6_09_pin.ensure();
+
             let J_Sec_Hair5_05_pin = new IKPin(armature.bonetags["J_Sec_Hair5_05"]);
             J_Sec_Hair5_05_pin.setPinWeight(0.500);
-            J_Sec_Hair5_05_pin.setTargetPriorities(0);
+            J_Sec_Hair5_05_pin.setTargetPriorities(0.03, 0.5, 0);
             J_Sec_Hair5_05_pin.setDepthFalloff(0.000);
             armature.c_chest.attach(J_Sec_Hair5_05_pin.target_threejs);
             J_Sec_Hair5_05_pin.ensure();  
@@ -448,12 +489,12 @@
                     let minx = Math.max(Math.random()*sizeDelta*maxdim, minDim);
                     let minz = Math.max(Math.random()*sizeDelta*maxdim, minDim);
                     //let boxGeo = new THREE.SphereGeometry(Math.random()*minDim*heightDelta, 16, 16); 
-                    let boxGeo = new THREE.BoxGeometry(minx, Math.random()*minDim*heightDelta, minz);//new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //
+                    let boxGeo = new THREE.BoxGeometry(minx, 1/*Math.random()*minDim*heightDelta*/, minz);//new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //
                     let boxMesh = new THREE.Mesh(boxGeo, groundCubesMat);
                     boxMesh.position.x = x; boxMesh.position.z = z;
-                    boxMesh.rotateX((angleDelta/2) - Math.random()*angleDelta);
-                    boxMesh.rotateY((angleDelta/2) - Math.random()*angleDelta);
-                    boxMesh.rotateZ((angleDelta/2) - Math.random()*angleDelta);
+                    boxMesh.rotateX(.5*angleDelta*((2*area)) - Math.random()*angleDelta*((x+z)/(2*area)));
+                    boxMesh.rotateY(.5*angleDelta*((2*area)) - Math.random()*angleDelta*((x+z)/(2*area)));
+                    boxMesh.rotateZ(.5*angleDelta*((2*area)) - Math.random()*angleDelta*((x+z)/(2*area)));
                     boxMesh.material.side = 0;
                     groundCubes.push(boxMesh);
                     

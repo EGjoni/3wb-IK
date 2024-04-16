@@ -109,6 +109,7 @@ export class IKPin extends Saveable{
         this.targetNode.registerTrackChangeListener((node, oldtracked, newtracked)=>this.onTargetNodeTrackChange(node, oldtracked, newtracked));
         this.enabled = !disabled;
         this.forBone.setIKPin(this);
+        this.setTargetPriorities(this.xPriority, this.yPriority, this.zPriority);
     }
 
     isEnabled() {
@@ -224,7 +225,7 @@ export class IKPin extends Saveable{
 	 * @param zPriority Determines how much this pin's bone tries to align its z-axis with the target z-axis.
 	 */
 
-    setTargetPriorities(xPriority, yPriority, zPriority) {
+    setTargetPriorities(xPriority=0, yPriority=0, zPriority=0) {
 
         let xDir = xPriority > 0 ? IKPin.XDir : 0;
 		let yDir = yPriority > 0 ? IKPin.YDir : 0;

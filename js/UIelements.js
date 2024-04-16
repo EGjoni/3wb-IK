@@ -556,19 +556,19 @@ ${wb.forBone.toString()}
                 initLines(wb);
                 wb.targetDrawer.draw(new THREE.Color('grey'),
                     new THREE.Color(0.6, 0.2, 0.2),//red
-                    new THREE.Color(0.6, 0.2, 0.6),//magenta
+                    new THREE.Color(0.6, 0.2, 0.2),//red
                     new THREE.Color(0.2, 0.6, 0.2),//green
-                    new THREE.Color(0.5, 0.5, 0.1),//yellow
+                    new THREE.Color(0.2, 0.6, 0.2),//green
                     new THREE.Color(0.2, 0.2, 0.8),//blue
-                    new THREE.Color(0.2, 0.6, 0.6)//cyan
+                    new THREE.Color(0.2, 0.2, 0.8),//blue
                 );
                 wb.tipDrawer.draw(new THREE.Color('white'),
                     new THREE.Color(0.6, 0, 0),//red
-                    new THREE.Color(0.6, 0, 0.6),//magenta
+                    new THREE.Color(0.6, 0, 0),//red
                     new THREE.Color(0, 0.6, 0),//green
-                    new THREE.Color(0.5, 0.5, 0),//yellow
+                    new THREE.Color(0, 0.6, 0),//green
                     new THREE.Color(0, 0, 0.8),//blue
-                    new THREE.Color(0, 0.4, 0.6)//cyan
+                    new THREE.Color(0, 0, 0.8),//blue
                 );
                 wb.rotDraw.visible = false;
                 wb.rotDraw.update((v, wb) => { return wb.simLocalAxes.origin().clone().add(v) });
@@ -584,11 +584,11 @@ ${wb.forBone.toString()}
                 //if (bone == window.contextBone) {
                 wb.tipDrawer.draw(new THREE.Color('white'),
                     new THREE.Color(1, 0, 0),//red
-                    new THREE.Color(1, 0, 1),//magenta
+                    new THREE.Color(1, 0, 0),//red
                     new THREE.Color(0, 1, 0),//green
-                    new THREE.Color(1, 1, 0),//yellow
+                    new THREE.Color(0, 1, 0),//green
                     new THREE.Color(0, 0, 1),//blue
-                    new THREE.Color(0, 1, 1)//cyan
+                    new THREE.Color(0, 0, 1)//blue
                 );
                 wb.rotDraw.update((v, wb) => { return wb.simLocalAxes.origin().clone().add(v) });
                 wb.rotDraw.makeVisible();// = true; 
@@ -1251,12 +1251,13 @@ window.updateInfoPanel = async function (item) {
 
     }
 
+    
+    let children = D.byid("default-stack").children;
+    for (let [key, node] of Object.entries(children)) {
+        node.remove();
+    }
     if (constraintStack != null) {
         let domConstraint = getMakeConstraint_DOMElem(constraintStack);
-        let children = D.byid("default-stack").children;
-        for (let [key, node] of Object.entries(children)) {
-            node.remove();
-        }
         D.byid("default-stack").appendChild(domConstraint);
         domConstraint.refresh();
     } else {

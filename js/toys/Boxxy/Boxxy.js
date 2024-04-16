@@ -154,7 +154,7 @@ export class Boxxy {
         this.gravityDirection = this.pool.new_Vec3(0, -10, 0);
         this.normedGravityDirection = this.gravityDirection.clone().normalize();
         this.normedGravityDirection.writeToTHREE(this.downVec);
-        this.downVec.multiplyScalar(1000);
+        //this.downVec.multiplyScalar(1000);
         this.hipClearanceDir = this.gravityDirection.clone().mult(-1*this.hipClearance);
         this.propA = new Proposal(this.pool);
         this.propB = new Proposal(this.pool);
@@ -513,12 +513,11 @@ export class Boxxy {
         this.rayCaster.set(this.intrxVec, this.downVec);
         let intrxRes = this.rayCaster.intersectObjects(this.groundObjects);
         for(let r of intrxRes) {
-            //if(r.normal.dot(this.downVec) < -0.2) {
-                outvec.readFromTHREE(r.point);
-                r.normal.applyQuaternion(r.object.quaternion);
-            //outvec.toConsole();
+            r.normal.applyQuaternion(r.object.quaternion);
+            if(r.normal.dot(this.downVec) < -0.5) {
+                outvec.readFromTHREE(r.point);    
                 return r;
-            
+            } else break;
         }
         return this.defaultNorm;
         //outvec.setComponents(invec.x, 0, invec.z);
