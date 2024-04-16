@@ -250,7 +250,7 @@ export class Loader {
         await Promise.all(popping);
         return true;
     }
-    findSceneObject(objPath, scene) {
+    static findSceneObject(objPath, scene) {
         if(objPath.isScenePathObj) 
             objPath = objPath.path;
         let curr = scene;

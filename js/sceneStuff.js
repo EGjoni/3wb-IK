@@ -179,6 +179,7 @@ function updateGlobalPinLists() {
     for (let a of armatures) {
         pinsList.push(...a.pinsList);
         targetsMeshList.push(...a.targetsMeshList);
+        a.recolorPreviewSkel();
     }
 }
 
@@ -188,7 +189,37 @@ function updateGlobalBoneLists() {
     for (let a of armatures) {
         boneMeshList.push(...a.meshList);
         boneList.push(...a.bones);
+        a.recolorPreviewSkel();
     }
+}
+
+
+function makePinMeshHint(ikpin, pinSize, into) { 
+    //let boneHeight = b.height
+    let baseSize = ikpin.forBone.height;
+    const targHint = ikpin.forBone.bonegeo != null ? ikpin.forBone.bonegeo : ikpin.forBone.getIKBoneOrientation();
+    targHint.updateWorldMatrix();
+    const globalTrans = targHint.matrixWorld; 
+    const geometry = ikpin.forBone?.bonegeo?.geometry ?? new THREE.BoxGeometry(baseSize * pinSize / 2, b.height, baseSize * pinSize);
+    
+    //const material = new THREE.MeshLambertMaterial({ color: 0xff0000, transparent: true, opacity: 0.6});
+    const material = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+    const targMesh = new THREE.Mesh(geometry, material);
+    //targMesh.position.set(0, b.height/2, 0);
+    targMesh.matrix.copy(globalTrans);
+    targMesh.matrix.decompose(targMesh.position, targMesh.quaternion, targMesh.scale);
+    let addTo = into;
+    if(ikpin.targetNode != null) {
+        addTo = ikpin.targetNode.toTrack;
+    }
+    addTo.attach(targMesh);
+    targMesh.name = ikpin.ikd;
+    targMesh.ikd = ikpin.ikd;
+    targMesh.meshHint = targMesh;
+    targMesh.layers.set(boneLayer);
+    targMesh.forPin = ikpin;
+    ikpin.hintMesh = targMesh;
+    return targMesh;
 }
 
 function makePinsList(pinSize, into = scene, armature, align = false, domakemesh= false) {
@@ -198,41 +229,14 @@ function makePinsList(pinSize, into = scene, armature, align = false, domakemesh
     let boneList = armature.bones;
     let i = 0;
 
-    function makeMeshHint(ikpin) { 
-        //let boneHeight = b.height
-        let baseSize = ikpin.forBone.height;
-        const targHint = ikpin.forBone.bonegeo != null ? ikpin.forBone.bonegeo : ikpin.forBone.getIKBoneOrientation();
-        targHint.updateWorldMatrix();
-        const globalTrans = targHint.matrixWorld; 
-        const geometry = ikpin.forBone?.bonegeo?.geometry ?? new THREE.BoxGeometry(baseSize * pinSize / 2, b.height, baseSize * pinSize);
-        
-        //const material = new THREE.MeshLambertMaterial({ color: 0xff0000, transparent: true, opacity: 0.6});
-        const material = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
-        const targMesh = new THREE.Mesh(geometry, material);
-        //targMesh.position.set(0, b.height/2, 0);
-        const meshWrapper = new THREE.Object3D();
-        meshWrapper.add(targMesh);
-        meshWrapper.matrix.copy(globalTrans);
-        meshWrapper.matrix.decompose(meshWrapper.position, meshWrapper.quaternion, meshWrapper.scale);
-        let addTo = into;
-        if(ikpin.targetNode != null) {
-            addTo = ikpin.targetNode.toTrack.parent;
-        }
-        addTo.attach(meshWrapper);
-        meshWrapper.name = ikpin.ikd;
-        meshWrapper.ikd = ikpin.ikd;
-        meshWrapper.meshHint = targMesh;
-        meshWrapper.layers.set(boneLayer);
-        targMesh.layers.set(boneLayer);
-        return meshWrapper;
-    }
+    
     for (let b of boneList) {
         if (b.getIKPin() != null) {
             let ikpin = b.getIKPin();
             
-            if (ikpin.targetNode.toTrack == null || domakemesh) {
-                ikpin.hintMesh = makeMeshHint(ikpin);
-                ikpin.targetNode.setTracked(ikpin.hintMesh);
+            if (ikpin.targetNode.toTrack == null || (domakemesh && ikpin.hintMesh == null)) {
+                ikpin.hintMesh = makePinMeshHint(ikpin, pinSize, ikpin.target_threejs.parent);
+                if(ikpin.targetNode.toTrack == null) ikpin.targetNode.setTracked(ikpin.hintMesh);
                 ikpin.alignToBone();
             } 
             if(align) {
@@ -484,7 +488,7 @@ function initControls(THREE, renderer) {
         mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
         raycaster.setFromCamera(mouse, camera);
         const intersectsPin = raycaster.intersectObjects(targetsMeshList, true).filter(elem => elem.object instanceof THREE.AxesHelper == false);
-        selectedPinIdx = targetsMeshList.indexOf(intersectsPin[0]?.object.parent);
+        selectedPinIdx = targetsMeshList.indexOf(intersectsPin[0]?.object.forPin.targetNode.toTrack);
         const intersectsBone = raycaster.intersectObjects(boneMeshList, false).filter(elem => elem.object instanceof THREE.AxesHelper == false);
         selectedBoneIdx = boneList.indexOf(intersectsBone[0]?.object.forBone);
         if (selectedPinIdx == -1) {

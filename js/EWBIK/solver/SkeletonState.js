@@ -564,7 +564,7 @@ export class IKPin {
         return this.modeCode;
     }
 
-    getDepthFallOff() {
+    getDepthFalloff() {
         return this.depthFalloff;
     }
 

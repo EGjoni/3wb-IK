@@ -684,17 +684,15 @@ ${wb.forBone.toString()}
             if (window.contextPin != null) {
                 window.contextPin.enable();
                 diddisable = true;
+                contextPin.forBone.parentArmature.regenerateShadowSkeleton(true)
             } else if (window.contextBone != null) {
                 newPin = new IKPin(window.contextBone);
+                newPin.forBone.parentArmature.regenerateShadowSkeleton(true);
+                makePinMeshHint(newPin, 1, window.contextBone.parentArmature);
             }
             makePinsList(1, window.contextBone.parentArmature.armatureObj3d, window.contextBone.parentArmature);
-            if (!autoSolve) {
-                await newPin?.forBone.parentArmature.regenerateShadowSkeleton(true);
-                render();
-            }
-
-            window.contextBone.parentArmature.showBones(0.1, true);
             updateGlobalPinLists();
+            updateGlobalBoneLists();
             if (diddisable) {
                 select(window.contextPin.forBone);
             } else {
@@ -702,10 +700,13 @@ ${wb.forBone.toString()}
             }
         } else if (window.contextPin != null) {
             window.contextPin.disable();
+            contextPin.forBone.parentArmature.regenerateShadowSkeleton(true); //force regeneration so we can update the preview
             makePinsList(1, window.contextBone.parentArmature.armatureObj3d, window.contextBone.parentArmature);
-            window.contextBone.parentArmature.showBones(0.1, true);
+            //window.contextBone.parentArmature.showBones(0.1, true);
             updateGlobalPinLists();
+            updateGlobalBoneLists();
             select(window.contextPin.forBone);
+
         }
     })
 
@@ -808,11 +809,14 @@ ${wb.forBone.toString()}
 
     D.byid("change-pin-parent").addEventListener('click', (e) => {
         if (window.contextPin != null) {
+            /**@type {IKPin} */
+            let pin = window.contextPin;
             window.toInterstitial("Click a bone or target to attach to. Or hit Esc to cancel",
                 (selected) => {
                     if (selected != null) {
                         let transform = selected?.toTrack ?? selected;
-                        transform.attach(window.contextPin.toTrack);
+                        transform.attach(pin.targetNode.toTrack);
+                        pin.ensure();
                     }
                 });
         }
@@ -1324,8 +1328,8 @@ window.updateInfoPanel = async function (item) {
         pinToggle.checked = true;
         pinDom.qs("#weight").value = Math.log(window.contextPin.getPinWeight() + 1);
         pinDom.qs("#weight").parentNode.qs(".un-exp-output").value = window.contextPin.getPinWeight().toFixed(4);
-        pinDom.qs("#falloff").value = window.contextPin.getDepthFallOff();
-        pinDom.qs("#falloff").parentNode.qs("#falloff-output").value = window.contextPin.getDepthFallOff();
+        pinDom.qs("#falloff").value = window.contextPin.getDepthFalloff();
+        pinDom.qs("#falloff").parentNode.qs("#falloff-output").value = window.contextPin.getDepthFalloff();
         pinDom.qs("#x-priority").value = Math.log(window.contextPin.getXPriority() + 1);
         pinDom.qs("#x-priority").parentNode.qs(".un-exp-output").value = window.contextPin.getXPriority().toFixed(4);
         pinDom.qs("#y-priority").value = Math.log(window.contextPin.getYPriority() + 1);

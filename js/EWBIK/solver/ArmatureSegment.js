@@ -62,13 +62,13 @@ export class ArmatureSegment {
             const currentWB = new WorkingBone(currentBS, parentBone, this);
             if (currentBS == startingFrom) this.wb_segmentRoot = currentWB;
             strandBones.push(currentWB);
-            const target = currentBS.getIKPin();
+            let target = currentBS.getIKPin()?.isEnabled() ? currentBS.getIKPin() : null;
             const childBones = currentBS.getChildBoneList();
             const childCount = childBones.length;
             if (target != null ||  childCount > 1) { //split condition
                 if (target != null) 
                     segEffectors.push(currentWB);
-                if (target?.getDepthFallOff() <= 0.0 || childCount == 0) {
+                if (target?.getDepthFalloff() <= 0.0 || childCount == 0) {
                     finished = true;
                     this.wb_segmentTip = currentWB;
                     for (let i = 0; i < childCount; i++) 
@@ -216,7 +216,7 @@ export class ArmatureSegment {
                 }
                 pinSequence.push(this.wb_segmentTip);
             }
-            const thisFalloff = target == null ? 1 : target.getDepthFallOff();
+            const thisFalloff = target == null ? 1 : target.getDepthFalloff();
             for (const s of this.immediateSubSegments) {
                 s.recursivelyCreatePenaltyArray(weightArray, pinSequence, currentFalloff * thisFalloff);
             }

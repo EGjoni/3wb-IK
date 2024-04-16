@@ -39,7 +39,7 @@ export class IKPin extends Saveable{
 
     static async fromJSON(json, loader, pool, scene) {
         let result = new IKPin(
-            loader.findSceneObject(json.requires.forBone, scene),
+            Loader.findSceneObject(json.requires.forBone, scene),
             undefined,
             undefined,
             !json.enabled,
@@ -101,9 +101,12 @@ export class IKPin extends Saveable{
                 this.targetNode = targetNode;
             }
             this.target_threejs = this.targetNode.toTrack;
-            this.hintMesh = this.target_threejs;
+            if(this.target_threejs instanceof THREE.Mesh)
+                this.hintMesh = this.target_threejs;
+
+            this.target_threejs.forPin = this;
         }
-        this.targetNode.registerTrackChangeListener((nl)=>this.onTargetNodeTrackChange(nl));
+        this.targetNode.registerTrackChangeListener((node, oldtracked, newtracked)=>this.onTargetNodeTrackChange(node, oldtracked, newtracked));
         this.enabled = !disabled;
         this.forBone.setIKPin(this);
     }
@@ -178,7 +181,7 @@ export class IKPin extends Saveable{
 		}
     }
 
-    getDepthFallOff() {
+    getDepthFalloff() {
         return this.depthFalloff;
     }
 
@@ -431,6 +434,24 @@ export class IKPin extends Saveable{
         return false;
     }
 
+    printInitializationString(doPrint=true) {
+        let string = ``;
+        let p = this;
+        let boneName = p.forBone.name;
+        let pinName = `${boneName}_pin`;
+        string += `\nlet ${pinName} = new IKPin(armature.bonetags["${boneName}"]);\n`;
+        string += `${pinName}.setPinWeight(${p.getPinWeight().toFixed(3)});\n`;
+        string += `${pinName}.setTargetPriorities(${p.priorities[0].toFixed(3), p.priorities[1].toFixed(3), p.priorities[2].toFixed(3)});\n`;
+        string += `${pinName}.setDepthFalloff(${p.getDepthFalloff().toFixed(3)});\n`;
+        if(!p.enabled) string+=`\n${pinName}.disable();`; 
+        let pt = p.target_threejs;
+        string += `${pinName}.target_threejs.position.set(${pt.position.x}, ${pt.position.y}, ${pt.position.z});\n`
+        string += `${pinName}.target_threejs.quaternion.set(${pt.quaternion.x}, ${pt.quaternion.y}, ${pt.quaternion.z}, ${pt.quaternion.w});\n`
+        string += `${pinName}.target_threejs.scale.set(${pt.scale.x}, ${pt.scale.y}, ${pt.scale.z});\n`
+        if(doPrint) console.log(string);
+        else return string;
+    }
+
     /**
      * positions this pin to precisely where its bone can reach it.
     */
@@ -456,7 +477,18 @@ export class IKPin extends Saveable{
 
     onTargetNodeTrackChange(node, previousTracked, newTracked) {
         if(node == this.targetNode) {
+            if(this.target_threejs?.forPin == this) {
+                this.target_threejs.forPin = null;
+                for(let c of this.target_threejs.children) {
+                    if(c.forPin == this) {
+                        c.forPin = null;
+                    }
+                }
+            }
             this.target_threejs = newTracked;
+            if(this.target_threejs != null) {            
+                this.target_threejs.forPin = this;
+            }
         }
     }
 

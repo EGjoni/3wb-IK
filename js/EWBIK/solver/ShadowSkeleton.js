@@ -33,7 +33,6 @@ export class ShadowSkeleton {
         this.traversalArray = [];
         this.boneWorkingBoneIndexMap = new Map();
         this.buildArmaturSegmentHierarchy();
-        this.buildTraversalArray();
     }
 
     /**doesn't solve for anything, 
@@ -238,6 +237,7 @@ export class ShadowSkeleton {
 
         this.rootSegment = new ArmatureSegment(this, rootBone, null, false);
         this.rootSegment.init();
+        this.buildTraversalArray();
     }
 
     buildTraversalArray() {
@@ -249,10 +249,12 @@ export class ShadowSkeleton {
         let pinsSet = new Set();
 
         for (const segment of segmentTraversalArray) {
-            reversedTraversalArray.push(...segment.solvableStrandBones);
-            for(let wb of segment.pinnedBones) {
-                this.commonRootDepth = Math.min(wb.ikPin.targetNode.nodeDepth, this.commonRootDepth);
-                pinsSet.add(wb.ikPin.targetNode);
+            if(segment.pinnedBones.length > 0) {
+                reversedTraversalArray.push(...segment.solvableStrandBones);
+                for(let wb of segment.pinnedBones) {
+                    this.commonRootDepth = Math.min(wb.ikPin.targetNode.nodeDepth, this.commonRootDepth);
+                    pinsSet.add(wb.ikPin.targetNode);
+                }
             }
         }
         this.targetList = [...pinsSet];
@@ -462,6 +464,7 @@ export class ShadowSkeleton {
      * @return {boolean}
      */
     isSolvable(bone) {
-        return this.boneWorkingBoneIndexMap.has(bone) != null; 
+        if(bone?.wb == null) return false;
+        return this.boneWorkingBoneIndexMap.has(bone); 
     }
 }

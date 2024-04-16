@@ -9,7 +9,7 @@ import { convexBlob, pcaOrientation } from "./util/mathdump/mathdump.js";
 import { IKPin } from "./betterbones/IKpin.js";
 import { Kusudama } from "./betterbones/Constraints/Kusudama/Kusudama.js";
 import { Bone } from "three";
-import { Saveable } from "./util/loader/saveable.js";
+import { Saveable, Loader } from "./util/loader/saveable.js";
 import { Object3D } from "../three/three.module.js";
 import { ShadowNode } from "./util/nodes/ShadowNode.js";
 //import * as THREE from 'three';
@@ -124,7 +124,7 @@ export class EWBIK extends Saveable {
     lastFrameNumber = 0;
 
     static async fromJSON(json, loader, pool, scene) {
-        let foundBone = loader.findSceneObject(json.requires.rootBone, scene);
+        let foundBone = Loader.findSceneObject(json.requires.rootBone, scene);
         let result = new EWBIK(
             foundBone,
             json.defaultIterations, 
@@ -278,10 +278,10 @@ export class EWBIK extends Saveable {
         let orientation = bone.getIKBoneOrientation();
         //if (orientation.children.length == 0) {
             let matObj = null;
-            if (this.shadowSkel?.isSolvable(bone.ikd) == null || bone.parent == null) {
+            if (this.shadowSkel?.isSolvable(bone) == null || bone.parent == null) {
                 matObj = { color: new THREE.Color(0.2, 0.2, 0.8), transparent: true, opacity: 0.6 };
             } else {
-                matObj = { color: bone.color, transparent: true, opacity: 1.0 };
+                matObj = { color: bone.color, transparent: true, opacity: 0.6 };
             }
             let hullPoints = [];
             if(mode =='plate') {                
@@ -482,6 +482,17 @@ export class EWBIK extends Saveable {
         bonecol.b = 0.2;
     }
 
+    recolorPreviewSkel() {
+        for(let b of this.bones) {
+            if(b.bonegeo != null) {
+                if(!this.shadowSkel?.isSolvable(b)) {
+                
+                    b.bonegeo.material.color = new THREE.Color(0.2, 0.2, 0.8);
+                }
+            }
+        }
+    }
+
     stepWiseUpdateResult(callMe, wb) {
         this.alignBoneToSolverResult(wb);
         callMe(wb);
@@ -505,11 +516,11 @@ export class EWBIK extends Saveable {
         forBone.IKUpdateNotification();
     }
 
-    async regenerateShadowSkeleton(force) {
+    regenerateShadowSkeleton(force) {
         this.dirtyShadowSkel = true;
         this.pendingSolve = null; //invalidate any pending solve
         if (force)
-            return this._regenerateShadowSkeleton();
+            this._regenerateShadowSkeleton();
         this.dirtyRate = true;
     }
 

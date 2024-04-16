@@ -716,7 +716,7 @@ export class TrackingNode extends IKNode {
     _toTrack = null;
 
     static async fromJSON(json, loader, pool, scene) {
-        let result = new TrackingNode(loader.findSceneObject(json.requires.toTrack, scene), json.ikd);
+        let result = new TrackingNode(Loader.findSceneObject(json.requires.toTrack, scene), json.ikd);
         result.globalMBasis = new IKTransform();
         result.localMBasis = new IKTransform();
         return result;
