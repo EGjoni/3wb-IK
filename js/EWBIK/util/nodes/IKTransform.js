@@ -473,7 +473,7 @@ export class IKTransform extends Saveable {
     setTransformToGlobalOf(localInput, globalOutput) {
         if(this.isOrthoNormal) {
             globalOutput.translate.set(localInput.translate).compMult(this.scale);
-            globalOutput.scale.compMult(this.scale); //only works if orthonormal, which we are. We checked. It's fine. Relax.
+            globalOutput.scale.set(localInput.scale).compMult(this.scale); //only works if orthonormal, which we are. We checked. It's fine. Relax.
 		    this.rotation.applyAfter(localInput.rotation, globalOutput.rotation);
             globalOutput.rotation.normalize();
 		    this.setVecToGlobalOf(localInput.translate, globalOutput.translate);

@@ -117,74 +117,7 @@
         }
 
         function initBoneConstraints(armature) {
-            armature.rootJoint = armature.bonetags['_rootJoint'];
-            armature.rootJoint.rotateX(-Math.PI / 2);
-            armature.hips = armature.bonetags["spine_01"];
-            armature.spine_pin = new IKPin(armature.bonetags["spine_01"]);
-            armature.left_foot_pin = new IKPin(armature.bonetags["footL_067"]);
-            armature.right_foot_pin = new IKPin(armature.bonetags["footR_072"]);
-            armature.right_hand_pin = new IKPin(armature.bonetags["forearmR_039"]);
-            armature.left_hand_pin = new IKPin(armature.bonetags["handL001_033"]);
-            armature.left_hand_pin.setPinWeight(0.038);
-            armature.left_hand_pin.setDepthFalloff(0.947);
-            let handL004_036_pin = new IKPin(armature.bonetags["handL004_036"]);
-            handL004_036_pin.setPinWeight(0.943);
-            armature.delicious_pin = new IKPin(armature.bonetags["spine004_05"]);
-
-
-
-            armature.rootJoint.position.y = armature.hips.position.y - 0.01;
-            armature.hips.position.y = 0.01;
-            armature.makeBoneMesh(armature.hips.parent, armature.hips.parent.boneRadius);
-
-            new Kusudama(armature.bonetags["shoulderL_011"], (t, b) => b == contextBone, "Kusudama for shoulderL_011", armature.stablePool)
-                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.9145643117013811, 0.40000099677558526, 0.059760541670215446), 0.4).parentKusudama
-                .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.9941201456294165, 0.10761166025253095, 0.012036055476837868), 0.55);
-            new Twist(armature.bonetags["shoulderL_011"], 0.1, undefined,
-                armature.stablePool.any_Vec3(0.9941201456294166, 0.10761166025253095, 0.012036055476837917),
-                1.425914460306217, (cnstrt, bone) => bone == contextBone,
-                "Twist for shoulderL_011", armature.stablePool);
-            new Kusudama(armature.bonetags["shoulderR_037"], (t, b) => b == contextBone, "Kusudama for shoulderR_037", armature.stablePool)
-                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.9145643117013811, 0.40000099677558526, 0.059760541670215446), 0.4).parentKusudama
-                .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.9941201456294165, 0.10761166025253095, 0.012036055476837868), 0.55);
-            new Twist(armature.bonetags["shoulderR_037"], 0.1, undefined,
-                armature.stablePool.any_Vec3(-0.9941201456294166, 0.10761166025253095, 0.012036055476837917),
-                1.425914460306217, (cnstrt, bone) => bone == contextBone,
-                "Twist for shoulderR_037", armature.stablePool);
-
-            new Kusudama(armature.bonetags["upper_armR_038"], (t, b) => b == contextBone, "Kusudama for upper_armR_038", armature.stablePool)
-                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.918700295443015, 0.22563409263503292, -0.3241589477304035), 1.14738);
-            new Twist(armature.bonetags["upper_armR_038"], 1.58915, undefined,
-                armature.stablePool.any_Vec3(-0.40658307784607417, 0.8220687777702661, -0.398613957383275),
-                0.33363330416059406, (cnstrt, bone) => bone == contextBone,
-                "Twist for upper_armR_038", armature.stablePool);
-
-            new Kusudama(armature.bonetags["forearmR_039"], (t, b) => b == contextBone, "Kusudama for forearmR_039", armature.stablePool)
-                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.15650828560707297, 0.987394652013582, 0.02359995151080632), 0.1).parentKusudama
-                .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.14917163438267206, -0.7103649491767694, 0.687844068431711), 0.1);
-            new Twist(armature.bonetags["forearmR_039"], 1.98429, undefined,
-                armature.stablePool.any_Vec3(-0.2484100309166494, 0.9606875386022342, 0.12398350608601774),
-                0.08978217516970559, (cnstrt, bone) => bone == contextBone,
-                "Twist for forearmR_039", armature.stablePool);
-
-            new Kusudama(armature.bonetags["spine003_04"], (t, b) => b == contextBone, "Kusudama for spine003_04", armature.stablePool)
-                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.10812334026603489, 0.5920051616340618, 0.7986483781291638), 0.19481);
-            new Twist(armature.bonetags["spine003_04"], 0.95411, undefined,
-                armature.stablePool.any_Vec3(0.10812334053790432, 0.592005163122622, 0.7986483801373155),
-                0, (cnstrt, bone) => bone == contextBone,
-                "Twist for spine003_04", armature.stablePool);
-            new Kusudama(armature.bonetags["spine002_03"], (t, b) => b == contextBone, "Kusudama for spine002_03", armature.stablePool)
-                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.025223156038351697, 0.957102360424707, -0.2886500720057405), 0.8228);
-            new Twist(armature.bonetags["spine002_03"], 0.86944, undefined,
-                armature.stablePool.any_Vec3(0.025223156076032826, 0.9571023618545322, -0.2886500724369578),
-                0.03081711419171452, (cnstrt, bone) => bone == contextBone,
-                "Twist for spine002_03", armature.stablePool);
-            new Kusudama(armature.bonetags["spine001_02"], (t, b) => b == contextBone, "Kusudama for spine001_02", armature.stablePool)
-                .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.10937154349178184, 0.9064908448735991, -0.40781394487507905), 0.42766);
-            new Twist(armature.bonetags["spine001_02"], 0.77065, undefined,
-                armature.stablePool.any_Vec3(0.10937154321996187, 0.9064908426207066, -0.40781394386154324),
-                5.913376748457747, (cnstrt, bone) => bone == contextBone,
-                "Twist for spine001_02", armature.stablePool);
+            
 
             for (let b of armature.bones) {
                 if (b.parent instanceof THREE.Bone) {
@@ -193,14 +126,7 @@
                         continue;
                     }
                     let restconst = new Rest(b);
-                    if (b == armature.bonetags['shoulderR_037']) {
-                        restconst.setPainfulness(0.8);
-                        restconst.setStockholmRate(0.8);
-                    }
-                    if (b == armature.bonetags['shoulderL_011']) {
-                        restconst.setPainfulness(0.8);
-                        restconst.setStockholmRate(0.8);
-                    }
+                    
                 }
             }
         }
@@ -208,7 +134,7 @@
         async function loadModel(position, loadId, onloaded) {
 
             let glb = await loader.loadAsync(
-                './gltftests/pyramid_pie-v1.glb',
+                './gltftests/umbra_marauder_rig.glb',
                 (xhr, otherParam) => { window.updateLoadStream(xhr, loadId) },
                 (error) => { window.notifyStreamError(error, loadId) }
             );

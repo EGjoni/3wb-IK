@@ -86,7 +86,7 @@
         document.body.appendChild(renderer.domElement);
         scene.add(hemisphereLight);
         renderer.setClearColor(0x000000, 0);
-        scene.background = new THREE.Color(0x101577);
+        //scene.background = new THREE.Color(0x772200);
         //scene.background = new THREE.Color(0x000000);
         const dirLight = new THREE.DirectionalLight(0x775522, 1);
         const plight = new THREE.PointLight();
@@ -119,9 +119,10 @@
         window.frtime = window.frrate * 1000;
         const loader = new GLTFLoader();
         const clock = new THREE.Clock();
+        const groundArea = 16
 
         async function init() {
-            randCubes(0.7, 0.8, 2, 0.9, 16);
+            randCubes(0.7, 0.8, 2, 0.9, groundArea);
             //groundPlane();
             loader.register((parser) => {
                 return new VRMLoaderPlugin(parser);
@@ -323,6 +324,7 @@
         const temp3v = new THREE.Vector3(0, 0, 0);
         window.framecount = 0;
         window.physicsUpdateCount = 0;
+
         function animate() {
             requestAnimationFrame(delayAnimate);
             armature.c_hips.getWorldPosition(temp3v);
@@ -333,23 +335,19 @@
             forwardVec.writeToTHREE(orbitControls.target);
             orbitControls.update();
             let updateCount = clock.getDelta() / window.frrate;
-            tempVec.readFromTHREE(camera.position);
-            forwardVec.readFromTHREE(orbitControls.target);
-            forwardVec.sub(tempVec);
+            tempVec.readFromTHREE(temp3v);
+            tempVec.mult(1/(groundArea/2));
             forwardVec.y = 0;
-            forwardVec.normalize();
-            tempVec.setComponents(0, 1, 0);
-            forwardVec.cross(tempVec, leftVec);
-            leftVec.normalize();
+            forwardVec.x = -mouse.x-tempVec.x;//groundArea/2;// readFromTHREE(orbitControls.target);
+            forwardVec.z = mouse.y-tempVec.z;//groundArea/2;
+            forwardVec.add(tempVec.readFromTHREE(temp3v));
+            //forwardVec.normalize(false);
+            forwardVec.y = 0;
 
-            /*if(window.framecount % 60) {
-                console.log(boxxy.hips.position.y.toFixed(5));
-                //console.log(`physics updates: ${window.physicsUpdateCount} in ${window.framecount} frames`);
-            }*/
             window.framecount++;
 
             for (let i = 0; i < updateCount; i++) {
-                armature.boxxy.controlledUpdate(forwardVec, leftVec, i == 0);
+                armature.boxxy.inferredUpdate(forwardVec, i == 0);
                 if (window.dowalk) {
                     window.follower.boxxy.inferredUpdate(window.follower.c_hips.trackedBy.origin());
                 }

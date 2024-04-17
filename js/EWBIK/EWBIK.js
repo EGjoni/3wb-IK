@@ -538,6 +538,8 @@ export class EWBIK extends Saveable {
     /**convenience function for overriding undesirable result of inferOrientations. 
      * let's you manualy specify the direction the physical bone should point in relative to the bone frame
      * the easiest way to use this is to just give "pointTo" as one of the bone children's position
+     * @param {Bone} forBone the bone you want to override the physical orientation of
+     * @param {Vector3|Vec3} pointTo a direction in bone space you want the physical bone to point toward.
      */
     setInternalOrientationFor(forBone, pointTo) {
         if(forBone.getConstraint() != null) {
@@ -1070,7 +1072,8 @@ let betterbones = {
             if (elem instanceof THREE.Bone) {
                 if (this.parentArmature != null) {
                     elem.registerToArmature(this.parentArmature);
-                    this.parentArmature.addSingleBone(this);
+                    this.parentArmature.recreateBoneList();
+                    this.parentArmature.regenerateShadowSkeleton(true);
                 }
             }
         }

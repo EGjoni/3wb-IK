@@ -66,7 +66,14 @@ export class ArmatureSegment {
             const childBones = currentBS.getChildBoneList();
             const childCount = childBones.length;
             if (target != null ||  childCount > 1) { //split condition
-                if (target != null) 
+                 /*We only add a bone to the list of effectors if its pin actually has an effect.
+                  But we still let the fact that a pin of 0 weight is enabled be meaningful because it allows for 
+                 some fancy tricks with parenting that would otherwise result in an armature chasing its own tail
+                 (check the actuators in the spot demo for example).
+                 Basically, this just means the pin is behaving as a hint to the solver that it should forcibly treat
+                 two segments as seperate.
+                 */
+                if (target != null && target.getPinWeight() > 0)
                     segEffectors.push(currentWB);
                 if (target?.getDepthFalloff() <= 0.0 || childCount == 0) {
                     finished = true;
@@ -273,6 +280,8 @@ class WorkingBone {
     myWeights = [] //personal copy of the weights array per this bone;
     hasLimitingConstraint = false;
     cyclicTargets = new Set();
+    _acceptableRotBy = new Rot(1,0,0,0);
+    _comfortableRotBy  = new Rot(1,0,0,0);
 
     constructor(forBone, parentBone, chain) {
         /** @type {BoneState} */
@@ -414,7 +423,7 @@ class WorkingBone {
         
         
         if (this.hasLimitingConstraint && !skipConstraints) {            
-            let rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, localDesiredRotby);
+            let rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, localDesiredRotby, this._acceptableRotBy);
             /*this.currentHardPain = 1;
             if(Rot.distance(rotBy, localDesiredRotby) > 1e-6) { 
                 this.currentHardPain = 1; //violating a hard constraint should be maximally painful.

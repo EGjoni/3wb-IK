@@ -594,20 +594,17 @@ export class Vec3Pool {
             //let vec;
             //let attempts =0;
             //while(!isFree && attempts < this.tempPool.length) {
-                /*if(this.lru >= this.length) { 
-                    if(this.assumeFree) {
-                        this.assumeFree = false;
-                        //attempts = 0;
-                    } else if(attempts >= this.tempPool.length) {
-                        console.warn(`
+               
+                this.lru++; 
+                if(this.lru >= this.tempPool.length) {
+                    console.warn(`
                         ran out of vectors after ${attempts} attempts! Make sure you release any you're not using! You should either
                         1. call releaseAll when you're at a point in your logic where you're sure any vectors you didn't call .finalize() for are free, or o
                         2. increase the tempPool size or
                         3. manually call .release() on more vectors after you finish using them
                         `)
-                    }
-                }*/
-                this.lru = (this.lru + 1) % this.tempPool.length;
+                    this.lru = 0;
+                }
                 const vec = this.tempPool[this.lru];        
                 const odb = this.tempBuffer; 
                 const obase = vec.baseIdx;

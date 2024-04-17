@@ -4,11 +4,15 @@ import { Rest } from "./EWBIK/betterbones/Constraints/Rest/Rest.js";
 import { Twist } from "./EWBIK/betterbones/Constraints/Twist/Twist.js";*/
 console.log("hmmm?");
 
+import *  as THREE from "three";
 import { IKPin } from "./EWBIK/betterbones/IKpin.js";
 import { CallbacksSequence } from "./EWBIK/CallbacksSequence.js"
 import { Bone, Vector3 } from "three";
 import {  Vec3, Vec3Pool, any_Vec3 } from "./EWBIK/util/vecs.js";
+import { Ray } from "./EWBIK/util/Ray.js";
 import { Rot } from "./EWBIK/util/Rot.js";
+import { TransformControls } from 'transformControls';
+import { OrbitControls } from 'orbitControls';
 import { ConvexGeometry } from "convexGeo";
 import { ChainRots, BoneRots, RayDrawer } from "./EWBIK/util/debugViz/debugViz.js";
 import { Constraint, ConstraintStack, Returnful, Rest, Twist, Kusudama } from "./EWBIK/betterbones/Constraints/ConstraintStack.js";
@@ -17,6 +21,9 @@ import { Saveable, Loader } from "./EWBIK/util/loader/saveable.js";
 
 window.Vec3 = Vec3;
 window.Rot = Rot;
+window.Ray = Ray;
+window.IKPin = IKPin;
+window.Bone = THREE.Bone;
 
 window.armatures = [];
 window.meshLayer = 0;
@@ -35,9 +42,11 @@ window.contextPin = null;
 window.selectedPin = null;
 window.selectedBone = null;
 window.contextBone = null;
-window.orbitControls
-window.boneCtrls
-window.pinOrientCtrls
+window.orbitControls;
+window.OrbitControls = OrbitControls;
+window.TransformControls = TransformControls;
+window.boneCtrls;
+window.pinOrientCtrls;
 window.pinTranslateCtrls;
 window.pinsList = [];
 window.boneList = [];
@@ -303,7 +312,7 @@ window.makeUI = function () {
                 <div>
                     <form class="pin-weight-form slider-container">
                         <label for="weight">Weight:</label>
-                        <input type="range" id="weight" name="weight" min="0.001" max="0.69" step="0.001" value="0.405">
+                        <input type="range" id="weight" name="weight" min="0.0" max="0.69" step="0.001" value="0.405">
                         <output class="un-exp-output">0.5</output>
                     </form>
                     <form class="pin-falloff-form slider-container">
@@ -1428,10 +1437,10 @@ window.setDOMtoInternalState = function () {
 
 
 
-function determineConstraintName(corb) {
+function determineConstraintName(corb, type) {
     let bone = corb instanceof THREE.Bone ? corb : corb.forBone;
     let parconstr = corb instanceof Constraint ? corb : null;
-    let ident = parconstr == null ? "Sub Kusudama of " + parconstr.ikd : "Kusudama for " + (bone.name.length > 0 ? bone.ikd : bone.name);
+    let ident = type+" for " + (bone.name.length > 0 ? bone.ikd : bone.name);
     return ident;
 }
 
@@ -1440,9 +1449,10 @@ function determineConstraintName(corb) {
  * @return {Element}
  */
 function initStack(corb) {
-    let ident = determineConstraintName(corb)
+    let ident = determineConstraintName(corb, "ConstraintStack")
     let newC = new ConstraintStack(corb, null, ident);
     let resultConst = getMakeConstraint_DOMElem(newC);
+    newC.layers.set(1);
     return resultConst;
 }
 
@@ -1451,9 +1461,10 @@ function initStack(corb) {
  * @return {Element}
  */
 function initTwist(corb) {
-    let ident = determineConstraintName(corb)
+    let ident = determineConstraintName(corb, "Twist")
     let newC = new Twist(corb, 0.1, contextBone, undefined, undefined, (cnstrt, bone) => bone == contextBone, ident);
     let resultConst = getMakeConstraint_DOMElem(newC);
+    newC.layers.set(1);
     return resultConst;
 }
 
@@ -1462,8 +1473,9 @@ function initTwist(corb) {
  * @return {Element}
  */
 function initKusudama(corb) {
-    let ident = determineConstraintName(corb)
+    let ident = determineConstraintName(corb, "Kusudama")
     let newC = new Kusudama(corb, (t, b) => b==contextBone, ident);
+    newC.layers.set(1);
     let resultConst = getMakeConstraint_DOMElem(newC);
     return resultConst;
 }
@@ -1473,7 +1485,7 @@ function initKusudama(corb) {
  * @return {Element}
  */
 function initRest(corb) {
-    let ident = determineConstraintName(corb)
+    let ident = determineConstraintName(corb, "Rest")
     let newC = new Rest(corb, null, ident);
     let resultConst = getMakeConstraint_DOMElem(newC);
     return resultConst;

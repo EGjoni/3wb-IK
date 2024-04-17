@@ -679,12 +679,13 @@ export class IKNode extends Saveable {
 
     static obj3dToString(object3d, withlocal=true, withglobal=true) {
         let loc = IKTransform.newPooled(this.pool);
-        loc.setFromObj3d(object3d);
-        let glob = IKTransform.newPooled(this.pool);
-        glob.setFromGlobalizedObj3d(object3d);
-
-        const global = `${glob.toString()}`;
+        if(withlocal) loc.setFromObj3d(object3d);
         const local = `${loc.toString()}`;
+
+        let glob = IKTransform.newPooled(this.pool);
+        if(withglobal) glob.setFromGlobalizedObj3d(object3d);
+        const global = `${glob.toString()}`;
+        
         let out = withglobal ? global : '' + withlocal ? local : '';
         return out;
     }

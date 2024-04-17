@@ -295,10 +295,11 @@ export class Limiting extends Constraint {
      * @param {IKNode} currentState the node to constrain, ideally prior to any potentially objectionable rotation being applied. Should be a sibiling of @param desiredState. 
      * @param {IKNode} currentBoneOrientation the node corresponding to the physical bone orientation, should be a child of @param currentState. 
      * @param {Rot} desiredRotation the local space rotation you are attempting to apply to currentState.
+     * @param {Rot} storeIn an optional Rot object in which to store the result 
      * @param {WorkingBone} calledBy a reference to the current solver's internal representation of the bone, in case you're maing a custom constraint that goes deep into the rabbit hole
      * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring it to.
      */
-    getAcceptableRotation (currentState, currentBoneOrientation, desiredRotation, calledBy = null) {
+    getAcceptableRotation (currentState, currentBoneOrientation, desiredRotation, storeIn, calledBy = null) {
         /**to be overriden by child classes */
         return desiredRotation; 
     }

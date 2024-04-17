@@ -64,7 +64,7 @@ export class Twist extends Limiting {
     constructor(forBone, range=2*Math.PI-0.0001, referenceBasis = undefined, twistAxis = undefined, baseZ = undefined, visibilityCondition=undefined, ikd = 'Twist-'+(Twist.totalInstances++), pool=null) {
         let basis = referenceBasis;
         if(referenceBasis == null && !Constraint.loadMode)
-            basis = new IKNode(null, null, undefined);
+            basis = new IKNode(null, null, null, pool);
         super(forBone, basis, ikd, pool);
         
         
@@ -117,8 +117,8 @@ export class Twist extends Limiting {
         this.__frame_internal = this.tempNode1; 
         this.__bone_internal = this.tempNode2;
         this.__bone_internal.setParent(this.__frame_internal); 
-        this.__frame_calc_internal = new IKNode(undefined, undefined, undefined);
-        this.__bone_calc_internal = new IKNode(undefined, undefined, undefined);
+        this.__frame_calc_internal = new IKNode(undefined, undefined, null, this.pool);
+        this.__bone_calc_internal = new IKNode(undefined, undefined, null, this.pool);
         this.__bone_calc_internal.setRelativeToParent(this.__frame_calc_internal);
         /**@type {IKNode} */
         this.frameCanonical = this.basisAxes;
@@ -268,10 +268,12 @@ export class Twist extends Limiting {
      * @param {IKNode} currentState the node to constrain, ideally prior to any potentially objectionable rotation being applied. Should be a sibiling of @param desiredState. 
      * @param {IKNode} currentBoneOrientation the node corresponding to the physical bone orientation, should be a child of @param currentState. 
      * @param {Rot} desiredRotation the local space rotation you are attempting to apply to currentState.
-     * @param {WorkingBone} calledBy a reference to the current solver's internal representation of the bone, in case you're maing a custom constraint that goes deep into the rabbit hole
+    * @param {Rot} storeIn an optional Rot object in which to store the result 
+    * @param {WorkingBone} calledBy a reference to the current solver's internal representation of the bone, in case you're maing a custom constraint that goes deep into the rabbit hole
+     
      * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring it to.
      */
-    getAcceptableRotation (currentState, currentBoneOrientation, desiredRotation, calledBy = null) {
+    getAcceptableRotation (currentState, currentBoneOrientation, desiredRotation, storeIn=this.tempOutRot, calledBy = null) {
         /**get the desired orientation in parentbone space from the composition of currentstate*currentboneorienteation*desiredrotatio
          * get the rotation that brings that orientation to framecanonical.
          * do a swingtwist decomposition.
@@ -288,7 +290,7 @@ export class Twist extends Limiting {
         this.twist.clampToCosHalfAngle(this.coshalfhalfRange);
         let clampedDesireTarget = this.swing.applyAfter(this.twist, this.tempOutRot)
         let frameToClampedTarget = clampedDesireTarget.applyAfter(this.frameCanonical.localMBasis.rotation, this.tempOutRot);
-        let result_maybe = currentOrientation.getRotationTo(frameToClampedTarget);
+        let result_maybe = currentOrientation.getRotationTo(frameToClampedTarget, storeIn);
         return result_maybe;
     }
 

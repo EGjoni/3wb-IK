@@ -458,6 +458,8 @@ export class IKPin extends Saveable{
     */
     alignToBone() {
         this.targetNode.ensure();
+        this.target_threejs.updateWorldMatrix(true, true);
+        //this.targetNode.alignGlobalsTo(this.forBone.getIKBoneOrientation().trackedBy.getGlobalMBasis());
         this.targetNode.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());
         this.targetNode.project();
     }

@@ -1,8 +1,6 @@
 import { IKPin } from "../../EWBIK/betterbones/IKpin.js";
 import { Rest, Twist, Kusudama } from "../../EWBIK/betterbones/Constraints/ConstraintStack.js";
 
-
-
 export function initWolfGirlConstraints(armature) {
     let rootrest = new Rest(armature.c_hips.parent);
     rootrest.setPainfulness(0.99);

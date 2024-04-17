@@ -383,7 +383,7 @@ export class Kusudama extends Limiting {
         this.updateDisplay();
     }
 
-    getAcceptableRotation(currentState, currentBoneOrientation, desiredRotation, calledBy = null) {
+    getAcceptableRotation(currentState, currentBoneOrientation, desiredRotation, storeIn, calledBy = null) {
         let inBounds = [1.0];
         let currentOrientation = currentState.localMBasis.rotation.applyAfter(currentBoneOrientation.localMBasis.rotation, this.tempOutRot);
         let desiredOrientation = desiredRotation.applyAfter(currentOrientation, this.tempRot2);

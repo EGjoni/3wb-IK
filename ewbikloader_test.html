@@ -56,21 +56,7 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         window.camera = camera;
         window.renderer = renderer;
-        /*window.rendlrs = new LayeredRender(renderer, window.innerWidth, window.innerHeight, 
-            (renderer, target) => { //renders mesh stuff
-                camera.layers.set(meshLayer);
-                renderer.render(scene, camera);
-            },
-            (renderer, target) => { //renders bones
-                camera.layers.set(boneLayer);
-                renderer.render(scene, camera);
-            }
-        );*/
-
-        //const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.5);
-        //const ambientLight = new THREE.AmbientLight(0x404040);
-        //hemisphereLight.layers.enable(boneLayer);
-        //ambientLight.layers.enable(boneLayer);
+        
 
         let orbitControls, boneCtrls, pinOrientCtrls, pinTranslateCtrls;
         var scene = null;

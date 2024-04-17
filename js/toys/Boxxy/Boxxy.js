@@ -58,6 +58,7 @@ export class Boxxy {
     terminalVel = this.walkVel; 
     walk_impetus = 0.0005;
     run_impetus =  0.001;
+    impetus = this.walk_impetus;
 
     impetizer = null;
     yhead = null;
@@ -183,8 +184,12 @@ export class Boxxy {
 
     inferredUpdate(newPos) {
         this.hipsNode.mimic();
-        this.velocity.set(newPos).sub(this.prevPos);
-        this.velocity.y = 0;
+        this.jerk.set(newPos).sub(this.prevPos);
+        this.jerk.normalize(false);
+        this.jerk.mult(this.impetus);
+        this.jerk.y = 0;
+        this.jerked();
+        //this.velocity.y = 0;
         //if(this.velocity.mag() > 0)
         //    debugger;
         this.update(this.doWalkery);
@@ -216,10 +221,15 @@ export class Boxxy {
             this.jerk.add(forwardVec);
         
 
-        this.jerk.clamp(-this.impetus, this.impetus);
-        
-        this.acceleration.add(this.jerk);
+       
         //this.acceleration.clamp(0, 1.6);
+        this.jerked();
+        this.update(doWalkery);
+    }
+
+    jerked() {
+        this.jerk.clamp(-this.impetus, this.impetus);
+        this.acceleration.add(this.jerk);
         this.rotjerk.set(this.jerk).mult(50);
         this.tiltceleration.add(this.rotjerk);
         this.tiltceleration.clamp(0,104);
@@ -230,8 +240,7 @@ export class Boxxy {
         this.hipsNode.setGlobalOrientationTo(this.tempRot.setFromVecs(this.yhead, this.impetizer));//, impetizer);
         this.tiltceleration.mult(this.coefftilt);
         this.acceleration.mult(this.coerel);
-        this.update(doWalkery);
-    }
+    } 
      
     update(doWalkery) {
         this.frameCount++;
