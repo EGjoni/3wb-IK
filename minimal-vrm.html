@@ -4,45 +4,92 @@
     <title>Three.js Skeleton Interaction</title>
     <script type="importmap">
         {
-          "imports": {
-            "three": "https://unpkg.com/three@latest/build/three.module.js",
-            "gltf" : "https://unpkg.com/three/examples/jsm/loaders/GLTFLoader.js",
-            "vrm" : "https://unpkg.com/@pixiv/three-vrm@2.1.0/lib/three-vrm.module.js"
-          }
+            "imports": {
+                "three": "./js/three/three.module.js",
+                "orbitControls": "./js/three/jsm/OrbitControls.js",
+                "gltf" : "./js/three/jsm/GLTFLoader.js",
+                "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
+                "vrm" : "./js/three/jsm/three-vrm.module.js"
+              }
         }
     </script>
 </head>
 <body>
-    <script> 
-        const pinsList = [];
-        const loader = new GLTFLoader();        
-        loader.register((parser) => VRMLoaderPlugin(parser));
-        loader.load(
-            './vrmtests/testmodel.vrm', //path to your .vrm model
-            (vrm) => {
-                scene.add(vrm.scene);
-                rootBone = vrm.scene.children[0];
-                armature = new EWBIK(rootBone);                    
-                boneList = armature.bones;
-                armature.inferOrientations(rootBone);
-
-                pinsList.push(
-                    IKPin(armature.bonetags["J_Bip_C_Head"]), 
-                    IKPin(armature.bonetags["J_Bip_R_Foot"]),
-                    IKPin(armature.bonetags["J_Bip_R_Hand"]),
-                    IKPin(armature.bonetags["J_Bip_L_Foot"]),
-                    IKPin(armature.bonetags["J_Bip_L_Hand"])
-                );
-                for(let pin of pinsList) pin.alignToBone();
-
-                for(let b of armature.bones) {
-                    if(b.parent instanceof THREE.Bone)
-                        new Rest(b); // dumb and easy constraints
-                }
-                armature.regenerateShadowSkeleton(true);
-            }
-        );
+    <script type="module"> 
+        import *  as THREE from "three";
+        import { GLTFLoader } from 'gltf';
+        import { VRMLoaderPlugin } from 'vrm';
+        import {EWBIK, IKPin, Rest} from "./js/EWBIK/EWBIK.js";
+        import {OrbitControls} from "orbitControls";
+        const loader = new GLTFLoader();   
+        loader.register((parser) => {
+            return new VRMLoaderPlugin(parser);
+        });
+        window.THREE = THREE;
+        window.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(-0.61, 1.2, -1);
+        window.renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setClearColor(0x000000, 1);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        const hemisphereLight = new THREE.HemisphereLight(0x775833, 0x000000, 4.1);
+        window.scene= new THREE.Scene();
+        scene.add(hemisphereLight);
+        document.body.appendChild(renderer.domElement);
+        window.orbitControls = new OrbitControls(camera, renderer.domElement);
         
+        
+        async function init() {
+            //load up a skeleton
+            let vrmScene = await loadModel('basic');
+            //let the IK system know about it 
+            window.armature = new EWBIK(vrmScene);
+            //add some effectors
+            window.left_foot_pin = new IKPin(armature.bonetags["J_Bip_L_Foot"]);
+            window.right_foot_pin = new IKPin(armature.bonetags["J_Bip_R_Foot"]);
+            window.left_hand_pin = new IKPin(armature.bonetags["J_Bip_L_Hand"]);
+            window.right_hand_pin = new IKPin(armature.bonetags["J_Bip_R_Hand"]);
+            window.head_pin = new IKPin(armature.bonetags["J_Bip_C_Head"]);
+            armature.regenerateShadowSkeleton(true);
+
+            //give the camera something interesting to look at.
+            armature.bonetags["J_Bip_C_Spine"].getWorldPosition(orbitControls.target);
+            
+            //we don't have to use constraints, but it's super easy to, so why not?
+            for(let b of armature.bones) new Rest(b); //makes all bones seek comfort while solving
+
+            orbitControls.update();
+            animate();
+        }
+
+        async function loadModel(loadId, onloaded=(vrmscene)=>{return vrmscene}) {
+            let vrm = await loader.loadAsync(
+                './vrmtests/testmodel.vrm',
+                (xhr, otherParam) => { console.log(xhr) },
+                (error) => { window.notifyStreamError(error, loadId) }
+            );
+            scene.add(vrm.scene);
+            return onloaded(vrm.scene, loadId);
+        }
+
+        window.render = function () {
+            renderer.render(scene, camera);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            //move the head around
+            head_pin.target_threejs.position.x += Math.sin(Date.now()/1000)/500;
+            head_pin.target_threejs.position.z += Math.cos(Date.now()/1000)/500;
+            //and the hands too, whyy not?
+            left_hand_pin.target_threejs.position.x += Math.sin(Date.now()/1000)/250;
+            left_hand_pin.target_threejs.position.y -= Math.cos(Date.now()/1000)/250;
+            right_hand_pin.target_threejs.position.x -= Math.sin(Date.now()/800)/300;
+            right_hand_pin.target_threejs.position.y -= Math.cos(Date.now()/800)/300;
+            window.armature.solve();
+            render();
+        }
+        
+        init();
     </script>
     <style>
         body {margin: 0;}

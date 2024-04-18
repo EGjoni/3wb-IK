@@ -106,7 +106,7 @@
                 return new VRMLoaderPlugin(parser);
             });
 
-            window.addEventListener('resize', onWindowResize, false);
+        
             //autoSolve = false;
             window.interactionSolve = false;
             initControls(THREE, renderer);
@@ -165,17 +165,8 @@
             rootBone1.position.set(position.x, position.y, position.z);
             window.updateParseStream("Scene instaniated...", loadId);
             return onloaded(vrm, loadId);
-            /*let armature1 = new EWBIK(rootBone1);
-            armature1.armatureNode.forceOrthonormality = false;
-            addSceneArmature(armature1);*/
         }
 
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            render();
-        }
 
         async function animate() {
             window.frameCount++;
@@ -185,8 +176,6 @@
         }
 
         window.render = function () {
-
-
             camera.layers.set(0);
             window.renderer.render(scene, camera);
             window.renderer.clearDepth();

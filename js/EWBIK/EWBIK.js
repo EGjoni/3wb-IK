@@ -7,11 +7,12 @@ import { Rot } from "./util/Rot.js";
 import { IKNode, TrackingNode } from "./util/nodes/IKNodes.js";
 import { convexBlob, pcaOrientation } from "./util/mathdump/mathdump.js";
 import { IKPin } from "./betterbones/IKpin.js";
-import { Kusudama } from "./betterbones/Constraints/Kusudama/Kusudama.js";
+import { Rest, Twist, Kusudama, LimitCone} from "./betterbones/Constraints/ConstraintStack.js";
 import { Bone } from "three";
 import { Saveable, Loader } from "./util/loader/saveable.js";
 import { Object3D } from "../three/three.module.js";
 import { ShadowNode } from "./util/nodes/ShadowNode.js";
+
 //import * as THREE from 'three';
 //import { LineSegments, Bone } from "three";
 
@@ -95,7 +96,7 @@ const regularBoneLayer = 4;
 
 export class EWBIK extends Saveable {
     static __default_dampening = 0.1;
-    static dfitr = 15;
+    static __dfitr = 15;
     static totalInstances = 0;
     static XDIR = new Vec3(1, 0, 0);
     static YDIR = new Vec3(0, 1, 0);
@@ -1108,6 +1109,7 @@ let betterbones = {
 }
 
 Object.assign(THREE.Bone.prototype, betterbones);
+export {IKPin, Kusudama, LimitCone, Twist, Rest, ShadowNode, Vec3, Vec3Pool, Rot, IKTransform, IKNode, ShadowSkeleton}
 
 
 

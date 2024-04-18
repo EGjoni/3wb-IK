@@ -338,8 +338,23 @@ async function orthonormalize(startnode) {
     } else if (startnode.scene != null) return orthonormalize(startnode.scene);
 }
 
+function getMeshDescendants(object) {
+    const meshes = [];
+    object.traverse((child) => {
+      if (child.isMesh) {
+        meshes.push(child);
+      }
+    });
+    return meshes;
+  }
+window.frameCount = 0;
+function setElemLayers(){
+
+}
 
 function initControls(THREE, renderer) {
+    renderer.autoClear = false;
+    setElemLayers();
     window.axesHelperSize = 1;
     window.boneAxesHelper = new THREE.AxesHelper(axesHelperSize);
     window.pinAxesHelper = new THREE.AxesHelper(axesHelperSize);
@@ -822,4 +837,12 @@ ${localScalestr}`;
     };
     THREE.Object3D.prototype.toString = THREE.Object3D.prototype.toStr;
     THREE.Object3D.prototype.toConsole = function (showscale = false) { console.log(this.toStr(showscale)) }
+}
+
+window.addEventListener('resize', onWindowResize, false);
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    render();
 }

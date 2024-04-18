@@ -462,6 +462,7 @@ export class IKPin extends Saveable{
         //this.targetNode.alignGlobalsTo(this.forBone.getIKBoneOrientation().trackedBy.getGlobalMBasis());
         this.targetNode.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());
         this.targetNode.project();
+        return this;
     }
 
 

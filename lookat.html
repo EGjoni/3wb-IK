@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Three.js Skeleton Interaction</title>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "./js/three/three.module.js",
+                "orbitControls": "./js/three/jsm/OrbitControls.js",                
+                "transformControls": "./js/penziltransform.js",
+                "gltf" : "./js/three/jsm/GLTFLoader.js",
+                "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
+                "vrm" : "./js/three/jsm/three-vrm.module.js"
+              }
+        }
+    </script>
+</head>
+
+<body>
+    <!--<script type="module" src="./js/UIelements.js"></script>
+    <script src="js/sceneStuff.js"></script>-->
+    <script type="module">
+        import *  as THREE from "three";
+        import { TransformControls } from 'transformControls';
+        import { GLTFLoader } from 'gltf';
+        import { VRMLoaderPlugin } from 'vrm';
+        import { EWBIK, IKPin, Rest, ShadowNode, Vec3, Rot} from "./js/EWBIK/EWBIK.js";
+        import { OrbitControls } from "orbitControls";
+        import { initWolfGirl, initWolfGirlShortcuts, initWolfGirlConstraints, initWolfgirlInteractivePins, initWolfGirlCosmeticPins } from "./js/toys/rigs/wolfgirl_vrm.js";
+        const loader = new GLTFLoader();
+        loader.register((parser) => {
+            return new VRMLoaderPlugin(parser);
+        });
+        window.THREE = THREE;
+        window.camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 1.65, -2);
+        camera.rotateY(Math.PI);
+        window.renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setClearColor(0x000000, 0);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 4.1);
+        window.scene = new THREE.Scene();
+        scene.add(hemisphereLight);
+        document.body.appendChild(renderer.domElement);
+        const itxmat = new THREE.MeshLambertMaterial({color: 0x004444});
+        const itxPmat = new THREE.MeshLambertMaterial({color: 0x440044});
+        const boxGeo = new THREE.BoxGeometry(0.01, 0.01, 0.01);//new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //
+        window.boxMesh = new THREE.Mesh(boxGeo, itxmat);
+        const sphereGeo = new THREE.SphereGeometry(0.7,9,9);
+        window.itxBound = new THREE.Mesh(sphereGeo, itxmat);
+        const mouseCaster = new THREE.Raycaster();
+        const planeGeo = new THREE.PlaneGeometry(15,15);
+        window.itxPlane = new THREE.Mesh(planeGeo, itxPmat);
+        const mouse = new Vec3();
+        window.frameCount= 0;
+
+        scene.add(itxBound);
+        scene.add(boxMesh);
+        boxMesh.visible=false;
+        itxBound.position.set(0,1.5,-0.2);
+        //itxBound.material.transparent = true;
+        //itxBound.material.wireframe = true;
+        //itxPlane.material.transparent = true;
+        //itxPlane.material.opacity = 0.8;
+        itxPmat.side = 2;
+        boxMesh.position.set(0,1,0);
+        scene.add(itxPlane);
+        
+        const planeShadow = new ShadowNode(itxPlane);
+        itxPlane.position.set(0, 1.5, -0.4);
+        planeShadow.mimic();
+        window.camShadow = new ShadowNode(camera);
+        
+
+        window.lookat=true;
+        //window.orbitControls = new OrbitControls(camera, renderer.domElement);
+        renderer.autoClear = false;
+
+        async function init() {
+            //load up a skeleton
+            window.armature = await loadModel(0, ikify);
+            armature.regenerateShadowSkeleton(true);
+            //initControls(THREE, renderer);
+            //give the camera something interesting to look at.
+            //armature.bonetags["J_Bip_C_Spine"].getWorldPosition(orbitControls.target);
+            //orbitControls.update();
+            animate();
+        }
+
+        function ikify(inst, loadId) {
+            //window.updateParseStream("Building IK Armature...", loadId);
+            let armature = new EWBIK(inst);
+            armature.setDefaultIterations(15);
+            armature.setDampening(0.8);
+            armature.armatureNode.forceOrthonormality = false;
+            //window.armatures.push(armature);
+
+            //window.updateParseStream("Inferring Bone directions and appearance...", loadId);
+            //initPrettyBones(armature);
+            //window.updateParseStream("Addings constraints...", loadId);
+            initWolfGirl(armature);
+            //initWolfGirlShortcuts(armature);
+            //initWolfGirlConstraints(armature);
+            //makePinsList(1, armature.armatureObj3d, armature, true, true);
+            //window.updateParseStream("UI stuff...", loadId);
+            //updateGlobalBoneLists();
+            initPose(armature);
+            armature.regenerateShadowSkeleton(true);
+            //window.updateParseStream(null, loadId);
+            return armature;
+        }
+
+        function initPose(armature) {
+            armature.hip_pin.target_threejs.position.y -= .2;
+            armature.hip_pin.setDepthFalloff(0.99);
+            armature.hip_pin.setPinWeight(0.05);
+            armature.l_hand_pin.setPinWeight(1);
+            armature.r_hand_pin.setPinWeight(1);
+
+
+            let J_Bip_L_Hand_pin = armature.l_hand_pin;
+            J_Bip_L_Hand_pin.target_threejs.position.set(-0.2628872730607969, 1.1320828172882704, -0.1058023847915398);
+            J_Bip_L_Hand_pin.target_threejs.quaternion.set(-0.466854980946203, -0.4415841689876301, 0.5158273464161427, 0.5665439057606263);
+
+            let J_Bip_R_Hand_pin = armature.r_hand_pin;
+            J_Bip_R_Hand_pin.target_threejs.position.set(0.22725199632250082, 1.1271629356945718, -0.1409638346652234);
+            J_Bip_R_Hand_pin.target_threejs.quaternion.set(-0.4635192535441378, 0.4385467682483039, -0.5184121542461977, 0.5692762703491778);
+
+            let J_Bip_C_Head_pin = armature.head_pin;
+            J_Bip_C_Head_pin.target_threejs.position.set(-0.048201991083735636, 1.4857808131871846, 0.029283233212733198);
+            J_Bip_C_Head_pin.target_threejs.quaternion.set(-0.24292338574302336, -0.04987885723340439, 0.026963677320800114, 0.9683869517737089);
+            headStart.set(armature.head_pin.targetNode.origin());
+
+            let J_Bip_C_Hips_pin = armature.hip_pin;
+            J_Bip_C_Hips_pin.target_threejs.position.set(-0.015845857272104392, 1.0629170260866243, 0.17429608236224103);
+            J_Bip_C_Hips_pin.target_threejs.quaternion.set(0.9917688869306138, 0, 0, 0.12804091110426974);
+
+            let J_Bip_R_Foot_pin = armature.r_foot_pin;
+            J_Bip_R_Foot_pin.target_threejs.position.set(0.13900366790462393, 0.43675138580707074, 0.08515916548568987);
+            J_Bip_R_Foot_pin.target_threejs.quaternion.set(0.873397558546335, 0, 0, -0.48700791033134283);
+
+            let J_Bip_L_Foot_pin = armature.l_foot_pin;
+            J_Bip_L_Foot_pin.target_threejs.position.set(-0.19254600138696348, 0.3626079408726957, 0.12299547884725825);
+            J_Bip_L_Foot_pin.target_threejs.quaternion.set(0.873397558546335, 0, 0, -0.48700791033134283);
+        }
+
+        async function loadModel(loadId, onloaded = (vrmscene) => { return vrmscene }) {
+            let vrm = await loader.loadAsync(
+                './vrmtests/testmodel.vrm',
+                (xhr, otherParam) => { /*window.updateLoadStream(xhr, loadId)*/ },
+                (error) => { window.notifyStreamError(error, loadId) }
+            );
+            scene.add(vrm.scene);
+            return onloaded(vrm.scene, loadId);
+        }
+
+        window.addEventListener('mousemove', (event) => {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        }, false);
+
+        window.render = function () {
+            mouseCaster.setFromCamera(mouse, camera);
+            //pointToward(planeShadow, camera.position);
+            itxBound.visible=true; 
+            itxPlane.visible=true;
+            let itx = mouseCaster.intersectObjects([itxBound, itxPlane]);
+            itxBound.visible = false;
+            itxPlane.visible = false;
+            window.renderer.clear();
+            camera.layers.set(0);
+            if(itx.length>0 && lookat) {
+                boxMesh.position.copy(itx[0].point);
+                glare(armature, boxMesh.position, 0.2, downadjust);
+            }            
+            window.renderer.render(scene, camera);
+            window.renderer.clearDepth();
+            const currentBackground = scene.background;
+            const currentFog = scene.fog;
+            scene.background = null;
+            scene.fog = null;
+            camera.layers.set(1);
+            window.renderer.render(scene, camera);
+            scene.background = currentBackground;
+            scene.fog = currentFog;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            render();
+        }
+
+        function animate() {
+            window.frameCount++;
+            requestAnimationFrame(animate);
+            window.armature.solve(undefined, undefined, undefined, undefined, undefined, undefined, window.frameCount);
+            render();
+        }
+
+        const headStart = new Vec3();
+        const tempVec = new Vec3();
+        const tempVec2 = new Vec3();
+        const downadjust = new Vec3(0, 0.5, -1).normalize();
+
+        function glare(char, point, rate, heading) {
+            let targNode = char.c_head.getIKPin().targetNode;
+            tempVec.set(targNode.getGlobalMBasis().yHeading);
+            tempVec2.setComponents(0.008, 0.977, -0.214).normalize();
+            
+            let temprot = Rot.fromVecs(tempVec, tempVec2);
+            Rot.fromSlerp(Rot.IDENTITY, temprot, rate, temprot);
+
+            targNode.rotateByGlobal(temprot);//.updateGlobal().project();
+            targNode.project();
+
+            //tempVec.set(targNode.getGlobalMBasis().zHeading).mult(-1);
+            targNode.setVecToGlobalOf(heading, tempVec).sub(targNode.origin())
+            //tempVec.set(heading);//.mult(-1);
+            tempVec2.readFromTHREE(point).sub(targNode.origin()).normalize();
+            temprot = Rot.fromVecs(tempVec, tempVec2);
+            targNode.rotateByGlobal(Rot.fromSlerp(Rot.IDENTITY, temprot, rate, temprot));
+            targNode.updateGlobal();
+            tempVec.set(targNode.origin());
+            tempVec2.readFromTHREE(point);
+            tempVec.lerp(tempVec2, rate*.5);
+            tempVec2.set(headStart);
+            targNode.translateTo(tempVec2.lerp(tempVec, 0.8)).project();
+        }
+
+        function pointToward(node, point, heading = node.getGlobalMBasis().zHeading) {
+            tempVec.readFromTHREE(point);
+            tempVec.sub(node.origin()).normalize();
+            node.rotateByGlobal(Rot.fromVecs(heading,tempVec));
+            node.project();
+        }
+
+        init();
+    </script>
+    <style>
+        body {
+            margin: 0;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</body>

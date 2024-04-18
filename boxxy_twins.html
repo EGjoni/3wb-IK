@@ -117,6 +117,7 @@
         window.boxxy = boxxy;
         window.frrate = 1 / 60;
         window.frtime = window.frrate * 1000;
+        window.lookat=true;
         const loader = new GLTFLoader();
         const clock = new THREE.Clock();
 
@@ -358,8 +359,10 @@
 
             if (window.goahead) {
                 leaderHand.targetNode.translateTo(armature.c_hips.trackedBy.origin().lerp(follower.c_hips.trackedBy.origin(), 0.5)).project();
-                glare(armature, 0.05);
-                glare(follower, 0.15);
+                if(window.lookat) {
+                    glare(armature, 0.05);
+                    glare(follower, 0.15);
+                }
 
                 window.armature.solve();
                 window.follower.solve();

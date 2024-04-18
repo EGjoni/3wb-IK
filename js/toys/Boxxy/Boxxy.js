@@ -211,6 +211,14 @@ export class Boxxy {
         this.jerk.setComponents(0,0,0);
 
         forwardVec.normalize().mult(this.impetus); leftVec.normalize().mult(this.impetus);
+        if(isKeyPressed('KeyQ')) {
+            this.hips.rotateY(0.01);
+            this.hipsNode.mimic();
+        }
+        if(isKeyPressed('KeyE')) {
+            this.hips.rotateY(-0.01);
+            this.hipsNode.mimic();
+        }
         if(isKeyPressed('KeyA')) 
             this.jerk.sub(leftVec);
         if(isKeyPressed('KeyD')) 
@@ -237,7 +245,7 @@ export class Boxxy {
         this.velocity.add(this.acceleration);
         this.velocity.clamp(0, this.terminalVel);
         this.impetizer.set(this.tiltceleration).add(this.yhead).normalize();
-        this.hipsNode.setGlobalOrientationTo(this.tempRot.setFromVecs(this.yhead, this.impetizer));//, impetizer);
+        ///this.hipsNode.setGlobalOrientationTo(this.tempRot.setFromVecs(this.yhead, this.impetizer));//, impetizer);
         this.tiltceleration.mult(this.coefftilt);
         this.acceleration.mult(this.coerel);
     } 
