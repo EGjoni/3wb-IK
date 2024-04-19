@@ -250,6 +250,40 @@ export function initWolfGirlConstraints(armature) {
             }
         }
     }
+}
+
+
+/**Warning: not to be used in conjunction with initWolfGirlConstraints */
+export function initWolfGirlRestConstraints(armature) {
+    armature.l_arm_lower.rotateY(-1.5);
+    armature.r_arm_lower.rotateY(1.5);
+
+    armature.l_arm_upp.rotateZ(1.2);
+    armature.r_arm_upp.rotateZ(-1.2);
+
+    armature.r_leg_upp.rotateX(1);
+    armature.l_leg_upp.rotateX(1);
+
+    armature.r_leg_lower.rotateX(-1.75);
+    armature.l_leg_lower.rotateX(-1.75);
+
+    for(let b of armature.bones) {
+        if(b.parent instanceof THREE.Bone)
+            new Rest(b);
+    }
+    //window.larm_rest = new Rest(l_arm_upp);
+    //window.rarm_rest = new Rest(r_arm_upp);
+    armature.r_leg_lower.rotateX(1.75);
+    armature.l_leg_lower.rotateX(1.75);
+
+    armature.r_leg_upp.rotateX(-1);
+    armature.l_leg_upp.rotateX(-1);
+
+    armature.l_arm_upp.rotateZ(-1.2);
+    armature.r_arm_upp.rotateZ(1.2);
+
+    armature.l_arm_lower.rotateY(1.5);
+    armature.r_arm_lower.rotateY(-1.5);
 
 }
 
@@ -424,9 +458,13 @@ export function initWolfGirlCosmeticPins(armature) {
 }
 
 
-export function initWolfGirl(armature) {
+export function initWolfGirl(armature, restOnly=false) {
     initWolfGirlShortcuts(armature);
     initWolfgirlInteractivePins(armature);
-    initWolfGirlConstraints(armature);
+    if(restOnly) {
+        initWolfGirlRestConstraints(armature);
+    } else {
+        initWolfGirlConstraints(armature);
+    }
     initWolfGirlCosmeticPins(armature);
 }

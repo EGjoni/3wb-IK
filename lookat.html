@@ -58,7 +58,7 @@
         scene.add(itxBound);
         scene.add(boxMesh);
         boxMesh.visible=false;
-        itxBound.position.set(0,1.5,-0.2);
+        itxBound.position.set(0,1.3,-0.2);
         //itxBound.material.transparent = true;
         //itxBound.material.wireframe = true;
         //itxPlane.material.transparent = true;
@@ -68,12 +68,13 @@
         scene.add(itxPlane);
         
         const planeShadow = new ShadowNode(itxPlane);
-        itxPlane.position.set(0, 1.5, -0.4);
+        itxPlane.position.set(0, 1.5, -0.2);
         planeShadow.mimic();
         window.camShadow = new ShadowNode(camera);
         
 
         window.lookat=true;
+        const isRestOnly = true;
         //window.orbitControls = new OrbitControls(camera, renderer.domElement);
         renderer.autoClear = false;
 
@@ -99,7 +100,7 @@
             //window.updateParseStream("Inferring Bone directions and appearance...", loadId);
             //initPrettyBones(armature);
             //window.updateParseStream("Addings constraints...", loadId);
-            initWolfGirl(armature);
+            initWolfGirl(armature, isRestOnly);
             //initWolfGirlShortcuts(armature);
             //initWolfGirlConstraints(armature);
             //makePinsList(1, armature.armatureObj3d, armature, true, true);
@@ -122,10 +123,16 @@
             let J_Bip_L_Hand_pin = armature.l_hand_pin;
             J_Bip_L_Hand_pin.target_threejs.position.set(-0.2628872730607969, 1.1320828172882704, -0.1058023847915398);
             J_Bip_L_Hand_pin.target_threejs.quaternion.set(-0.466854980946203, -0.4415841689876301, 0.5158273464161427, 0.5665439057606263);
+            if(isRestOnly) {//Todo: This correcion shouldn't be necessary. Should figure out what's causing the difference
+                J_Bip_L_Hand_pin.target_threejs.rotateZ(-1.5); 
+            }
 
             let J_Bip_R_Hand_pin = armature.r_hand_pin;
             J_Bip_R_Hand_pin.target_threejs.position.set(0.22725199632250082, 1.1271629356945718, -0.1409638346652234);
             J_Bip_R_Hand_pin.target_threejs.quaternion.set(-0.4635192535441378, 0.4385467682483039, -0.5184121542461977, 0.5692762703491778);
+            if(isRestOnly) {//Todo: This correcion shouldn't be necessary. Should figure out what's causing the difference
+                J_Bip_R_Hand_pin.target_threejs.rotateZ(1.5); 
+            }
 
             let J_Bip_C_Head_pin = armature.head_pin;
             J_Bip_C_Head_pin.target_threejs.position.set(-0.048201991083735636, 1.4857808131871846, 0.029283233212733198);
@@ -203,7 +210,7 @@
         const headStart = new Vec3();
         const tempVec = new Vec3();
         const tempVec2 = new Vec3();
-        const downadjust = new Vec3(0, 0.5, -1).normalize();
+        const downadjust = new Vec3(0, 0.1, -1).normalize();
 
         function glare(char, point, rate, heading) {
             let targNode = char.c_head.getIKPin().targetNode;
