@@ -25,7 +25,7 @@
         import { TransformControls } from 'transformControls';
         import { GLTFLoader } from 'gltf';
         import { VRMLoaderPlugin } from 'vrm';
-        import { EWBIK, IKPin, Rest, ShadowNode, Vec3, Rot} from "./js/EWBIK/EWBIK.js";
+        import { EWBIK, IKPin, IKTransform, Rest, ShadowNode, Vec3, Rot, Interpolator, any_Vec3} from "./js/EWBIK/EWBIK.js";
         import { OrbitControls } from "orbitControls";
         import { initWolfGirl, initWolfGirlShortcuts, initWolfGirlConstraints, initWolfgirlInteractivePins, initWolfGirlCosmeticPins } from "./js/toys/rigs/wolfgirl_vrm.js";
         const loader = new GLTFLoader();
@@ -33,6 +33,8 @@
             return new VRMLoaderPlugin(parser);
         });
         window.THREE = THREE;
+        window.Rot = Rot;
+        window.Vec3 = Vec3;
         window.camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 1.65, -2);
         camera.rotateY(Math.PI);
@@ -41,11 +43,15 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 4.1);
         window.scene = new THREE.Scene();
+        window.axHelp = new THREE.AxesHelper();
+        window.axHelp2 = new THREE.AxesHelper();
+        window.axHelp3 = new THREE.AxesHelper();
+        window.axHelp4 = new THREE.AxesHelper();
         scene.add(hemisphereLight);
         document.body.appendChild(renderer.domElement);
         const itxmat = new THREE.MeshLambertMaterial({color: 0x004444});
         const itxPmat = new THREE.MeshLambertMaterial({color: 0x440044});
-        const boxGeo = new THREE.BoxGeometry(0.01, 0.01, 0.01);//new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //
+        const boxGeo = new THREE.BoxGeometry(0.03, 0.03, 0.03);//new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //
         window.boxMesh = new THREE.Mesh(boxGeo, itxmat);
         const sphereGeo = new THREE.SphereGeometry(0.7,9,9);
         window.itxBound = new THREE.Mesh(sphereGeo, itxmat);
@@ -53,14 +59,15 @@
         const planeGeo = new THREE.PlaneGeometry(15,15);
         window.itxPlane = new THREE.Mesh(planeGeo, itxPmat);
         const mouse = new Vec3();
+        const prevMouse = new Vec3();
         window.frameCount= 0;
 
         scene.add(itxBound);
         scene.add(boxMesh);
-        boxMesh.visible=false;
-        itxBound.position.set(0,1.3,-0.2);
+        boxMesh.visible=true;
+        itxBound.position.set(0,1.3,0);
         //itxBound.material.transparent = true;
-        //itxBound.material.wireframe = true;
+        itxBound.material.wireframe = false;
         //itxPlane.material.transparent = true;
         //itxPlane.material.opacity = 0.8;
         itxPmat.side = 2;
@@ -71,17 +78,46 @@
         itxPlane.position.set(0, 1.5, -0.2);
         planeShadow.mimic();
         window.camShadow = new ShadowNode(camera);
+
+        window.prepounce_l_targ3js = new THREE.Object3D();
+        window.prepounce_r_targ3js = new THREE.Object3D();
+        scene.add(prepounce_l_targ3js);
+        scene.add(prepounce_r_targ3js);
+        let prepounce_l_targ = new ShadowNode(prepounce_l_targ3js);
+        let prepounce_r_targ = new ShadowNode(prepounce_r_targ3js);
         
 
         window.lookat=true;
-        const isRestOnly = true;
+        const useRest = true;
+        const useLimiting = true;
         //window.orbitControls = new OrbitControls(camera, renderer.domElement);
         renderer.autoClear = false;
+        let leftHandResting = true;
+        let rightHandResting = true;
+        let lastRightPounce = 0;
+        let lastLeftPounce = 0;
+        const pounceTimeAvgThresh = 600;
+        const pounceTimeMinThresh = 200;
+        let shyMin = 3000;
+        let lastMotion = Date.now();
+        let isMidPounce_left = false;
+        let isMidPounce_right = false;
+        let leftHandReturning = false;
+        let rightHandReturning = false;
+        let unShy = 0;
+
+        let leftInterpolator= null;
+        let rightInterpolator = null;
+        window.leftGoal = new IKTransform();
+        window.rightGoal = new IKTransform();
+        //window.leftGoal = new IKTransform(any_Vec3(0,0,0), any_Vec3(0,-1,0).normalize(), any_Vec3(0,0,1), any_Vec3(1,0,0).normalize());
+        //window.rightGoal = new IKTransform(any_Vec3(0,0,0), any_Vec3(0.707,0.707,0).normalize(), any_Vec3(0,0,1), any_Vec3(.707,-0.707,0).normalize());
 
         async function init() {
             //load up a skeleton
             window.armature = await loadModel(0, ikify);
             armature.regenerateShadowSkeleton(true);
+            unShy = Date.now();
             //initControls(THREE, renderer);
             //give the camera something interesting to look at.
             //armature.bonetags["J_Bip_C_Spine"].getWorldPosition(orbitControls.target);
@@ -100,7 +136,7 @@
             //window.updateParseStream("Inferring Bone directions and appearance...", loadId);
             //initPrettyBones(armature);
             //window.updateParseStream("Addings constraints...", loadId);
-            initWolfGirl(armature, isRestOnly);
+            initWolfGirl(armature, useLimiting, useRest, false);
             //initWolfGirlShortcuts(armature);
             //initWolfGirlConstraints(armature);
             //makePinsList(1, armature.armatureObj3d, armature, true, true);
@@ -112,27 +148,47 @@
             return armature;
         }
 
+        
+        
+
         function initPose(armature) {
             armature.hip_pin.target_threejs.position.y -= .2;
-            armature.hip_pin.setDepthFalloff(0.99);
-            armature.hip_pin.setPinWeight(0.05);
+            armature.hip_pin.setDepthFalloff(0.8);
+            armature.hip_pin.setPinWeight(0.4);
             armature.l_hand_pin.setPinWeight(1);
+            armature.l_hand_pin.setXPriority(0.5);
+            armature.l_hand_pin.setYPriority(0.5);
+            armature.l_hand_pin.setZPriority(0);
+            armature.l_hand_pin.target_threejs.add(axHelp3);
+            armature.l_hand_pin.forBone.add(axHelp4);
+
             armature.r_hand_pin.setPinWeight(1);
+            armature.r_hand_pin.setXPriority(0.5);
+            armature.l_hand_pin.setYPriority(0.5);
+            armature.r_hand_pin.setZPriority(0);
+            armature.r_hand_pin.target_threejs.add(axHelp);
+            armature.r_hand_pin.forBone.add(axHelp2);
+
 
 
             let J_Bip_L_Hand_pin = armature.l_hand_pin;
             J_Bip_L_Hand_pin.target_threejs.position.set(-0.2628872730607969, 1.1320828172882704, -0.1058023847915398);
             J_Bip_L_Hand_pin.target_threejs.quaternion.set(-0.466854980946203, -0.4415841689876301, 0.5158273464161427, 0.5665439057606263);
-            if(isRestOnly) {//Todo: This correcion shouldn't be necessary. Should figure out what's causing the difference
-                J_Bip_L_Hand_pin.target_threejs.rotateZ(-1.5); 
-            }
+            //if(isRestOnly) {//Todo: This correcion shouldn't be necessary. Should figure out what's causing the difference
+            //    J_Bip_L_Hand_pin.target_threejs.rotateZ(-1.5); 
+            //}
+            prepounce_l_targ.alignGlobalsTo(armature.l_hand_pin.targetNode.mimic().getGlobalMBasis()).project();
+            leftInterpolator = new Interpolator(armature.l_hand_pin.targetNode, window.__tempVecPool);
 
             let J_Bip_R_Hand_pin = armature.r_hand_pin;
             J_Bip_R_Hand_pin.target_threejs.position.set(0.22725199632250082, 1.1271629356945718, -0.1409638346652234);
             J_Bip_R_Hand_pin.target_threejs.quaternion.set(-0.4635192535441378, 0.4385467682483039, -0.5184121542461977, 0.5692762703491778);
-            if(isRestOnly) {//Todo: This correcion shouldn't be necessary. Should figure out what's causing the difference
-                J_Bip_R_Hand_pin.target_threejs.rotateZ(1.5); 
-            }
+            //if(isRestOnly) {//Todo: This correcion shouldn't be necessary. Should figure out what's causing the difference
+            //    J_Bip_R_Hand_pin.target_threejs.rotateZ(1.5); 
+            //}
+
+            prepounce_r_targ.alignGlobalsTo(armature.r_hand_pin.targetNode.mimic().getGlobalMBasis()).project();
+            rightInterpolator = new Interpolator(armature.r_hand_pin.targetNode, window.__tempVecPool);
 
             let J_Bip_C_Head_pin = armature.head_pin;
             J_Bip_C_Head_pin.target_threejs.position.set(-0.048201991083735636, 1.4857808131871846, 0.029283233212733198);
@@ -162,7 +218,193 @@
             return onloaded(vrm.scene, loadId);
         }
 
+        const tempRot = new Rot(1,0,0,0);
+        const prevBoxPos = new Vec3();
+        window.clearRadius = 0.3;
+
+        function initLeftPounce() {
+            if(!isMidPounce_left) {   
+                let pounceWith = armature.l_hand_pin;
+                //leftGoal.setToIdentity();
+                leftGoal.translate.readFromTHREE(boxMesh.position);
+                leftGoal.rotation.setFromVecs(any_Vec3(0, 0, -1).normalize(), any_Vec3(1, 0, 0).normalize());
+                //leftGoal.rotation.setFromVecs(any_Vec3(0,0,1), any_Vec3(0, 1, 0)); 
+                //leftGoal.translate.readFromTHREE(boxMesh.position);
+                let otherHandDist = leftGoal.translate.dist(armature.r_hand_pin.targetNode.origin());
+                if(otherHandDist < window.clearRadius ) {
+                   // console.log(`oldDist: ${otherHandDist.toFixed(4)}`); 
+                    leftGoal.translate.sub(armature.r_hand_pin.targetNode.origin()).normalize().mult(clearRadius).add(armature.r_hand_pin.targetNode.origin());
+                    otherHandDist = leftGoal.translate.dist(armature.r_hand_pin.targetNode.origin());
+                    //console.log(`newDist: ${otherHandDist.toFixed(4)}`);
+                }
+                leftGoal.translate.z = -0.36;
+                leftGoal.lazyRefresh();
+                leftInterpolator.setGoal(leftGoal, (...p)=>{
+                    lastLeftPounce = Date.now();
+                    leftHandResting = false;
+                    leftHandReturning = false;
+                    isMidPounce_left = true;
+                }, (...p) => {
+                    isMidPounce_left = false;
+                    leftHandReturning = false;
+                    lastLeftPounce = Date.now(); 
+                    armature.l_hand_pin.setPinWeight(0.5);
+                });
+                armature.l_hand_pin.setYPriority(0);
+                armature.l_hand_pin.setPinWeight(0.6);
+                armature.r_hand_pin.setPinWeight(0.1);
+                leftInterpolator.begin(120);
+            }
+        }
+        
+        function initRightPounce(timeThresh) {
+            let pounceWith = armature.r_hand_pin;
+            //rightGoal.setToIdentity();
+            rightGoal.rotation.setFromVecs(any_Vec3(0, 0,1).normalize(), any_Vec3(1, 0, 0).normalize());
+            //tempRot.setFromVecs(any_Vec3(0,0,-1), any_Vec3(0, 1, 0)) 
+            if(!isMidPounce_right) {
+                rightGoal.translate.readFromTHREE(boxMesh.position);
+                let otherHandDist = rightGoal.translate.dist(armature.l_hand_pin.targetNode.origin());
+                if(otherHandDist < window.clearRadius ) {
+                    //console.log(`oldDist: ${otherHandDist.toFixed(4)}`);
+                    rightGoal.translate.sub(armature.l_hand_pin.targetNode.origin()).normalize().mult(clearRadius).add(armature.l_hand_pin.targetNode.origin())
+                    rightGoal.translate.dist(armature.l_hand_pin.targetNode.origin());
+                    //console.log(`newDist: ${otherHandDist.toFixed(4)}`);
+                }
+                rightGoal.translate.z = -0.36;
+                rightGoal.lazyRefresh();
+                rightInterpolator.setGoal(rightGoal, (...p)=>{
+                    lastRightPounce = Date.now();
+                    
+                    rightHandResting = false;
+                    rightHandReturning = false;
+                    isMidPounce_right = true;
+                }, (...p) => {
+                    isMidPounce_right = false;
+                    rightHandReturning = false;
+                    lastRightPounce = Date.now(); 
+                    
+                });
+            
+                armature.r_hand_pin.setYPriority(0);
+                armature.r_hand_pin.setPinWeight(0.6);
+                armature.l_hand_pin.setPinWeight(0.1);
+                rightInterpolator.begin(120);
+            }
+        }
+        function maybePounce() {
+            let currTime = Date.now();
+            if(currTime - unShy < shyMin) return;
+            let boxPos = tempVec.readFromTHREE(boxMesh.position);
+            let moveDist = boxPos.dist(prevBoxPos);
+            let mouseVel = mouse.dist(prevMouse)/((currTime-lastMotion)/1000);
+            if(mouseVel > 0) { 
+                lastMotion = currTime;
+                prevMouse.set(mouse);
+                prevBoxPos.set(boxPos);
+            }
+            if(currTime - lastMotion < 1200 &&  mouseVel < 0.2 && boxMesh.position.z < itxPlane.position.z - 0.05) {
+                console.log(mouseVel);
+                //console.log("can pounce");
+                let pounceWith = null;
+                let rhandDist = boxPos.dist(armature.l_hand_pin.targetNode.origin());
+                let lhandDist = boxPos.dist(armature.r_hand_pin.targetNode.origin());
+                let interHandDist = armature.l_hand_pin.targetNode.origin().dist(armature.r_hand_pin.targetNode.origin());
+                if(rightHandResting && !leftHandResting) {
+                    //console.log("solounrest right");
+                    initRightPounce();
+                    /*pounceWith = armature.r_hand_pin;
+                    lastRightPounce = currTime;
+                    rightHandResting = false;*/
+                } else if (leftHandResting && !rightHandResting) {
+                    //console.log("solounrest left");
+                    initLeftPounce();
+                    /*pounceWith = armature.l_hand_pin; 
+                    lastLeftPounce = currTime;
+                    leftHandResting = false;*/
+                } else {
+                    let pounceTimeThresh = pounceTimeMinThresh;// + (2*Math.random()*(pounceTimeAvgThresh - pounceTimeMinThresh));
+                    let lastPounce = Math.min(lastLeftPounce, lastRightPounce);
+                    /*tempVec.z = 0;
+                    tempVec2.set(armature.l_hand_pin.targNode.origin());
+                    tempVec2.z = 0;
+                    tempVec.sub(tempVec2);
+                    tempVec2.set(armature.r_hand_pin.targNode.origin()).sub(armature.l_hand_pin.targNode.origin());
+                    tempVec2.z=0;
+                    let lrdot = temp*/
+                    if(currTime - lastPounce > pounceTimeThresh) {
+                        if(/*rhandDist > interHandDist ||*/ boxPos.x < armature.l_hand_pin.targetNode.origin().x) {
+                            //console.log("unrest left");
+                            initLeftPounce();
+                            /*pounceWith = armature.r_hand_pin;
+                            lastRightPounce = currTime;
+                            rightHandResting = false;*/
+                        } else if ( /*lhandDist > interHandDist*/ boxPos.x > armature.r_hand_pin.targetNode.origin().x) {
+                            //console.log("unrest right");
+                            initRightPounce();
+                            /*pounceWith = armature.l_hand_pin; 
+                            lastLeftPounce = currTime;
+                            leftHandResting = false;*/
+                        } else {
+                            if(lhandDist < rhandDist && lhandDist > clearRadius/2) initLeftPounce();
+                            if(rhandDist < lhandDist && rhandDist > clearRadius/2) initRightPounce();
+                        }
+                    }
+                    /*if(currTime - lastLeftPounce > pounceTimeThresh) {
+                        initLeftPounce();
+                    } else if (currTime - lastRightPounce > pounceTimeThresh) {
+                        initRightPounce();
+                    }*/
+                }
+                /*if(pounceWith != null) {
+                    pounceWith.targetNode.translateTo(tempVec).project();
+                }*/
+            } else if (boxMesh.position.z <= itxPlane.position.z || currTime - lastMotion > 2000) {
+                if(!leftHandReturning && !leftHandResting && currTime - lastLeftPounce > 500) {
+                    leftInterpolator.setGoal(prepounce_l_targ.getGlobalMBasis(), 
+                        (...p) => {
+                            leftHandReturning = true; 
+                            leftHandResting=false;
+                        }, 
+                        (...p) => {
+                            leftHandResting = true; 
+                            leftHandReturning  = false;
+                            unShy = Date.now();
+                            shyMin = 1500;
+                        });
+                    armature.l_hand_pin.setPinWeight(0.5);
+                    armature.l_hand_pin.setYPriority(0.5);
+                    leftInterpolator.begin(400);                    
+                }
+                if(!rightHandReturning &&  !rightHandResting && currTime - lastRightPounce > 500) {
+                    rightInterpolator.setGoal(prepounce_r_targ.getGlobalMBasis(), 
+                    (...p) => {
+                        rightHandReturning = true; 
+                        rightHandResting = false}, 
+                    (...p) => {
+                        rightHandResting = true; 
+                        rightHandReturning = false;
+                        unShy = Date.now();
+                        shyMin = 1500;});
+                    armature.r_hand_pin.setPinWeight(0.5);
+                    armature.r_hand_pin.setYPriority(0.5);
+                    rightInterpolator.begin(400);
+                }
+            }
+            if(rightHandResting) {
+                armature.r_hand_pin.targetNode.alignGlobalsTo(prepounce_r_targ.getGlobalMBasis()).project();
+            }
+            if(leftHandResting) {
+                armature.l_hand_pin.targetNode.alignGlobalsTo(prepounce_l_targ.getGlobalMBasis()).project();
+            }
+            leftInterpolator.tick(true);
+            rightInterpolator.tick(true);
+            leftInterpolator.tick(true);
+            rightInterpolator.tick(true);
+        }
+
         window.addEventListener('mousemove', (event) => {
+            
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
         }, false);
@@ -179,7 +421,8 @@
             camera.layers.set(0);
             if(itx.length>0 && lookat) {
                 boxMesh.position.copy(itx[0].point);
-                glare(armature, boxMesh.position, 0.2, downadjust);
+                maybePounce();
+                glare(armature, boxMesh.position, 0.2, downadjust, (leftHandResting && rightHandResting) || (isMidPounce_left || isMidPounce_right));
             }            
             window.renderer.render(scene, camera);
             window.renderer.clearDepth();
@@ -212,7 +455,7 @@
         const tempVec2 = new Vec3();
         const downadjust = new Vec3(0, 0.1, -1).normalize();
 
-        function glare(char, point, rate, heading) {
+        function glare(char, point, rate, heading, lean = true) {
             let targNode = char.c_head.getIKPin().targetNode;
             tempVec.set(targNode.getGlobalMBasis().yHeading);
             tempVec2.setComponents(0.008, 0.977, -0.214).normalize();
@@ -227,14 +470,19 @@
             targNode.setVecToGlobalOf(heading, tempVec).sub(targNode.origin())
             //tempVec.set(heading);//.mult(-1);
             tempVec2.readFromTHREE(point).sub(targNode.origin()).normalize();
+            tempVec2.z = Math.min(tempVec2.z, targNode.origin().z-0.01);
             temprot = Rot.fromVecs(tempVec, tempVec2);
             targNode.rotateByGlobal(Rot.fromSlerp(Rot.IDENTITY, temprot, rate, temprot));
             targNode.updateGlobal();
-            tempVec.set(targNode.origin());
-            tempVec2.readFromTHREE(point);
-            tempVec.lerp(tempVec2, rate*.5);
-            tempVec2.set(headStart);
-            targNode.translateTo(tempVec2.lerp(tempVec, 0.8)).project();
+            if(lean) {
+                tempVec.set(targNode.origin());
+                tempVec2.readFromTHREE(point);
+                tempVec.lerp(tempVec2, rate*.5);
+                tempVec2.set(headStart);
+                tempVec.z = headStart.z;
+                targNode.translateTo(tempVec2.lerp(tempVec, 0.8));
+            }
+            targNode.project();
         }
 
         function pointToward(node, point, heading = node.getGlobalMBasis().zHeading) {

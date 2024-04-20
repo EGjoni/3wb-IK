@@ -11,7 +11,7 @@ import { Vector3 } from '../../../../three/three.module.js';
 import { LayerGroup } from '../Constraint.js';
 
 
-export class Twist extends Limiting {
+export class Twist extends Limiting/*Returnful*/ {
     static TAU = Math.PI * 2;
     static PI = Math.PI;
     static totalInstances = 0;
@@ -189,6 +189,8 @@ export class Twist extends Limiting {
         this.updateDisplay();
     }
 
+    
+
 
     /**sets the direction of the twist axis relative to the parent bone frame
      * @param {Vec3|Vector3} vec the twist axis
@@ -265,12 +267,11 @@ export class Twist extends Limiting {
     }
 
     /**
-     * @param {IKNode} currentState the node to constrain, ideally prior to any potentially objectionable rotation being applied. Should be a sibiling of @param desiredState. 
+     * @param {IKNode} currentState the node to constrain, ideally prior to any potentially objectionable rotation being applied. 
      * @param {IKNode} currentBoneOrientation the node corresponding to the physical bone orientation, should be a child of @param currentState. 
      * @param {Rot} desiredRotation the local space rotation you are attempting to apply to currentState.
-    * @param {Rot} storeIn an optional Rot object in which to store the result 
-    * @param {WorkingBone} calledBy a reference to the current solver's internal representation of the bone, in case you're maing a custom constraint that goes deep into the rabbit hole
-     
+     * @param {Rot} storeIn an optional Rot object in which to store the result 
+     * @param {WorkingBone} calledBy a reference to the current solver's internal representation of the bone, in case you're maing a custom constraint that goes deep into the rabbit hole
      * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring it to.
      */
     getAcceptableRotation (currentState, currentBoneOrientation, desiredRotation, storeIn=this.tempOutRot, calledBy = null) {
@@ -290,8 +291,40 @@ export class Twist extends Limiting {
         this.twist.clampToCosHalfAngle(this.coshalfhalfRange);
         let clampedDesireTarget = this.swing.applyAfter(this.twist, this.tempOutRot)
         let frameToClampedTarget = clampedDesireTarget.applyAfter(this.frameCanonical.localMBasis.rotation, this.tempOutRot);
+        let result = currentOrientation.getRotationTo(frameToClampedTarget, storeIn);
+        return result;
+    }
+
+    updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy) {
+        this.constraintResult.reset(iteration);
+        this.__frame_calc_internal.adoptLocalValuesFromIKNode(frameCanonical);
+        //this.__frame_calc_internal.rotateByLocal(desiredRotation);
+        let currentOrientation = currentState.localMBasis.rotation.applyAfter(currentBoneOrientation.localMBasis.rotation, this.tempRot1);
+        let canonToDesired = this.frameCanonical.getGlobalMBasis().rotation.getRotationTo(currentOrientation, this.tempRot2);
+        this.tempVec1.setComponents(0, 1, 0);
+        this.frameCanonical.localMBasis.rotation.applyToVec(this.tempVec1, this.tempVec1);
+        canonToDesired.getSwingTwist(this.tempVec1, this.swing, this.twist);
+        this.twist.conjugate(); //invert the twist since we're going from where we are to where we'd like to be
+        this.twist.clampToCosHalfAngle(this.coshalfhalfRange);
+        let clampedDesireTarget = this.swing.applyAfter(this.twist, this.tempOutRot)
+        let frameToClampedTarget = clampedDesireTarget.applyAfter(this.frameCanonical.localMBasis.rotation, this.tempOutRot);
         let result_maybe = currentOrientation.getRotationTo(frameToClampedTarget, storeIn);
         return result_maybe;
+
+        
+        
+        if(iteration >= this.giveup) {            
+            return this.constraintResult;
+        }
+        this.lastCalled = iteration;
+        /**@type {Rot} */
+        let targframe = this.boneFrameRest.getLocalMBasis().rotation;
+        let currRotFrame = currentState.getLocalMBasis().rotation;
+        currRotFrame.getRotationTo(targframe, this.constraintResult.fullRotation);
+
+        this.constraintResult.fullRotation.shorten();      
+        this.constraintResult.markSet(true);
+        return this.constraintResult;
     }
 
     /**

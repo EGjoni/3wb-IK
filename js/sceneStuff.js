@@ -213,6 +213,11 @@ function updateGlobalBoneLists() {
         boneList.push(...a.bones);
         a.recolorPreviewSkel();
     }
+    for(let b of boneList) {
+        if(b.getConstraint()) {
+            b.getConstraint().layers.set(window.boneLayer);
+        }
+    }
 }
 
 

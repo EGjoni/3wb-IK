@@ -1,23 +1,19 @@
 import { IKPin } from "../../EWBIK/betterbones/IKpin.js";
 import { Rest, Twist, Kusudama } from "../../EWBIK/betterbones/Constraints/ConstraintStack.js";
 
-export function initWolfGirlConstraints(armature) {
-    armature.inferOrientations(armature.rootBone);
-    let rootrest = new Rest(armature.c_hips.parent);
-    rootrest.setPainfulness(0.99);
-    rootrest.setStockholmRate(0.99);
-    
+export function initWolfGirlConstraints(armature, withRootRest = false) {
 
     //override the autoinferred orientation for the legs because this rig has weird tassles that throw it off
     armature.setInternalOrientationFor(armature.r_leg_lower, armature.r_foot.position);
     armature.setInternalOrientationFor(armature.l_leg_lower, armature.l_foot.position);
 
-    //snip the root bone (make it shorter).
-    armature.c_hips.parent.position.y = armature.c_hips.position.y - 0.01;
-    armature.c_hips.position.y = 0.01;
-    armature.makeBoneMesh(armature.c_hips.parent, armature.c_hips.parent.boneRadius);
+    if (withRootRest) {
+        let rootrest = new Rest(armature.c_hips.parent);
+        rootrest.setPainfulness(0.9);
+        rootrest.setStockholmRate(0.9);
+    }
 
-    new Kusudama(armature.bonetags["J_Bip_L_UpperLeg"], (cnstrt, bone) => bone == window.contextBone, "Kusudama for J_Bip_L_UpperLeg", armature.stablePool)
+    /*new Kusudama(armature.bonetags["J_Bip_L_UpperLeg"], (cnstrt, bone) => bone == window.contextBone, "Kusudama for J_Bip_L_UpperLeg", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.2505336783387944, -0.2645716928861982, -0.9312543666159987), 0.48411).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.3143631992559614, -0.7667395103803937, -0.5597198425776874), 0.69579).parentKusudama
         .addLimitConeAtIndex(2, armature.stablePool.any_Vec3(0, -0.9578262852211515, 0.28734788556634544), 0.45589);
@@ -65,28 +61,28 @@ export function initWolfGirlConstraints(armature) {
     new Twist(armature.bonetags["J_Bip_R_Foot"], 1.78672, undefined,
         armature.stablePool.any_Vec3(0, -0.5256465905493974, -0.8507030397522946),
         6.19399, (cnstrt, bone) => bone == window.contextBone,
-        "Twist for J_Bip_R_Foot", armature.stablePool);
+        "Twist for J_Bip_R_Foot", armature.stablePool);*/
 
     new Kusudama(armature.bonetags["J_Bip_R_Shoulder"], (t, b) => b == window.contextBone, "Kusudama for J_Bip_R_Shoulder", armature.stablePool)
-        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.9887169584774933, 0.14950459401107696, 0.009335544365375602), 0.52645);
+        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.9887169584774933, 0.14950459401107696, 0.009335544365375602), 0.4);
     new Twist(armature.bonetags["J_Bip_R_Shoulder"], 0.29084, undefined,
         armature.stablePool.any_Vec3(0.9891449243957722, -0.14694324939268918, 0),
         0, (cnstrt, bone) => bone == window.contextBone,
         "Kusudama for J_Bip_R_Shoulder", armature.stablePool);
 
     new Kusudama(armature.bonetags["J_Bip_R_LowerArm"], (t, b) => b == window.contextBone, "Kusudama for J_Bip_R_LowerArm", armature.stablePool)
-    .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.9600705258759669, 0.1644617183058307, -0.22631157406579597), 0.05).parentKusudama
-    .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.921264879266164, -0.11244607014498358, -0.37232634010992266), 0.05);
+        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.9600705258759669, 0.1644617183058307, -0.22631157406579597), 0.05).parentKusudama
+        .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.921264879266164, -0.11244607014498358, -0.37232634010992266), 0.05);
     new Twist(armature.bonetags["J_Bip_R_LowerArm"], 3, undefined,
         armature.stablePool.any_Vec3(0.5218281678275412, 0.3762160660809324, -0.7656088001612293),
         1.28, (cnstrt, bone) => bone == window.contextBone,
         "Kusudama for J_Bip_R_LowerArm", armature.stablePool);
 
     new Kusudama(armature.bonetags["J_Bip_R_UpperArm"], (t, b) => b == window.contextBone, "Kusudama for J_Bip_R_UpperArm", armature.stablePool)
-        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.9916964094100271, -0.11207984022434514, -0.06305823481945402), 1.14738);
-    new Twist(armature.bonetags["J_Bip_R_UpperArm"], 2.6, undefined,
+        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.9916964094100271, -0.11207984022434514, -0.06305823481945402), 0.92);
+    new Twist(armature.bonetags["J_Bip_R_UpperArm"], 1.43, undefined,
         armature.stablePool.any_Vec3(0.9936739704965505, -0.11230334081233606, -3.443753094947278e-8),
-        (2*Math.PI)-5.9, (cnstrt, bone) => bone == window.contextBone,
+        (2 * Math.PI) - 5.9, (cnstrt, bone) => bone == window.contextBone,
         "Kusudama for J_Bip_R_UpperArm", armature.stablePool);
 
     new Kusudama(armature.bonetags["J_Bip_R_Hand"], (t, b) => b == window.contextBone, "Kusudama for J_Bip_R_Hand", armature.stablePool)
@@ -98,15 +94,15 @@ export function initWolfGirlConstraints(armature) {
         "Kusudama for J_Bip_R_Hand", armature.stablePool);
 
     new Kusudama(armature.bonetags["J_Bip_L_Shoulder"], (t, b) => b == window.contextBone, "Kusudama for J_Bip_L_Shoulder", armature.stablePool)
-        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.9887169584774933, 0.14950459401107696, 0.009335544365375602), 0.52645);
+        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.9887169584774933, 0.14950459401107696, 0.009335544365375602), 0.4);
     new Twist(armature.bonetags["J_Bip_L_Shoulder"], 0.29084, undefined,
         armature.stablePool.any_Vec3(-0.9891449243957722, -0.14694324939268918, 0),
         0, (cnstrt, bone) => bone == window.contextBone,
         "Kusudama for J_Bip_L_Shoulder", armature.stablePool);
 
     new Kusudama(armature.bonetags["J_Bip_L_LowerArm"], (t, b) => b == window.contextBone, "Kusudama for J_Bip_L_LowerArm", armature.stablePool)
-    .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.9600705258759669, 0.1644617183058307, -0.22631157406579597), 0.05).parentKusudama
-    .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.921264879266164, -0.11244607014498358, -0.37232634010992266), 0.05);
+        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.9600705258759669, 0.1644617183058307, -0.22631157406579597), 0.05).parentKusudama
+        .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.921264879266164, -0.11244607014498358, -0.37232634010992266), 0.05);
 
     new Twist(armature.bonetags["J_Bip_L_LowerArm"], 3, undefined,
         armature.stablePool.any_Vec3(-0.5218281678275412, 0.3762160660809324, -0.7656088001612293),
@@ -114,8 +110,8 @@ export function initWolfGirlConstraints(armature) {
         "Kusudama for J_Bip_L_LowerArm", armature.stablePool);
 
     new Kusudama(armature.bonetags["J_Bip_L_UpperArm"], (t, b) => b == window.contextBone, "Kusudama for J_Bip_L_UpperArm", armature.stablePool)
-        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.9916964094100271, -0.11207984022434514, -0.06305823481945402), 1.14738);
-    new Twist(armature.bonetags["J_Bip_L_UpperArm"],2.6, undefined,
+        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.9916964094100271, -0.11207984022434514, -0.06305823481945402), 0.92);
+    new Twist(armature.bonetags["J_Bip_L_UpperArm"], 1.43, undefined,
         armature.stablePool.any_Vec3(-0.9936739704965505, -0.11230334081233606, -3.443753094947278e-8),
         5.9, (cnstrt, bone) => bone == window.contextBone,
         "Kusudama for J_Bip_L_UpperArm", armature.stablePool);
@@ -216,7 +212,7 @@ export function initWolfGirlConstraints(armature) {
         "Twist for J_Bip_R_Foot", armature.stablePool);
 
 
-    for (let b of armature.bones) {
+    /*for (let b of armature.bones) {
         if(b.getConstraint() != null) {
             b.getConstraint().layers?.set(1);
         }
@@ -228,10 +224,10 @@ export function initWolfGirlConstraints(armature) {
                 restconst.setPainfulness(0.1);
                 restconst.setStockholmRate(0.6);
             }
-            /*if (b == armature.bonetags["J_Bip_C_Hips"]) {
-                restconst.setPainfulness(0.8);
-                restconst.setStockholmRate(0.85);
-            }*/
+            if (b == armature.bonetags["J_Bip_C_Hips"]) {
+                //restconst.setPainfulness(0.8);
+                //restconst.setStockholmRate(0.85);
+            }
             if (b == armature.bonetags["J_Bip_C_Neck"]) {
                 restconst.setPainfulness(0.8);
                 restconst.setStockholmRate(0.8);
@@ -249,31 +245,77 @@ export function initWolfGirlConstraints(armature) {
                 restconst.setStockholmRate(0.5);
             }
         }
+    }*/
+    for (let b of armature.bones) {
+
+        if (b.name.indexOf("J_Sec") != -1) {
+            let restconst = new Rest(b);
+            restconst.setPainfulness(0.15);
+            restconst.setStockholmRate(0.5);
+        }
     }
 }
 
 
 /**Warning: not to be used in conjunction with initWolfGirlConstraints */
 export function initWolfGirlRestConstraints(armature) {
+    armature.l_arm_upp.rotateX(1.2);
+    armature.l_arm_upp.rotateY(1.2);
+
+    armature.r_arm_upp.rotateX(1.2);
+    armature.r_arm_upp.rotateY(-1.2);
+
+    armature.l_arm_lower.rotateY(-1.8);
+    armature.l_arm_lower.rotateZ(.9);
+    armature.l_arm_lower.rotateX(-.6);
+
+    armature.r_arm_lower.rotateY(1.8);
+    armature.r_arm_lower.rotateZ(-.9);
+    armature.r_arm_lower.rotateX(-.6);
+    /*armature.l_arm_lower.rotateX(-1.2);
+    armature.r_arm_lower.rotateX(-1.2);
     armature.l_arm_lower.rotateY(-1.5);
     armature.r_arm_lower.rotateY(1.5);
 
-    armature.l_arm_upp.rotateZ(1.2);
-    armature.r_arm_upp.rotateZ(-1.2);
+    
+    
+
+    
 
     armature.r_leg_upp.rotateX(1);
     armature.l_leg_upp.rotateX(1);
 
     armature.r_leg_lower.rotateX(-1.75);
-    armature.l_leg_lower.rotateX(-1.75);
+    armature.l_leg_lower.rotateX(-1.75);*/
 
-    for(let b of armature.bones) {
-        if(b.parent instanceof THREE.Bone)
-            new Rest(b);
+    for (let b of armature.bones) {
+        let rest = null;
+        if (b.parent instanceof THREE.Bone) {
+            
+            /*if (b.name == "J_Bip_L_Shoulder" || b.name == "J_Bip_R_Shoulder") {
+                rest = new Rest(b);
+                rest.setPainfulness(0.8);
+                rest.setStockholmRate(0.8);
+                b.getConstraint().setLimitState(false);
+            }*/
+            if (b.name == "J_Bip_L_UpperArm" || b.name == "J_Bip_R_UpperArm") {
+                rest = new Rest(b);
+                rest.setPainfulness(0.5);
+                rest.setStockholmRate(0.5);
+                b.getConstraint().setLimitState(false);
+            }
+            if (b.name == "J_Bip_L_LowerArm" || b.name == "J_Bip_R_LowerArm") {
+                rest = new Rest(b);
+                rest.setPainfulness(0.5);
+                rest.setStockholmRate(0.4);
+                b.getConstraint().setLimitState(false);
+            }
+
+        }
     }
     //window.larm_rest = new Rest(l_arm_upp);
     //window.rarm_rest = new Rest(r_arm_upp);
-    armature.r_leg_lower.rotateX(1.75);
+    /*armature.r_leg_lower.rotateX(1.75);
     armature.l_leg_lower.rotateX(1.75);
 
     armature.r_leg_upp.rotateX(-1);
@@ -283,7 +325,7 @@ export function initWolfGirlRestConstraints(armature) {
     armature.r_arm_upp.rotateZ(1.2);
 
     armature.l_arm_lower.rotateY(1.5);
-    armature.r_arm_lower.rotateY(-1.5);
+    armature.r_arm_lower.rotateY(-1.5);*/
 
 }
 
@@ -302,6 +344,11 @@ export function initWolfGirlShortcuts(armature) {
     armature.r_foot = armature.bonetags["J_Bip_R_Foot"];
     armature.l_foot = armature.bonetags["J_Bip_L_Foot"];
     armature.upper_chest = armature.bonetags["J_Bip_C_UpperChest"];
+    armature.inferOrientations(armature.rootBone);
+    //snip the root bone (make it shorter).
+    armature.c_hips.parent.position.y = armature.c_hips.position.y - 0.01;
+    armature.c_hips.position.y = 0.01;
+    armature.makeBoneMesh(armature.c_hips.parent, armature.c_hips.parent.boneRadius);
 }
 
 export function initWolfgirlInteractivePins(armature) {
@@ -458,12 +505,13 @@ export function initWolfGirlCosmeticPins(armature) {
 }
 
 
-export function initWolfGirl(armature, restOnly=false) {
+export function initWolfGirl(armature, useLimiting = true, useRest = false, withRootRest = false) {
     initWolfGirlShortcuts(armature);
     initWolfgirlInteractivePins(armature);
-    if(restOnly) {
-        initWolfGirlRestConstraints(armature);
-    } else {
+    if (useRest) {
+        initWolfGirlRestConstraints(armature, withRootRest);
+    }
+    if (useLimiting) {
         initWolfGirlConstraints(armature);
     }
     initWolfGirlCosmeticPins(armature);

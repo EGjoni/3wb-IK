@@ -175,10 +175,10 @@ export class ShadowNode extends IKNode{
      */
     project(linear = false) {
         //yeah I know "project" isn't the best name but, the next best option was kageShibariNoJutsu() so...
-        /*if(isNaN(this.localMBasis.translate.x) || isNaN(this.localMBasis.rotation.x) || isNaN(this.localMBasis.scale.x)) {
+        if(isNaN(this.localMBasis.translate.x) || isNaN(this.localMBasis.rotation.x) || isNaN(this.localMBasis.scale.x)) {
             alert("NaN detected, check the debugger")
             throw new Error("Projecting NaNs is bad.");
-        }*/
+        }
         this.toTrack.position.x = this.localMBasis.translate.x;
         this.toTrack.position.y = this.localMBasis.translate.y;
         this.toTrack.position.z = this.localMBasis.translate.z;

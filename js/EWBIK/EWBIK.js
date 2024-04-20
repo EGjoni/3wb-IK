@@ -1,8 +1,9 @@
 const THREE = await import('three');
 import { ShadowSkeleton } from "./solver/ShadowSkeleton.js"
 import { IKTransform } from "./util/nodes/IKTransform.js";
-import { Vec3, any_Vec3, Vec3Pool } from "./util/vecs.js";
+import { Vec3, any_Vec3, any_Vec3fv, Vec3Pool } from "./util/vecs.js";
 import { CallbacksSequence } from "./CallbacksSequence.js";
+import { Interpolator } from "./util/nodes/Interpolator.js";
 import { Rot } from "./util/Rot.js";
 import { IKNode, TrackingNode } from "./util/nodes/IKNodes.js";
 import { convexBlob, pcaOrientation } from "./util/mathdump/mathdump.js";
@@ -438,8 +439,9 @@ export class EWBIK extends Saveable {
      * @param stabilizingPasses number of stabilization passes to run. Set this to -2 if you want to use the armature's default. -1 tells it to break constraints if need be, 0 means no stabilization, 1 means a single (very cheap) stabilization pass which may increase grindiness in extreme poses. Greater than 1 reduces grindiness, but at signifcant cost.
      * @param {CallbacksSequence} callbacks to snoop on solver state
      */
-    async doSinglePullbackStep(bone, iterations = this.getDefaultIterations(), stabilizingPasses = this.getDefaultStabilizingPassCount(), callbacks) {
-        this.pendingSolve = async () => await this._doSinglePullbackStep(bone, iterations, stabilizingPasses, callbacks);
+    async doSinglePullbackStep(bone, stopOn, iterations = this.getDefaultIterations(), stabilizingPasses = this.getDefaultStabilizingPassCount(), onComplete =(wb) => this.alignBoneToSolverResult(wb), callbacks) {
+        let literal = stopOn != null;
+        this.pendingSolve = async () => await this._doSinglePullbackStep(bone, literal, iterations, stabilizingPasses, onComplete, callbacks);
         if (this.activeSolve != null) {
             await this.activeSolve;
         }
@@ -460,7 +462,8 @@ export class EWBIK extends Saveable {
      * @param stabilizingPasses number of stabilization passes to run. Set this to -2 if you want to use the armature's default. -1 tells it to break constraints if need be, 0 means no stabilization, 1 means a single (very cheap) stabilization pass which may increase grindiness in extreme poses. Greater than 1 reduces grindiness, but at signifcant cost.
      * @param {CallbacksSequence} callbacks to snoop on solver state
      */
-    async _doSinglePullbackStep(bone = null, iterations = this.getDefaultIterations(), stabilizationPasses = this.getDefaultStabilizingPassCount(), callbacks) {
+    async _doSinglePullbackStep(bone = null, literal, iterations = this.getDefaultIterations(), stabilizationPasses = this.getDefaultStabilizingPassCount(), onComplete =(wb) => this.alignBoneToSolverResult(wb), callbacks) {
+        
         if (this.dirtyShadowSkel)
             this._regenerateShadowSkeleton();
         if (this.dirtyRate) {
@@ -469,7 +472,7 @@ export class EWBIK extends Saveable {
             this.dirtyRate = false;
         }
         callbacks?.__initStep((callme, wb) => this.stepWiseUpdateResult(callme, wb));
-        this.shadowSkel.pullBackAll(this.getDefaultIterations(), null, (wb) => this.alignBoneToSolverResult(wb), callbacks, 0);
+        this.shadowSkel.pullBackAll(this.getDefaultIterations(), bone, literal, (wb) => this.alignBoneToSolverResult(wb), callbacks, 0);
     }
 
  
@@ -1109,7 +1112,7 @@ let betterbones = {
 }
 
 Object.assign(THREE.Bone.prototype, betterbones);
-export {IKPin, Kusudama, LimitCone, Twist, Rest, ShadowNode, Vec3, Vec3Pool, Rot, IKTransform, IKNode, ShadowSkeleton}
+export {IKPin, Kusudama, LimitCone, Twist, Rest, ShadowNode, Vec3, Vec3Pool, any_Vec3, any_Vec3fv, Rot, IKTransform, IKNode, ShadowSkeleton, Interpolator}
 
 
 

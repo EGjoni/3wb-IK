@@ -13,7 +13,8 @@
             "gltf" : "./js/three/jsm/GLTFLoader.js",
             "vrm" : "./js/three/jsm/three-vrm.module.js",
             "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
-            "enviro" : "./js/environment.js"
+            "enviro" : "./js/environment.js",
+            "uiElements" : "./js/UIelements.js"
           }
         }
     </script>
@@ -22,10 +23,11 @@
 
 
 <body>
-    <script type="module" src="./js/UIelements.js"></script>
+    <!--<script type="module" src="./js/UIelements.js"></script>-->
     <script src="js/sceneStuff.js"></script>
     <script type="module">
         import *  as THREE from "three";
+        const uielems = await import("./js/UIelements.js");
         import { LayeredRender } from "./js/LayeredRender.js"
         import { TransformControls } from 'transformControls';
         import { OrbitControls } from 'orbitControls';
@@ -46,7 +48,7 @@
         window.IKNode = IKNode;
         window.TrackingNode = TrackingNode;
         window.IKPin = IKPin;
-        window.autoSolve = false;
+        window.autoSolve = true;
 
         window.meshLayer = 0;
         window.boneLayer = 1;
@@ -191,7 +193,7 @@
         }
 
         function initHumanoidRestConstraints(armature) {
-            initWolfGirl(armature);
+            initWolfGirl(armature, true, false, false);
         }
 
         init();

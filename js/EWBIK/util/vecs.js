@@ -843,8 +843,8 @@ export class NoPool {
     }
 }
 
-//I feel like anyone can spare 120kb for this convenience. 
-const __tempVecPool = new Vec3Pool(5000);
+//I feel like anyone can spare 60kb for this convenience. 
+const __tempVecPool = new Vec3Pool(2500);
 __tempVecPool.finalize(); 
 window.noPool = new NoPool();
 window.globalVecPool = window.noPool;

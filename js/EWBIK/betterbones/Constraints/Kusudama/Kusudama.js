@@ -338,43 +338,6 @@ export class Kusudama extends Limiting {
         this.updateRotationalFreedom();
     }
 
-    optimizeTwistAxes() {
-        let directions = [];
-        if (this.getLimitCones().length === 1) {
-            directions.push(this.limitCones[0].getControlPoint().clone());
-        } else {
-            let thisC = this.getLimitCones()[0];
-            directions.push(thisC.getControlPoint().clone().mult(thisC.getRadius()));
-            for (let i = 0; i < this.getLimitCones().length - 1; i++) {
-                thisC = this.getLimitCones()[i];
-                let nextC = this.getLimitCones()[i + 1];
-                let thisCp = thisC.getControlPoint().clone();
-                let nextCp = nextC.getControlPoint().clone();
-                let thisToNext = Rot.fromVecs(thisCp, nextCp);
-                let halfThisToNext = Rot.fromAxisAngle(thisToNext.getAxis(), thisToNext.getAngle() / 2);
-
-                let halfAngle = halfThisToNext.applyToClone(thisCp);
-                halfAngle.normalize();
-                halfAngle.mult((thisC.getRadius() + nextC.getRadius()) / 2 + thisToNext.getAngle());
-                directions.push(halfAngle);
-                directions.add(nextCp.mult(nextC.getRadius()));
-            }
-        }
-
-        let newY = this.pool.any_Vec3();
-        directions.forEach(dv => {
-            newY.add(dv);
-        });
-        newY.normalize();
-
-        let newYRay = new Ray(this.pool.any_Vec3(0, 0, 0), newY);
-
-        let oldYtoNewY = Rot.fromVecs(this.swingOrientationAxes().yRay().heading(), this.swingOrientationAxes().getGlobalOf(newYRay).heading());
-        this.twistAxes.alignOrientationTo(this.swingOrientationAxes());
-        this.twistAxes.rotateByGlobal(oldYtoNewY);
-        this.updateTangentRadii();
-    }
-
     updateTangentRadii() {
         for (let i = 0; i < this.limitCones.length; i++) {
             let next = i < this.limitCones.length - 1 ? this.limitCones[i + 1] : null;
@@ -383,6 +346,15 @@ export class Kusudama extends Limiting {
         this.updateDisplay();
     }
 
+    /**
+     * 
+     * @param {IKNode} currentState the node to constrain, ideally prior to any potentially objectionable rotation being applied. 
+     * @param {IKNode} currentBoneOrientation the node corresponding to the physical bone orientation, should be a child of @param currentState. 
+     * @param {Rot} desiredRotation the local space rotation you are attempting to apply to currentState.
+     * @param {Rot} storeIn an optional Rot object in which to store the result
+     * @param {WorkingBone} calledBy a reference to the current solver's internal representation of the bone, in case you're maing a custom constraint that goes deep into the rabbit hole
+     * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring it to.
+     */
     getAcceptableRotation(currentState, currentBoneOrientation, desiredRotation, storeIn, calledBy = null) {
         let inBounds = [1.0];
         let currentOrientation = currentState.localMBasis.rotation.applyAfter(currentBoneOrientation.localMBasis.rotation, this.tempOutRot);
@@ -540,15 +512,41 @@ export class Kusudama extends Limiting {
         return this.painfulness;
     }
 
-    /**
-    * @return the limitingAxes of this Kusudama (these are just its parentBone's majorRotationAxes)
-    */
-    swingOrientationAxes() {
-        //if(inverted) return inverseLimitingAxes; 
-        return limitingAxes;
-    }
 
-    twistOrientationAxes() {
-        return twistAxes;
-    }
+    /*optimizeTwistAxes() {
+        let directions = [];
+        if (this.getLimitCones().length === 1) {
+            directions.push(this.limitCones[0].getControlPoint().clone());
+        } else {
+            let thisC = this.getLimitCones()[0];
+            directions.push(thisC.getControlPoint().clone().mult(thisC.getRadius()));
+            for (let i = 0; i < this.getLimitCones().length - 1; i++) {
+                thisC = this.getLimitCones()[i];
+                let nextC = this.getLimitCones()[i + 1];
+                let thisCp = thisC.getControlPoint().clone();
+                let nextCp = nextC.getControlPoint().clone();
+                let thisToNext = Rot.fromVecs(thisCp, nextCp);
+                let halfThisToNext = Rot.fromAxisAngle(thisToNext.getAxis(), thisToNext.getAngle() / 2);
+
+                let halfAngle = halfThisToNext.applyToClone(thisCp);
+                halfAngle.normalize();
+                halfAngle.mult((thisC.getRadius() + nextC.getRadius()) / 2 + thisToNext.getAngle());
+                directions.push(halfAngle);
+                directions.add(nextCp.mult(nextC.getRadius()));
+            }
+        }
+
+        let newY = this.pool.any_Vec3();
+        directions.forEach(dv => {
+            newY.add(dv);
+        });
+        newY.normalize();
+
+        let newYRay = new Ray(this.pool.any_Vec3(0, 0, 0), newY);
+
+        let oldYtoNewY = Rot.fromVecs(this.swingOrientationAxes().yRay().heading(), this.swingOrientationAxes().getGlobalOf(newYRay).heading());
+        this.twistAxes.alignOrientationTo(this.swingOrientationAxes());
+        this.twistAxes.rotateByGlobal(oldYtoNewY);
+        this.updateTangentRadii();
+    }*/
 }

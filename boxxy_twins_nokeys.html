@@ -40,8 +40,7 @@
 </head>
 
 <body>
-    <div class="clack" style="position:absolute; background:rgba(0, 0, 0, 0.329); color:white; font-size:1.5em;">WASD to
-        move. Drag to orbit.</div>
+   
     <!--<script type="module" src="./js/UIelements.js"></script>-->
     <script src="js/sceneStuff.js"></script>
     <script type="module">
@@ -182,11 +181,11 @@
             armature.c_hips.parent.position.y = armature.c_hips.position.y - 0.01;
             armature.c_hips.position.y = 0.01;
             armature.makeBoneMesh(armature.c_hips.parent, armature.c_hips.parent.boneRadius);
-            initPrettyBones(armature);
+            //initPrettyBones(armature);
             initHumanoidRestConstraints(armature);
-            makePinsList(1, armature.armatureObj3d, armature, false, false);
-            updateGlobalBoneLists();
-            initIK(armature);
+            //makePinsList(1, armature.armatureObj3d, armature, false, false);
+            //updateGlobalBoneLists();
+            //initIK(armature);
             //initPrettyBones(armature);
             armature.regenerateShadowSkeleton(true);
             return armature;
@@ -324,6 +323,7 @@
         const temp3v = new THREE.Vector3(0, 0, 0);
         window.framecount = 0;
         window.physicsUpdateCount = 0;
+        let useTilt = false;
 
         function animate() {
             requestAnimationFrame(delayAnimate);
@@ -340,6 +340,11 @@
             forwardVec.y = 0;
             forwardVec.x = -mouse.x-tempVec.x;//groundArea/2;// readFromTHREE(orbitControls.target);
             forwardVec.z = mouse.y-tempVec.z;//groundArea/2;
+            if(useTilt) {
+                //tilt.toConsole();
+                forwardVec.x = -Math.max(-1, Math.min(-tilt.x/4.4, 1));//absmouse.x*(1+(tilt.x/9.8));
+                forwardVec.z = Math.max(-1, Math.min(0.5-(tilt.y/4.4), 1));//absmouse.x*(1+(tilt.x/9.8));
+            }
             forwardVec.add(tempVec.readFromTHREE(temp3v));
             //forwardVec.normalize(false);
             forwardVec.y = 0;
@@ -381,6 +386,56 @@
             char.c_head.getIKPin().targetNode.rotateByGlobal(Rot.fromSlerp(Rot.IDENTITY, temprot, rate, temprot));
             char.c_head.getIKPin().targetNode.updateGlobal().project();
         }
+
+        const tilt= new Vec3(1, 1, 1);
+        const mouse = new Vec3();
+        const absmouse = new Vec3();
+        function onTilt(e) {
+            useTilt = true;
+            tilt.x = event.accelerationIncludingGravity.x;
+            tilt.y = event.accelerationIncludingGravity.y;
+            tilt.z = event.accelerationIncludingGravity.z;
+            //mouse.x = Math.max(-1, Math.min(-tilt.x/4.4, 1));//absmouse.x*(1+(tilt.x/9.8));
+            //mouse.y = Math.max(-1, Math.min(-tilt.y/4.4));//absmouse.x*(1+(tilt.y/9.8));
+        }
+
+        window.addEventListener('mousemove', async (event) => {
+            absmouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            absmouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            mouse.x = absmouse.x;
+            mouse.y = absmouse.y;
+        }, false);
+
+        async function requestMotionPermissions() {
+            try {
+                const permissionStatus = await navigator.permissions.query({ name: 'accelerometer' });        
+                if (permissionStatus.state === 'granted') {
+                    console.log('Accelerometer permission already granted.');
+                    window.addEventListener('devicemotion', onTilt);
+                       
+                } else if (permissionStatus.state === 'prompt') {
+                    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                        const permissionState = await DeviceMotionEvent.requestPermission();
+                        if (permissionState === 'granted') {
+                            window.addEventListener('devicemotion', onTilt);
+                        } 
+                    }
+                } else {
+                    console.log('Accelerometer permission is denied.');
+                }
+            } catch (error) {
+                console.error('Error querying accelerometer permission:', error);
+            }
+        }
+        
+        function setupMotionAccess() {
+            document.addEventListener('click', requestMotionPermissions);
+        }
+        
+        setupMotionAccess();
+        requestMotionPermissions();
+
+
         init();
         window.camera = camera;
 

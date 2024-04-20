@@ -639,7 +639,7 @@ ${wb.forBone.toString()}
                     }
                 }
             });
-        window.contextArmature?._doSinglePullbackStep(window.contextBone, undefined, 0, callbacks);
+        window.contextArmature?._doSinglePullbackStep(window.contextBone, undefined, undefined, 0, undefined, callbacks);
     }
 
     D.byid('pullback-btn').addEventListener('click', async () => {
