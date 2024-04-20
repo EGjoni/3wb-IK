@@ -40,7 +40,7 @@
 </head>
 
 <body>
-   
+    <div class="clack" style="position:absolute; background:rgba(0, 0, 0, 0.329); color:white; font-size:1.5em;">Tilt to move. Drag to orbit.</div>
     <!--<script type="module" src="./js/UIelements.js"></script>-->
     <script src="js/sceneStuff.js"></script>
     <script type="module">
@@ -299,9 +299,11 @@
         }
 
         async function loadModel(position, loadId, onloaded) {
+            let clack = document.querySelector(".clack");
             let vrm = await loader.loadAsync(
                 './vrmtests/testmodel.vrm',
-                (xhr, otherParam) => { },
+                (xhr, otherParam) => {
+                    if(clack != null) clack.innerText = (100 * xhr.loaded / xhr.total).toFixed(3) + "% loaded" },
                 (error) => { window.notifyStreamError(error, loadId) }
             );
             vrm.scene.updateMatrixWorld();
