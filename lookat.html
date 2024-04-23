@@ -20,6 +20,8 @@
 <body>
     <!--<script type="module" src="./js/UIelements.js"></script>
     <script src="js/sceneStuff.js"></script>-->
+    <div id="your-score">You:<span class="score">0</span></div>
+    <div id="pounce-score">Pounce:<span class="score">0</span></div>
     <script type="module">
         import *  as THREE from "three";
         import { TransformControls } from 'transformControls';
@@ -77,6 +79,8 @@
         itxPmat.side = 2;
         boxMesh.position.set(0,1,0);
         scene.add(itxPlane);
+        window.pounceScoreContainer = document.getElementById("pounce-score").querySelector("span");
+        window.yourScoreContainer = document.getElementById("your-score").querySelector("span");
         
         const planeShadow = new ShadowNode(itxPlane);
         itxPlane.position.set(0, 1.5, -0.2);
@@ -166,6 +170,7 @@
             armature.l_hand_pin.setZPriority(0);
             armature.l_hand_pin.target_threejs.add(axHelp3);
             armature.l_hand_pin.forBone.add(axHelp4);
+            axHelp.visible = false; axHelp2.visible = false; axHelp3.visible = false; axHelp4.visible = false;
 
             armature.r_hand_pin.setPinWeight(1);
             armature.r_hand_pin.setXPriority(0.16);
@@ -232,8 +237,11 @@
         window.yourScore =0;
         window.leftScored = false;
         window.rightScored = false;
+        let yourMostRecentPoint = Date.now();
+        let pounceMostRecentPoint = Date.now();
+        let mostRecentPoint = Date.now();
         window.hitboxhintid = -1;
-        window.hitThresh = 0.1;
+        window.hitThresh = 0.05;
         window.flatPos = new Vec3();
         window.flatTarg = new Vec3();
 
@@ -243,24 +251,29 @@
             flatTarg.set(currentTransform.origin());
             flatPos.z = 0;
             flatTarg.z = 0;
-            if(flatPos.dist(flatTarg) < hitThresh) {
+            if(flatPos.dist(flatTarg) < hitThresh && Date.now()-mostRecentPoint > 500) {
                 scoreHintMesh.visible = true;
                 scoreHintMesh.position.copy(boxMesh.position);
                 scoreHintMesh.updateMatrix();
-                scoreHintMesh.material.color = new THREE.Color('red');
+                scoreHintMesh.material.color = new THREE.Color(1, 0, 0.8);
                 window.clearTimeout(hitboxhintid);
                 hitboxhintid = window.setTimeout(()=>{scoreHintMesh.material.color = new THREE.Color('blue'); scoreHintMesh.visible= false;}, 300);
                 pounceScore++;
+                pounceScoreContainer.innerText = pounceScore;
                 scored = true;
-            } else if(isFinal) {
+                pounceMostRecentPoint = Date.now();
+            } else if(isFinal && Date.now()-mostRecentPoint > 500) {
                 scoreHintMesh.visible = true;
-                scoreHintMesh.material.color = new THREE.Color('green');
+                scoreHintMesh.material.color = new THREE.Color(0, 1, 0);
                 scoreHintMesh.position.copy(boxMesh.position);
                 window.clearTimeout(hitboxhintid);
                 hitboxhintid = window.setTimeout(()=>{scoreHintMesh.material.color = new THREE.Color('blue'); scoreHintMesh.visible= false;}, 300);
+                yourScoreContainer.innerText = yourScore;
+                yourMostRecentPoint = Date.now();
                 yourScore++;
                 scored = true;
             }
+            mostRecentPoint = Math.max(pounceMostRecentPoint, yourMostRecentPoint);
             return scored;
         }
 
@@ -293,9 +306,10 @@
                     lastLeftPounce = Date.now(); 
                     armature.l_hand_pin.setPinWeight(0.5);
                     if(!leftScored ) {
-                        leftScored = maybePoint(currentTransform, true);
+                        leftScored = maybePoint(armature.l_hand_pin.forBone.trackedBy.getGlobalMBasis(), true);
                     }
                 });
+                leftScored = false;
                 armature.l_hand_pin.setYPriority(0);
                 armature.l_hand_pin.setXPriority(0.2);
                 armature.l_hand_pin.setPinWeight(0.6);
@@ -332,13 +346,14 @@
                     rightHandReturning = false;
                     lastRightPounce = Date.now();
                     if(!rightScored) {
-                        rightScored = maybePoint(currentTransform, true);
+                        rightScored = maybePoint(armature.r_hand_pin.forBone.trackedBy.getGlobalMBasis(), true);
                     }
                     
                 });            
                 armature.r_hand_pin.setYPriority(0);
                 armature.r_hand_pin.setXPriority(0.2);
                 armature.r_hand_pin.setPinWeight(0.6);
+                rightScored = false;
                 if(leftHandResting || leftHandReturning) {
                     armature.l_hand_pin.setPinWeight(0.1);
                 }
@@ -356,20 +371,20 @@
                 prevMouse.set(mouse);
                 prevBoxPos.set(boxPos);
             }
-            if(currTime - lastMotion < 800 &&  mouseVel < 0.2 && boxMesh.position.z < itxPlane.position.z - 0.05) {
+            if(currTime - lastMotion < 1500 &&  mouseVel < 0.2 && boxMesh.position.z < itxPlane.position.z - 0.05) {
                 //console.log(mouseVel);
                 //console.log("can pounce");
                 let pounceWith = null;
                 let rhandDist = boxPos.dist(prepounce_r_targ.origin());
                 let lhandDist = boxPos.dist(prepounce_l_targ.origin());
                 let interHandDist = armature.l_hand_pin.targetNode.origin().dist(armature.r_hand_pin.targetNode.origin());                
-                let pounceTimeThresh = pounceTimeMinThresh;// + (2*Math.random()*(pounceTimeAvgThresh - pounceTimeMinThresh));
+                let pounceTimeThresh = pounceTimeMinThresh + (2*Math.random()*(pounceTimeAvgThresh - pounceTimeMinThresh));
                 let lastPounce = Math.min(lastLeftPounce, lastRightPounce);
                 if(currTime - lastPounce > pounceTimeThresh) {
-                    if(lhandDist < rhandDist && lhandDist > clearRadius/2 && !leftHandReturning) initLeftPounce();
-                    if(rhandDist < lhandDist && rhandDist > clearRadius/2 && !rightHandReturning) initRightPounce();
+                    if(lhandDist < rhandDist && lhandDist > clearRadius && !leftHandReturning && !isMidPounce_left) initLeftPounce();
+                    if(rhandDist < lhandDist && rhandDist > clearRadius && !rightHandReturning && !isMidPounce_right) initRightPounce();
                 }
-            } else if (boxMesh.position.z <= itxPlane.position.z || currTime - lastMotion > 700) {
+            } else if (boxMesh.position.z <= itxPlane.position.z || currTime - lastMotion > 400) {
                 if(!leftHandReturning && !leftHandResting && currTime - lastLeftPounce > 500) {
                     leftInterpolator.setGoal(prepounce_l_targ.getGlobalMBasis(), 
                         (...p) => {
@@ -378,14 +393,14 @@
                             leftHandResting = true; 
                             leftHandReturning  = false;
                             isMidPounce_left = false;
-                            armature.l_hand_pin.setXPriority(0.5);
                             armature.l_hand_pin.setYPriority(0.5);
-                            armature.l_hand_pin.setPinWeight(0.6);
                             unShy = Date.now();
                             shyMin = 1000;
                             leftScored = false;
                         });
                    
+                        armature.r_hand_pin.setXPriority(0.5);
+                    armature.r_hand_pin.setPinWeight(0.6);
                     leftHandReturning = true; 
                     isMidPounce_left = false;
                     leftHandResting = false;
@@ -436,7 +451,7 @@
             if(itx.length>0 && lookat) {
                 boxMesh.position.copy(itx[0].point);
                 maybePounce();
-                glare(armature, boxMesh.position, 0.2, downadjust, (leftHandResting && rightHandResting) || (isMidPounce_left || isMidPounce_right));
+                glare(armature, boxMesh.position, 0.2, downadjust/*, (leftHandResting && rightHandResting) || (isMidPounce_left || isMidPounce_right)*/);
             }            
             window.renderer.render(scene, camera);
             window.renderer.clearDepth();
@@ -508,6 +523,7 @@
 
         init();
     </script>
+    
     <style>
         body {
             margin: 0;
@@ -515,6 +531,23 @@
 
         canvas {
             display: block;
+        }
+        div#pounce-score {
+            position: absolute;
+            bottom: 2em;
+            right: 0px;
+            font-size: 2em;
+            font-family: cursive;
+            color: #ff00ff;
+            filter: drop-shadow(0px 0px 2px black);
+        }
+        div#your-score {
+            position: absolute;
+            bottom: 2em;
+            font-size: 2em;
+            font-family: cursive;
+            color: rgb(0, 255, 0);
+            filter: drop-shadow(0px 0px 2px black);
         }
     </style>
 </body>
