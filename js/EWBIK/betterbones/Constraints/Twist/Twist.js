@@ -5,13 +5,13 @@ import { Vec3, any_Vec3 } from "../../../util/vecs.js";
 import { Ray } from "../../../util/Ray.js";
 import { IKNode, TrackingNode } from "../../../util/nodes/IKNodes.js";
 import { generateUUID } from "../../../util/uuid.js";
-const { Constraint, Limiting} = await import( "../Constraint.js");
+const { Constraint, LimitingReturnful} = await import( "../Constraint.js");
 import { Saveable } from '../../../util/loader/saveable.js';
 import { Vector3 } from '../../../../three/three.module.js';
 import { LayerGroup } from '../Constraint.js';
 
 
-export class Twist extends Limiting/*Returnful*/ {
+export class Twist extends LimitingReturnful {
     static TAU = Math.PI * 2;
     static PI = Math.PI;
     static totalInstances = 0;
@@ -23,6 +23,8 @@ export class Twist extends Limiting/*Returnful*/ {
     workingVec = new Vec3(0,0,0);
     baseZ = 0;
     twistAxis = new Vec3(0,1,0);
+    painfulness = 0.2;
+    stockholmRate = 0.2;
     
     static fromJSON(json, loader, pool, scene) {
         let result = new Twist(null, json.range, null, null, json.ikd, pool);
@@ -61,7 +63,7 @@ export class Twist extends Limiting/*Returnful*/ {
      * @param {*} ikd optional  unique string identifier
      * @param {*} pool 
      */
-    constructor(forBone, range=2*Math.PI-0.0001, referenceBasis = undefined, twistAxis = undefined, baseZ = undefined, visibilityCondition=undefined, ikd = 'Twist-'+(Twist.totalInstances++), pool=null) {
+    constructor(forBone, range=2*Math.PI-0.0001, referenceBasis = undefined, twistAxis = undefined, baseZ = undefined, visibilityCondition=undefined, ikd = 'Twist-'+(Twist.totalInstances++), pool=globalVecPool) {
         let basis = referenceBasis;
         if(referenceBasis == null && !Constraint.loadMode)
             basis = new IKNode(null, null, null, pool);
@@ -187,6 +189,7 @@ export class Twist extends Limiting/*Returnful*/ {
         this.__frame_internal.updateGlobal(); 
                
         this.updateDisplay();
+        return this;
     }
 
     
@@ -204,6 +207,7 @@ export class Twist extends Limiting/*Returnful*/ {
         this.frameCanonical.localMBasis.lazyRefresh();
         this.frameCanonical.markDirty();
         this.setBaseZ(this.baseZ);
+        return this;
     }
 
     printInitializationString(doPrint=true, parname) {
@@ -240,6 +244,7 @@ export class Twist extends Limiting/*Returnful*/ {
         this.range = range;
         this.coshalfhalfRange = Math.cos(0.25*range); // set to a fourth, because the range is defined as being on either side of the reference orientation.
         this.updateDisplay();
+        return this;
     }
 
     getRange() {
@@ -275,13 +280,14 @@ export class Twist extends Limiting/*Returnful*/ {
      * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring it to.
      */
     getAcceptableRotation (currentState, currentBoneOrientation, desiredRotation, storeIn=this.tempOutRot, calledBy = null) {
-        /**get the desired orientation in parentbone space from the composition of currentstate*currentboneorienteation*desiredrotatio
-         * get the rotation that brings that orientation to framecanonical.
+        /**get the desired orientation in parentbone space from the composition of currentstate*currentboneorienteation*desiredrotation
+         * get the rotation that brings framecanonical to the desired orientation.
          * do a swingtwist decomposition.
-         * clamp the twist. invert the swing, recompose the two, then apply that to framecanonical's rotation to get back to the acceptable version of the desired orientation.
+         * clamp the twist, recompose it with the swing, then apply that to framecanonical's rotation to get back to the acceptable version of the desired orientation.
+         * finally, return the difference between the currentstate and the resulting frame orientation
          */
-        this.__frame_calc_internal.adoptLocalValuesFromIKNode(currentState); 
-        this.__frame_calc_internal.rotateByLocal(desiredRotation);
+        //this.__frame_calc_internal.adoptLocalValuesFromIKNode(currentState); 
+        //this.__frame_calc_internal.rotateByLocal(desiredRotation);
         let currentOrientation = currentState.localMBasis.rotation.applyAfter(currentBoneOrientation.localMBasis.rotation, this.tempRot1);
         let desiredOrientation = desiredRotation.applyAfter(currentOrientation, this.tempRot2);
         let canonToDesired = this.frameCanonical.getGlobalMBasis().rotation.getRotationTo(desiredOrientation, this.tempRot2);
@@ -297,43 +303,41 @@ export class Twist extends Limiting/*Returnful*/ {
 
     updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy) {
         this.constraintResult.reset(iteration);
-        this.__frame_calc_internal.adoptLocalValuesFromIKNode(frameCanonical);
-        //this.__frame_calc_internal.rotateByLocal(desiredRotation);
+        /**
+         * get the desired orientation in parentbone space from the composition of currentstate*currentboneorienteation
+         * get the rotation that brings framecanonical to the desired orientation.
+         * do a swingtwist decomposition.
+         * apply just the swing to framecanonical's rotation to get back to the twistless version of the desired orientation.
+         * finally, return the difference between the currentstate and the resulting frame orientation
+         */
+        if(iteration >= this.giveup) return this.constraintResult;
+
         let currentOrientation = currentState.localMBasis.rotation.applyAfter(currentBoneOrientation.localMBasis.rotation, this.tempRot1);
-        let canonToDesired = this.frameCanonical.getGlobalMBasis().rotation.getRotationTo(currentOrientation, this.tempRot2);
+        let canonToCurrent = this.frameCanonical.getGlobalMBasis().rotation.getRotationTo(currentOrientation, this.tempRot2);
         this.tempVec1.setComponents(0, 1, 0);
         this.frameCanonical.localMBasis.rotation.applyToVec(this.tempVec1, this.tempVec1);
-        canonToDesired.getSwingTwist(this.tempVec1, this.swing, this.twist);
-        this.twist.conjugate(); //invert the twist since we're going from where we are to where we'd like to be
-        this.twist.clampToCosHalfAngle(this.coshalfhalfRange);
-        let clampedDesireTarget = this.swing.applyAfter(this.twist, this.tempOutRot)
-        let frameToClampedTarget = clampedDesireTarget.applyAfter(this.frameCanonical.localMBasis.rotation, this.tempOutRot);
-        let result_maybe = currentOrientation.getRotationTo(frameToClampedTarget, storeIn);
-        return result_maybe;
-
-        
-        
-        if(iteration >= this.giveup) {            
-            return this.constraintResult;
-        }
-        this.lastCalled = iteration;
-        /**@type {Rot} */
-        let targframe = this.boneFrameRest.getLocalMBasis().rotation;
-        let currRotFrame = currentState.getLocalMBasis().rotation;
-        currRotFrame.getRotationTo(targframe, this.constraintResult.fullRotation);
-
+        canonToCurrent.getSwingTwist(this.tempVec1, this.swing, this.twist);
+        //here we can just ignore the twist component, since the full preference rotation is the one that amounts to no twist.
+        let frameToTwistlessCurrentState = this.swing.applyAfter(this.frameCanonical.localMBasis.rotation, this.tempOutRot);
+        currentOrientation.getRotationTo(frameToTwistlessCurrentState, this.constraintResult.fullRotation);
         this.constraintResult.fullRotation.shorten();      
         this.constraintResult.markSet(true);
         return this.constraintResult;
     }
 
-    /**
-      * computes the raw unscaled discomfort associated with this historical value presuming pre-alleviation
-      * @param {ConstraintResult} previousResult
-      * @returns a number from 0 - 1, implying amount of pain
-      * */
-    _computePast_Pre_RawDiscomfortFor(previousResult) {
-        return 0;
+    discomfortScale(val) {
+        return val;
+    }
+
+
+     /**
+     * computes the raw unscaled discomfort associated with this historical value presuming pre-alleviation
+     * @param {ConstraintResult} previousResult
+     * @returns a number from 0 - 1, implying amount of pain
+     * */
+     _computePast_Pre_RawDiscomfortFor(previousResult) {
+        /**doing acos() instead of 2*acos() because division by PI*2 instead of TAU means the multiplication by 2 cancels out */
+        return Math.acos(Math.abs(previousResult.fullRotation.normalize().w)) * Constraint.HALF_PI_RECIP;
      }
  
      /**
@@ -342,7 +346,9 @@ export class Twist extends Limiting/*Returnful*/ {
       * @returns a number from 0 - 1, implying amount of pain
       * */
      _computePast_Post_RawDiscomfortFor(previousResult) {
-        return 0;
+        /*just the ratio of the angle of the full rotation to the preferred orientation minus the angle to the clamped rotation, 
+        doing acos() instead of 2*acos() because division by PI instead of TAU means the multiplication by 2 cancels out */
+        return previousResult.raw_preCallDiscomfort - ((Math.acos(Math.abs(previousResult.clampedRotation.w))) * Constraint.HALF_PI_RECIP);
      }
 
     

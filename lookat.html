@@ -53,6 +53,9 @@
         const itxPmat = new THREE.MeshLambertMaterial({color: 0x440044});
         const boxGeo = new THREE.BoxGeometry(0.03, 0.03, 0.03);//new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //
         window.boxMesh = new THREE.Mesh(boxGeo, itxmat);
+        window.scoreHintGeo = new THREE.BoxGeometry(0.03, 0.03, 0.03);
+        window.scoreHintMat = new THREE.MeshBasicMaterial({color: 0x00ff00});
+        window.scoreHintMesh = new THREE.Mesh(scoreHintGeo, scoreHintMat)
         const sphereGeo = new THREE.SphereGeometry(0.7,9,9);
         window.itxBound = new THREE.Mesh(sphereGeo, itxmat);
         const mouseCaster = new THREE.Raycaster();
@@ -64,7 +67,8 @@
 
         scene.add(itxBound);
         scene.add(boxMesh);
-        boxMesh.visible=true;
+        scene.add(scoreHintMesh);
+        boxMesh.visible=false;
         itxBound.position.set(0,1.3,0);
         //itxBound.material.transparent = true;
         itxBound.material.wireframe = false;
@@ -88,7 +92,7 @@
         
 
         window.lookat=true;
-        const useRest = true;
+        const useRest = false;
         const useLimiting = true;
         //window.orbitControls = new OrbitControls(camera, renderer.domElement);
         renderer.autoClear = false;
@@ -110,6 +114,7 @@
         let rightInterpolator = null;
         window.leftGoal = new IKTransform();
         window.rightGoal = new IKTransform();
+        rightGoal.rotation.setFromVecs(any_Vec3(0, 0,1).normalize(), any_Vec3(1, 0, 0).normalize());
         //window.leftGoal = new IKTransform(any_Vec3(0,0,0), any_Vec3(0,-1,0).normalize(), any_Vec3(0,0,1), any_Vec3(1,0,0).normalize());
         //window.rightGoal = new IKTransform(any_Vec3(0,0,0), any_Vec3(0.707,0.707,0).normalize(), any_Vec3(0,0,1), any_Vec3(.707,-0.707,0).normalize());
 
@@ -156,15 +161,15 @@
             armature.hip_pin.setDepthFalloff(0.8);
             armature.hip_pin.setPinWeight(0.4);
             armature.l_hand_pin.setPinWeight(1);
-            armature.l_hand_pin.setXPriority(0.5);
-            armature.l_hand_pin.setYPriority(0.5);
+            armature.l_hand_pin.setXPriority(0.16);
+            armature.l_hand_pin.setYPriority(0.0);
             armature.l_hand_pin.setZPriority(0);
             armature.l_hand_pin.target_threejs.add(axHelp3);
             armature.l_hand_pin.forBone.add(axHelp4);
 
             armature.r_hand_pin.setPinWeight(1);
-            armature.r_hand_pin.setXPriority(0.5);
-            armature.l_hand_pin.setYPriority(0.5);
+            armature.r_hand_pin.setXPriority(0.16);
+            armature.r_hand_pin.setYPriority(0);
             armature.r_hand_pin.setZPriority(0);
             armature.r_hand_pin.target_threejs.add(axHelp);
             armature.r_hand_pin.forBone.add(axHelp2);
@@ -172,8 +177,9 @@
 
 
             let J_Bip_L_Hand_pin = armature.l_hand_pin;
-            J_Bip_L_Hand_pin.target_threejs.position.set(-0.2628872730607969, 1.1320828172882704, -0.1058023847915398);
+            J_Bip_L_Hand_pin.target_threejs.position.set(-0.2628872730607969, 1.1320828172882704, -0.058023847915398);
             J_Bip_L_Hand_pin.target_threejs.quaternion.set(-0.466854980946203, -0.4415841689876301, 0.5158273464161427, 0.5665439057606263);
+            J_Bip_L_Hand_pin.setTargetPriorities(0.5, 0.5, 0);
             //if(isRestOnly) {//Todo: This correcion shouldn't be necessary. Should figure out what's causing the difference
             //    J_Bip_L_Hand_pin.target_threejs.rotateZ(-1.5); 
             //}
@@ -181,8 +187,9 @@
             leftInterpolator = new Interpolator(armature.l_hand_pin.targetNode, window.__tempVecPool);
 
             let J_Bip_R_Hand_pin = armature.r_hand_pin;
-            J_Bip_R_Hand_pin.target_threejs.position.set(0.22725199632250082, 1.1271629356945718, -0.1409638346652234);
+            J_Bip_R_Hand_pin.target_threejs.position.set(0.22725199632250082, 1.1271629356945718, -0.059638346652234);
             J_Bip_R_Hand_pin.target_threejs.quaternion.set(-0.4635192535441378, 0.4385467682483039, -0.5184121542461977, 0.5692762703491778);
+            J_Bip_R_Hand_pin.setTargetPriorities(0.5, 0.5, 0);
             //if(isRestOnly) {//Todo: This correcion shouldn't be necessary. Should figure out what's causing the difference
             //    J_Bip_R_Hand_pin.target_threejs.rotateZ(1.5); 
             //}
@@ -221,9 +228,44 @@
         const tempRot = new Rot(1,0,0,0);
         const prevBoxPos = new Vec3();
         window.clearRadius = 0.3;
+        window.pounceScore = 0; 
+        window.yourScore =0;
+        window.leftScored = false;
+        window.rightScored = false;
+        window.hitboxhintid = -1;
+        window.hitThresh = 0.1;
+        window.flatPos = new Vec3();
+        window.flatTarg = new Vec3();
+
+        function maybePoint(currentTransform, isFinal) {
+            let scored = false;
+            flatPos.readFromTHREE(boxMesh.position);
+            flatTarg.set(currentTransform.origin());
+            flatPos.z = 0;
+            flatTarg.z = 0;
+            if(flatPos.dist(flatTarg) < hitThresh) {
+                scoreHintMesh.visible = true;
+                scoreHintMesh.position.copy(boxMesh.position);
+                scoreHintMesh.updateMatrix();
+                scoreHintMesh.material.color = new THREE.Color('red');
+                window.clearTimeout(hitboxhintid);
+                hitboxhintid = window.setTimeout(()=>{scoreHintMesh.material.color = new THREE.Color('blue'); scoreHintMesh.visible= false;}, 300);
+                pounceScore++;
+                scored = true;
+            } else if(isFinal) {
+                scoreHintMesh.visible = true;
+                scoreHintMesh.material.color = new THREE.Color('green');
+                scoreHintMesh.position.copy(boxMesh.position);
+                window.clearTimeout(hitboxhintid);
+                hitboxhintid = window.setTimeout(()=>{scoreHintMesh.material.color = new THREE.Color('blue'); scoreHintMesh.visible= false;}, 300);
+                yourScore++;
+                scored = true;
+            }
+            return scored;
+        }
 
         function initLeftPounce() {
-            if(!isMidPounce_left) {   
+            if(!isMidPounce_left && !leftHandReturning) {   
                 let pounceWith = armature.l_hand_pin;
                 //leftGoal.setToIdentity();
                 leftGoal.translate.readFromTHREE(boxMesh.position);
@@ -239,19 +281,27 @@
                 }
                 leftGoal.translate.z = -0.36;
                 leftGoal.lazyRefresh();
-                leftInterpolator.setGoal(leftGoal, (...p)=>{
+                leftInterpolator.setGoal(leftGoal, (t, currentTransform)=>{
                     lastLeftPounce = Date.now();
                     leftHandResting = false;
                     leftHandReturning = false;
                     isMidPounce_left = true;
-                }, (...p) => {
+
+                }, (currentTransform) => {
                     isMidPounce_left = false;
                     leftHandReturning = false;
                     lastLeftPounce = Date.now(); 
                     armature.l_hand_pin.setPinWeight(0.5);
+                    if(!leftScored ) {
+                        leftScored = maybePoint(currentTransform, true);
+                    }
                 });
                 armature.l_hand_pin.setYPriority(0);
+                armature.l_hand_pin.setXPriority(0.2);
                 armature.l_hand_pin.setPinWeight(0.6);
+                if(rightHandResting || rightHandReturning) {
+                    armature.r_hand_pin.setPinWeight(0.1);
+                }
                 armature.r_hand_pin.setPinWeight(0.1);
                 leftInterpolator.begin(120);
             }
@@ -260,9 +310,8 @@
         function initRightPounce(timeThresh) {
             let pounceWith = armature.r_hand_pin;
             //rightGoal.setToIdentity();
-            rightGoal.rotation.setFromVecs(any_Vec3(0, 0,1).normalize(), any_Vec3(1, 0, 0).normalize());
             //tempRot.setFromVecs(any_Vec3(0,0,-1), any_Vec3(0, 1, 0)) 
-            if(!isMidPounce_right) {
+            if(!isMidPounce_right && !rightHandReturning) {
                 rightGoal.translate.readFromTHREE(boxMesh.position);
                 let otherHandDist = rightGoal.translate.dist(armature.l_hand_pin.targetNode.origin());
                 if(otherHandDist < window.clearRadius ) {
@@ -273,22 +322,26 @@
                 }
                 rightGoal.translate.z = -0.36;
                 rightGoal.lazyRefresh();
-                rightInterpolator.setGoal(rightGoal, (...p)=>{
-                    lastRightPounce = Date.now();
-                    
+                rightInterpolator.setGoal(rightGoal, (t, currentTransform)=>{
+                    lastRightPounce = Date.now();                    
                     rightHandResting = false;
                     rightHandReturning = false;
                     isMidPounce_right = true;
-                }, (...p) => {
+                }, (currentTransform) => {
                     isMidPounce_right = false;
                     rightHandReturning = false;
-                    lastRightPounce = Date.now(); 
+                    lastRightPounce = Date.now();
+                    if(!rightScored) {
+                        rightScored = maybePoint(currentTransform, true);
+                    }
                     
-                });
-            
+                });            
                 armature.r_hand_pin.setYPriority(0);
+                armature.r_hand_pin.setXPriority(0.2);
                 armature.r_hand_pin.setPinWeight(0.6);
-                armature.l_hand_pin.setPinWeight(0.1);
+                if(leftHandResting || leftHandReturning) {
+                    armature.l_hand_pin.setPinWeight(0.1);
+                }
                 rightInterpolator.begin(120);
             }
         }
@@ -303,102 +356,63 @@
                 prevMouse.set(mouse);
                 prevBoxPos.set(boxPos);
             }
-            if(currTime - lastMotion < 1200 &&  mouseVel < 0.2 && boxMesh.position.z < itxPlane.position.z - 0.05) {
-                console.log(mouseVel);
+            if(currTime - lastMotion < 800 &&  mouseVel < 0.2 && boxMesh.position.z < itxPlane.position.z - 0.05) {
+                //console.log(mouseVel);
                 //console.log("can pounce");
                 let pounceWith = null;
-                let rhandDist = boxPos.dist(armature.l_hand_pin.targetNode.origin());
-                let lhandDist = boxPos.dist(armature.r_hand_pin.targetNode.origin());
-                let interHandDist = armature.l_hand_pin.targetNode.origin().dist(armature.r_hand_pin.targetNode.origin());
-                if(rightHandResting && !leftHandResting) {
-                    //console.log("solounrest right");
-                    initRightPounce();
-                    /*pounceWith = armature.r_hand_pin;
-                    lastRightPounce = currTime;
-                    rightHandResting = false;*/
-                } else if (leftHandResting && !rightHandResting) {
-                    //console.log("solounrest left");
-                    initLeftPounce();
-                    /*pounceWith = armature.l_hand_pin; 
-                    lastLeftPounce = currTime;
-                    leftHandResting = false;*/
-                } else {
-                    let pounceTimeThresh = pounceTimeMinThresh;// + (2*Math.random()*(pounceTimeAvgThresh - pounceTimeMinThresh));
-                    let lastPounce = Math.min(lastLeftPounce, lastRightPounce);
-                    /*tempVec.z = 0;
-                    tempVec2.set(armature.l_hand_pin.targNode.origin());
-                    tempVec2.z = 0;
-                    tempVec.sub(tempVec2);
-                    tempVec2.set(armature.r_hand_pin.targNode.origin()).sub(armature.l_hand_pin.targNode.origin());
-                    tempVec2.z=0;
-                    let lrdot = temp*/
-                    if(currTime - lastPounce > pounceTimeThresh) {
-                        if(/*rhandDist > interHandDist ||*/ boxPos.x < armature.l_hand_pin.targetNode.origin().x) {
-                            //console.log("unrest left");
-                            initLeftPounce();
-                            /*pounceWith = armature.r_hand_pin;
-                            lastRightPounce = currTime;
-                            rightHandResting = false;*/
-                        } else if ( /*lhandDist > interHandDist*/ boxPos.x > armature.r_hand_pin.targetNode.origin().x) {
-                            //console.log("unrest right");
-                            initRightPounce();
-                            /*pounceWith = armature.l_hand_pin; 
-                            lastLeftPounce = currTime;
-                            leftHandResting = false;*/
-                        } else {
-                            if(lhandDist < rhandDist && lhandDist > clearRadius/2) initLeftPounce();
-                            if(rhandDist < lhandDist && rhandDist > clearRadius/2) initRightPounce();
-                        }
-                    }
-                    /*if(currTime - lastLeftPounce > pounceTimeThresh) {
-                        initLeftPounce();
-                    } else if (currTime - lastRightPounce > pounceTimeThresh) {
-                        initRightPounce();
-                    }*/
+                let rhandDist = boxPos.dist(prepounce_r_targ.origin());
+                let lhandDist = boxPos.dist(prepounce_l_targ.origin());
+                let interHandDist = armature.l_hand_pin.targetNode.origin().dist(armature.r_hand_pin.targetNode.origin());                
+                let pounceTimeThresh = pounceTimeMinThresh;// + (2*Math.random()*(pounceTimeAvgThresh - pounceTimeMinThresh));
+                let lastPounce = Math.min(lastLeftPounce, lastRightPounce);
+                if(currTime - lastPounce > pounceTimeThresh) {
+                    if(lhandDist < rhandDist && lhandDist > clearRadius/2 && !leftHandReturning) initLeftPounce();
+                    if(rhandDist < lhandDist && rhandDist > clearRadius/2 && !rightHandReturning) initRightPounce();
                 }
-                /*if(pounceWith != null) {
-                    pounceWith.targetNode.translateTo(tempVec).project();
-                }*/
-            } else if (boxMesh.position.z <= itxPlane.position.z || currTime - lastMotion > 2000) {
+            } else if (boxMesh.position.z <= itxPlane.position.z || currTime - lastMotion > 700) {
                 if(!leftHandReturning && !leftHandResting && currTime - lastLeftPounce > 500) {
                     leftInterpolator.setGoal(prepounce_l_targ.getGlobalMBasis(), 
                         (...p) => {
-                            leftHandReturning = true; 
-                            leftHandResting=false;
                         }, 
                         (...p) => {
                             leftHandResting = true; 
                             leftHandReturning  = false;
+                            isMidPounce_left = false;
+                            armature.l_hand_pin.setXPriority(0.5);
+                            armature.l_hand_pin.setYPriority(0.5);
+                            armature.l_hand_pin.setPinWeight(0.6);
                             unShy = Date.now();
-                            shyMin = 1500;
+                            shyMin = 1000;
+                            leftScored = false;
                         });
-                    armature.l_hand_pin.setPinWeight(0.5);
-                    armature.l_hand_pin.setYPriority(0.5);
+                   
+                    leftHandReturning = true; 
+                    isMidPounce_left = false;
+                    leftHandResting = false;
                     leftInterpolator.begin(400);                    
                 }
-                if(!rightHandReturning &&  !rightHandResting && currTime - lastRightPounce > 500) {
+                if(!rightHandReturning && !rightHandResting && currTime - lastRightPounce > 500) {
                     rightInterpolator.setGoal(prepounce_r_targ.getGlobalMBasis(), 
-                    (...p) => {
-                        rightHandReturning = true; 
-                        rightHandResting = false}, 
+                    (...p) => {}, 
                     (...p) => {
                         rightHandResting = true; 
+                        isMidPounce_right = false;
                         rightHandReturning = false;
+                        shyMin = 1000;
+                        armature.r_hand_pin.setYPriority(0.5);
                         unShy = Date.now();
-                        shyMin = 1500;});
-                    armature.r_hand_pin.setPinWeight(0.5);
-                    armature.r_hand_pin.setYPriority(0.5);
+                        rightScored = false;
+                    });
+                    //
+                    armature.r_hand_pin.setXPriority(0.5);
+                    armature.r_hand_pin.setPinWeight(0.6);
+                    
+                    rightHandReturning = true;
+                    isMidPounce_right = false; 
+                    rightHandResting = false
                     rightInterpolator.begin(400);
                 }
             }
-            if(rightHandResting) {
-                armature.r_hand_pin.targetNode.alignGlobalsTo(prepounce_r_targ.getGlobalMBasis()).project();
-            }
-            if(leftHandResting) {
-                armature.l_hand_pin.targetNode.alignGlobalsTo(prepounce_l_targ.getGlobalMBasis()).project();
-            }
-            leftInterpolator.tick(true);
-            rightInterpolator.tick(true);
             leftInterpolator.tick(true);
             rightInterpolator.tick(true);
         }
@@ -412,8 +426,8 @@
         window.render = function () {
             mouseCaster.setFromCamera(mouse, camera);
             //pointToward(planeShadow, camera.position);
-            itxBound.visible=true; 
-            itxPlane.visible=true;
+            itxBound.visible=false; 
+            itxPlane.visible=false;
             let itx = mouseCaster.intersectObjects([itxBound, itxPlane]);
             itxBound.visible = false;
             itxPlane.visible = false;

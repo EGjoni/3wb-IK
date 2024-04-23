@@ -139,7 +139,7 @@
             window.updateParseStream("Building IK Armature...", loadId);
             let armature = new EWBIK(inst.scene.children[0]);
             armature.setDefaultIterations(15);
-            armature.setDampening(0.21);
+            armature.setDampening(0.7);
             armature.armatureNode.forceOrthonormality = false;
             window.armatures.push(armature);
 

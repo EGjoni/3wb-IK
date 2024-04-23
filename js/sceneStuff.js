@@ -155,7 +155,7 @@ async function select(item) {
         contextPin.targetNode.origin().subClone(camVec).projectedOn(lookDir, newTarg).add(camVec);
         newTarg.writeToTHREE(orbitControls.target);
     }
-    if(contextBone != null) {
+    if(contextBone != null && contextBone.trackedBy != null) {
         let newTarg = new Vec3(); 
         contextBone.trackedBy.origin().subClone(camVec).projectedOn(lookDir, newTarg).add(camVec);
         newTarg.writeToTHREE(orbitControls.target);

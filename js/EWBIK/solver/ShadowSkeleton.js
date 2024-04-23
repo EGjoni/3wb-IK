@@ -83,9 +83,10 @@ export class ShadowSkeleton {
         this.alignSimAxesToBoneStates();
         const endOnIndex = this.getEndOnIndex(solveUntil, literal)
         //this.pullBack(iterations, solveUntil, false, null);
-        this.updateReturnfulnessDamps(iterations);
-
+        //this.updateReturnfulnessDamps(iterations);
+        
         for (let i = 0; i < iterations; i++) {
+            this.pullBackAll(iterations, endOnIndex, callbacks, i);
             this.solveToTargets(stabilizationPasses, endOnIndex, null, callbacks, i);
         }
 
@@ -94,10 +95,8 @@ export class ShadowSkeleton {
         this.updateBoneStates(onComplete, callbacks);        
     }
 
-    pullBackAll(iterations, solveUntil, literal, onComplete, callbacks = null, currentIteration) {
+    pullBackAll(iterations, endOnIndex, callbacks = null, currentIteration) {
         if (this.traversalArray?.length == 0) return;
-        this.alignSimAxesToBoneStates();
-        const endOnIndex = this.getEndOnIndex(solveUntil, literal);
         this.updateReturnfulnessDamps(iterations);
         this.accumulatingPain = 0;
         this.maxPain = 0;
@@ -111,7 +110,6 @@ export class ShadowSkeleton {
             this.accumulatingPain += bonepain;
         }
         this.lastPainTotal = this.accumulatingPain;
-        this.updateBoneStates(onComplete, callbacks)
     }
 
     /**
@@ -215,6 +213,7 @@ export class ShadowSkeleton {
         }
         this.rootBone.trackedBy.mimic(false, this.commonAncestor);
         for(let b of this.traversalArray) {
+            b.simBoneAxes.quickMimic();
             b.simLocalAxes.quickMimic();
         }
         /*for (let i = 0; i < this.constrainedBoneArray.length; i++) {

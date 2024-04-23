@@ -78,6 +78,7 @@ export class ArmatureSegment {
                 if (target?.getDepthFalloff() <= 0.0 || childCount == 0) {
                     finished = true;
                     this.wb_segmentTip = currentWB;
+                    currentWB.isTerminal = true;
                     for (let i = 0; i < childCount; i++) 
                         childSgmts.push(new ArmatureSegment(this.shadowSkel, childBones[i], this, true));
                 } else {
@@ -149,7 +150,8 @@ export class ArmatureSegment {
         for(let i = (this.solvableStrandBones.length - 1) ; i>= 0; i--) {
             const wb = this.solvableStrandBones[i];
             wb.setPerPinDescendantCounts(this.pinnedBones);
-            wb.myWeights = [...this.weights]
+            wb.myWeights = this.weights;
+            wb.painWeights = [...this.weights];
         }
     }
 
@@ -280,6 +282,10 @@ class WorkingBone {
     myWeights = [] //personal copy of the weights array per this bone;
     hasLimitingConstraint = false;
     cyclicTargets = new Set();
+    /*used a convenience to allow specifying that a terminal effector should be weighted differently than the rest of the segment. 
+    * Taken to its logical extreme every bone in the chain should be allowed to specify its own separate orientation weights, but this would be annoying and unintuitive to specify, 
+    so this seems like a reasonable middle ground to allow the user to quickly indicate that the very last bone should do its best to match target orientation, while the rest of the chain may do less than its best*/
+    isTerminal = false;  
     _acceptableRotBy = new Rot(1,0,0,0);
     _comfortableRotBy  = new Rot(1,0,0,0);
 
@@ -366,15 +372,15 @@ class WorkingBone {
                 this.chain.previousDeviation = Infinity;
         }
         //this.updateDescendantsPain();
-        this.updateTargetHeadings(this.chain.boneCenteredTargetHeadings, this.chain.weights, this.myWeights);
+        this.updateTargetHeadings(this.chain.boneCenteredTargetHeadings, this.myWeights, this.painWeights);
         //const prevOrientation = Rot.fromRot(this.simLocalAxes.localMBasis.rotation);
         let gotCloser = true;
         for (let i = 0; i <= stabilizePasses; i++) {
             this.updateTipHeadings(this.chain.boneCenteredTipHeadings, !translate);
-            this.updateOptimalRotationToPinnedDescendants(translate, skipConstraint, this.chain.boneCenteredTipHeadings, this.chain.boneCenteredTargetHeadings, this.chain.weights);
+            this.updateOptimalRotationToPinnedDescendants(translate, skipConstraint, this.chain.boneCenteredTipHeadings, this.chain.boneCenteredTargetHeadings, this.painWeights);
             if (stabilizePasses > 0) {
                 this.updateTipHeadings(this.chain.uniform_boneCenteredTipHeadings, !translate);
-                const currentmsd = this.chain.getManualMSD(this.chain.uniform_boneCenteredTipHeadings, this.chain.boneCenteredTargetHeadings, this.chain.weights);
+                const currentmsd = this.chain.getManualMSD(this.chain.uniform_boneCenteredTipHeadings, this.chain.boneCenteredTargetHeadings, this.painWeights);
                 if (currentmsd <= this.chain.previousDeviation * 1.000001) {
                     this.chain.previousDeviation = currentmsd;
                     gotCloser = true;
@@ -394,15 +400,16 @@ class WorkingBone {
         //if(window.perfing) performance.measure("slowUpdateOptimalRotationToPinnedDescendants", "slowUpdateOptimalRotationToPinnedDescendants start", "slowUpdateOptimalRotationToPinnedDescendants end");   
     }
 
-    fastUpdateOptimalRotationToPinnedDescendants(translate, skipConstraint) {
+    fastUpdateOptimalRotationToPinnedDescendants(translate, skipConstraints) {
         //if(window.perfing) performance.mark("fastUpdateOptimalRotationToPinnedDescendants start");
         this.updateDescendantsPain();
         //this.simLocalAxes.getGlobalMBasis().rotation.normalize();
         //this.simLocalAxes.getLocalMBasis().rotation.normalize();
-        this.updateTargetHeadings(this.chain.boneCenteredTargetHeadings, this.chain.weights, this.myWeights);
         
+        this.updateTargetHeadings(this.chain.boneCenteredTargetHeadings, this.myWeights, this.painWeights);        
         this.updateTipHeadings(this.chain.boneCenteredTipHeadings, !translate);
-        this.updateOptimalRotationToPinnedDescendants(translate, skipConstraint, this.chain.boneCenteredTipHeadings, this.chain.boneCenteredTargetHeadings, this.chain.weights);
+        this.updateOptimalRotationToPinnedDescendants(translate, skipConstraints, this.chain.boneCenteredTipHeadings, this.chain.boneCenteredTargetHeadings, this.painWeights);
+    
         
         //this.simLocalAxes.markDirty();
         //if(window.perfing) performance.mark("fastUpdateOptimalRotationToPinnedDescendants end");
@@ -419,7 +426,7 @@ class WorkingBone {
             desiredRotation.clampToCosHalfAngle(boneDamp);
         }
         let localDesiredRotby = this.simLocalAxes.getParentAxes().getGlobalMBasis().getLocalOfRotation(desiredRotation, this.chain.tempRot);
-        let reglobalizedRot = desiredRotation;
+        //let reglobalizedRot = desiredRotation;
         
         
         if (this.hasLimitingConstraint && !skipConstraints) {            
@@ -428,7 +435,7 @@ class WorkingBone {
             if(Rot.distance(rotBy, localDesiredRotby) > 1e-6) { 
                 this.currentHardPain = 1; //violating a hard constraint should be maximally painful.
             }*/
-            reglobalizedRot = this.simLocalAxes.parent.globalMBasis.rotation.applyAfter(localDesiredRotby, this.chain.tempRot);
+            //reglobalizedRot = this.simLocalAxes.parent.globalMBasis.rotation.applyAfter(localDesiredRotby, this.chain.tempRot);
             this.simLocalAxes.rotateByLocal(rotBy);
         } else {
             if (translate) {
@@ -476,7 +483,7 @@ class WorkingBone {
             //if(window.perfing) performance.measure("setPerPinDescendantCounts", "setPerPinDescendantCounts start", "setPerPinDescendantCounts end");   
         }
     }
-    updateTargetHeadings(localizedTargetHeadings, baseWeights, weights) {
+    updateTargetHeadings(localizedTargetHeadings, baseWeights, outWeights) {
         //if(window.perfing) performance.mark("updateTargetHeadings start");
         let hdx = 0;
         const workingRay = this.workingRay;
@@ -495,30 +502,30 @@ class WorkingBone {
             targetAxes.updateGlobal();            
             localizedTargetHeadings[hdx].set(targetAxes.origin()).sub(origin);
             const localizedOrig = localizedTargetHeadings[hdx];
-            let painScalar = (1+this.descendantAveragePain[i]);
-            weights[hdx] = painScalar * baseWeights[hdx];
+            let painScalar = 1;//(1+this.descendantAveragePain[i]);
+            outWeights[hdx] = painScalar * baseWeights[hdx];
             const modeCode = sb.ikPin.getModeCode();
             hdx++;
             if (modeCode & IKPin.XDir) {
-                weights[hdx] = painScalar*baseWeights[hdx];
-                weights[hdx+1] = painScalar*baseWeights[hdx+1];
-                targetAxes.setToXHeading(localizedTargetHeadings[hdx]).mult(weights[hdx]);
+                outWeights[hdx] = painScalar*baseWeights[hdx];
+                outWeights[hdx+1] = painScalar*baseWeights[hdx+1];
+                targetAxes.setToXHeading(localizedTargetHeadings[hdx]).mult(outWeights[hdx]);
                 localizedTargetHeadings[hdx+1].set(localizedTargetHeadings[hdx]).mult(-1).add(localizedOrig);
                 localizedTargetHeadings[hdx].add(localizedOrig);
                 hdx += 2;
             }
             if (modeCode & IKPin.YDir) {
-                weights[hdx] = painScalar*baseWeights[hdx];
-                weights[hdx+1] = painScalar*baseWeights[hdx+1];
-                targetAxes.setToYHeading(localizedTargetHeadings[hdx]).mult(weights[hdx]);
+                outWeights[hdx] = painScalar*baseWeights[hdx];
+                outWeights[hdx+1] = painScalar*baseWeights[hdx+1];
+                targetAxes.setToYHeading(localizedTargetHeadings[hdx]).mult(outWeights[hdx]);
                 localizedTargetHeadings[hdx+1].set(localizedTargetHeadings[hdx]).mult(-1).add(localizedOrig);
                 localizedTargetHeadings[hdx].add(localizedOrig);
                 hdx += 2;
             }
             if (modeCode & IKPin.ZDir) {
-                weights[hdx] = painScalar*baseWeights[hdx];
-                weights[hdx+1] = painScalar*baseWeights[hdx+1];
-                targetAxes.setToZHeading(localizedTargetHeadings[hdx]).mult(weights[hdx]);
+                outWeights[hdx] = painScalar*baseWeights[hdx];
+                outWeights[hdx+1] = painScalar*baseWeights[hdx+1];
+                targetAxes.setToZHeading(localizedTargetHeadings[hdx]).mult(outWeights[hdx]);
                 localizedTargetHeadings[hdx+1].set(localizedTargetHeadings[hdx]).mult(-1).add(localizedOrig);
                 localizedTargetHeadings[hdx].add(localizedOrig);
                 hdx += 2;

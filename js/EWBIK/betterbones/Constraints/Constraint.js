@@ -434,7 +434,7 @@ export class Returnful extends Constraint {
          let newLeeway = this.painfulness * radians;
          if(newLeeway != this.preferenceLeeway)
             this.invalidateCache();
-         this.preferenceLeeway = this.painfulness * radians;
+         this.preferenceLeeway = newLeeway;
      }
  
      getPreferenceLeeway () {
@@ -448,6 +448,7 @@ export class Returnful extends Constraint {
       */
      setStockholmRate (val) {
          this.stockholmRate = val;
+         this.invalidateCache();
          if (this.forBone && this.forBone.parentArmature) {
             this.forBone.parentArmature.updateShadowSkelRateInfo(); 
         }
@@ -776,6 +777,12 @@ export class ConstraintStack extends LimitingReturnful {
     }
 
 
+    invalidateCache() {
+        super.invalidateCache();
+        for(let c of this.returnfulled) {
+            c.invalidateCache();
+        }
+    }
 
     /**
      * @param {Number} val specifies the maximum angle in radians that this constraint is allowed give pullback values of.
@@ -785,9 +792,13 @@ export class ConstraintStack extends LimitingReturnful {
     setPreferenceLeeway(radians = this.baseRadians) {
         this.lastCalled = 0;
         this.baseRadians = radians;
-        this.preferenceLeeway = this.painfulness * this.baseRadians;        
+        let newLeeway = this.painfulness * this.baseRadians;
+        if(newLeeway != this.preferenceLeeway)
+            this.invalidateCache();
+        
+        this.preferenceLeeway = newLeeway;        
         for(let c of this.returnfulled) {
-            c.setPreferenceLeeway(this.getPreferenceLeeway()*(c.getPainfulness()));
+            c.setPreferenceLeeway(this.getPreferenceLeeway());
         }
     }
     

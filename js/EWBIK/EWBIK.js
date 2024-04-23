@@ -124,6 +124,11 @@ export class EWBIK extends Saveable {
     activeSolve = null;
     pendingSolve = null;
     lastFrameNumber = 0;
+    /**
+     * Whether to treat the last end effector as if it has max orientation priorities.
+     * This is essentially a convenience to let the user specify that the last bone should make a best effort to orientation match while still allowing other bones in the chain to make less than a best effort.
+     **/
+    independentTerminal = true;
 
     static async fromJSON(json, loader, pool, scene) {
         let foundBone = Loader.findSceneObject(json.requires.rootBone, scene);
@@ -471,8 +476,11 @@ export class EWBIK extends Saveable {
             this.shadowSkel.updateRates(this.getDefaultIterations());
             this.dirtyRate = false;
         }
-        callbacks?.__initStep((callme, wb) => this.stepWiseUpdateResult(callme, wb));
-        this.shadowSkel.pullBackAll(this.getDefaultIterations(), bone, literal, (wb) => this.alignBoneToSolverResult(wb), callbacks, 0);
+        callbacks?.__initStep((callme, wb) => { this.stepWiseUpdateResult(callme, wb); this.alignBoneToSolverResult(wb)});
+        this.shadowSkel.alignSimAxesToBoneStates();
+        let endOnIndex = this.shadowSkel.getEndOnIndex(bone, literal)
+        this.shadowSkel.pullBackAll(this.getDefaultIterations(), endOnIndex, callbacks, 0);
+        this.shadowSkel.updateBoneStates(onComplete, callbacks);
     }
 
  

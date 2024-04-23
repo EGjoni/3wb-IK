@@ -269,6 +269,7 @@ export class IKPin extends Saveable{
             this.forBone?.parentArmature?.regenerateShadowSkeleton();
         }
         this.forBone?.parentArmature?.updateShadowSkelRateInfo();
+        return this;
     }
 
 

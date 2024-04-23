@@ -86,7 +86,7 @@
         
         document.body.appendChild(renderer.domElement);
         scene.add(ambientLight);
-        window.rendlrs = new LayeredRender(renderer, window.innerWidth, window.innerHeight, 
+        /*window.rendlrs = new LayeredRender(renderer, window.innerWidth, window.innerHeight, 
             (renderer, target) => { //renders mesh stuff
                 camera.layers.set(meshLayer);
                 renderer.render(scene, camera);
@@ -99,7 +99,7 @@
                 camera.layers.set(widgetLayer);
                 renderer.render(scene, camera);
             }
-        );      
+        );*/      
         
         
         hemisphereLight.layers.enable(boneLayer);
@@ -129,26 +129,36 @@
             b1.position.y = 1;
             b1.name = "b1";
             let b2 = new THREE.Bone(); 
+            let b3 = new THREE.Bone();
             b2.position.y = 1;
             b2.position.x = 0.5;
-            b2.name = "b2"
+            b3.position.y = 0.5;
+            b2.name = "b2";
+            b3.name='b3';
             root.add(b1);
             b1.add(b2);
+            b2.add(b3);
             scene.add(root);
             window.armature = new EWBIK(root); 
-            window.b1Twist = new Twist(b1);
-            window.b2Twist = new Twist(b2);
-            window.kusu = new Kusudama(b2);
-            kusu.addLimitConeAtIndex(0, new Vec3(0,1,0), 0.5);
-            kusu.shell.layers.set(1);
+            window.b1Twist = new Twist(b1).setVisibilityCondition((c, b)=> b==contextBone).setRange(0.8);
+            window.b2Twist = new Twist(b2).setVisibilityCondition((c, b)=> b==contextBone).setRange(0.8);
+            window.b3Twist = new Twist(b3).setVisibilityCondition((c, b)=> b==contextBone).setRange(0.1);
+            window.kusub1 = new Kusudama(b1).setVisibilityCondition((c, b)=> b==contextBone);
+            kusub1.addLimitConeAtIndex(0, new Vec3(0,1,0), 0.01);
+            kusub1.shell.layers.set(1);
+            window.kusub2 = new Kusudama(b2).setVisibilityCondition((c, b)=> b==contextBone);
+            kusub2.addLimitConeAtIndex(0, new Vec3(0,0.1,1), 0.01);
+            kusub2.addLimitConeAtIndex(0, new Vec3(0,0.1,-1), 0.01);
+            kusub2.shell.layers.set(1);
             window.b1Twist.layers.set(1);
             window.b2Twist.layers.set(1);
+            window.b3Twist.layers.set(1);
             addSceneArmature(window.armature);
             /*initEnvironment(scene, renderer, //scene,
                 [...getMeshDescendants(window.armature.armatureObj3d.children[1])],
                 [0, 1, 2]
             );*/
-            initControls(THREE, window.rendlrs);
+            initControls(THREE, window.renderer);
             animate();
             //const helper = new THREE.SkeletonHelper(rootBone);
             //helper.material.linewidth = 5; // Make the helper lines thicker
@@ -163,16 +173,25 @@
         }
         async function animate() {
             requestAnimationFrame(animate);
+            window.frameCount++;
+            window.fr++;
+            doSolve();
             render(true);
         }
 
 
         window.render = function (incrFrame = false) {
-            if (incrFrame) frameCount++;
-            //setPinVisibility(frameCount%2 == 0);
-            window.fr++;
-            doSolve();
-            window.rendlrs.render();
+            camera.layers.set(0);
+            window.renderer.render(scene, camera);
+            window.renderer.clearDepth();
+            const currentBackground = scene.background;
+            const currentFog = scene.fog;
+            scene.background = null;
+            scene.fog = null;
+            camera.layers.set(1);
+            window.renderer.render(scene, camera);
+            scene.background = currentBackground;
+            scene.fog = currentFog;
         }
 
         window.addEventListener('resize', onWindowResize, false);

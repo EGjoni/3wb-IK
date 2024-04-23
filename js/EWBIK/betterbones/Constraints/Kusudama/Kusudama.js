@@ -144,6 +144,7 @@ export class Kusudama extends Limiting {
             this._visibilityCondition = (cnstrt, forBone) =>  false;
         else 
             this._visibilityCondition = condition;
+        return this;
     }
 
     updateDisplay() {
@@ -368,7 +369,8 @@ export class Kusudama extends Limiting {
 
         if (inBounds[0] == -1 && inLimits != null) {
             let constrainedHeading = this.frameCanonical.getGlobalMBasis().setVecToGlobalOf(inLimits, this.tempVec3);
-            let rectifiedRot = this.tempOutRot.setFromVecs(currentHeading, constrainedHeading);
+            let rectifiedRot = this.tempOutRot.setFromVecs(desiredHeading, constrainedHeading);
+            rectifiedRot = rectifiedRot.applyAfter(desiredRotation, rectifiedRot);
             return rectifiedRot;
         }
         return desiredRotation;
