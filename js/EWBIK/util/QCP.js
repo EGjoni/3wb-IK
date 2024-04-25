@@ -173,7 +173,7 @@ export class QCP {
 	calcRmsd(x, y) {
 		// QCP doesn't handle alignment of single values, so if we only have one point
 		// we just compute regular distance.
-		if (x.length == 1) {
+		if (this?.weight?.length == 1 || x.length == 1) {
 			this.rmsd = x[0].dist(y[0]);
 			this.rmsdCalculated = true;
 		} else {
@@ -203,7 +203,7 @@ export class QCP {
 		if (this.weight != null) {
 			// wsum = 0;
 			let x1, y1, z1;
-			for (let i = 0; i < coords1.length; i++) {
+			for (let i = 0; i < this.weight.length; i++) {
 				const ci1x = coords1[i].x, ci1y = coords1[i].y, ci1z = coords1[i].z;
 				const ci2x = coords2[i].x, ci2y = coords2[i].y, ci2z = coords2[i].z;
 
@@ -333,7 +333,7 @@ export class QCP {
         
 		// QCP doesn't handle single targets, so if we only have one point and one
 		// target, we just rotate by the angular distance between them
-		if (this.moved.length == 1) {
+		if (this?.weight?.length == 1 || this.moved.length == 1) {
 			return this.resultRot.setFromVecs(this.moved[0], this.target[0]);
 		} else {
 			const {
@@ -446,7 +446,7 @@ export class QCP {
 		}*/
 		if(weight != null) {
 			this.wsum = 0;
-			for (let i = 0; i < toCenter.length; i++) {
+			for (let i = 0; i < weight.length; i++) {
 				center.mulAdd(toCenter[i], weight[i]);
 				this.wsum += weight[i];
 			}

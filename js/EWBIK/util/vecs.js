@@ -578,7 +578,7 @@ export class Vec3Pool {
         this.isFinalized = false;  
         this.lru = -1;
         if(this.persistentPool?.length > 0) {
-            this.reclaimedPool.push(...this.persistentPool);
+            this.reclaimedPool = this.persistentPool;//.push(...this.persistentPool);
             this.inProgressPool = [];
             this.persistentPool = [];
         }

@@ -104,9 +104,7 @@ export class LimitCone extends Saveable {
      * update the tangent cones as a result of this modification
      */
     setComponents(xdir, ydir, zdir, radius, updateTangents = true) {
-        this.controlPoint.x = xdir; 
-        this.controlPoint.y = ydir;
-        this.controlPoint.z = zdir;
+        this.controlPoint.setComponents(xdir, ydir, zdir);
         this.setRadius(radius, updateTangents);
     }
 
@@ -127,13 +125,9 @@ export class LimitCone extends Saveable {
              * so we set isInBounds to true.  
              */
             isInBounds = true;
-            collisionPoint.x = input.x;
-            collisionPoint.y = input.y;
-            collisionPoint.z = input.z;
+            collisionPoint.set(input);
         } else {
-            collisionPoint.x = closestCollision.x;
-            collisionPoint.y = closestCollision.y;
-            collisionPoint.z = closestCollision.z;
+            collisionPoint.set(closestCollision);
         }
         return isInBounds;
     }

@@ -199,7 +199,15 @@ export class Constraint extends Saveable {
     }
 
     _visibilityCondition(cnstrt, bone) {
-        return false;
+        return true;
+    }
+
+    get visible() {
+        return this._visibilityCondition(this, this.forBone) && this._visible;
+    }
+
+    set visible(val) {
+        this._visible = val;
     }
 
 
@@ -259,6 +267,14 @@ export class Constraint extends Saveable {
     invalidatePain() {
         this.constraintResult.__raw_postCallDiscomfort = null;
         this.constraintResult.__raw_preCallDiscomfort = null;
+    }
+
+    setVisibilityCondition(condition) {
+        if(condition == null)
+            this._visibilityCondition = (cnstrt, forBone) =>  false;
+        else 
+            this._visibilityCondition = condition;
+        return this;
     }
 
     updateDisplay() {
@@ -636,7 +652,7 @@ export class ConstraintStack extends LimitingReturnful {
         this.lastLimitBoneOrientation = new IKNode(null, null, undefined);
         this.lastLimitBoneOrientation.setParent(this.lastLimitState); 
         this.lastLimitBoneOrientation.adoptLocalValuesFromObject3D(this.forBone?.getIKBoneOrientation());
-        if(this.parentConstraint != null) this.visible = this.parentConstraint.visible;
+        if(this.parentConstraint != null) this.setVisibilityCondition(this.parentConstraint.visible);
     }
 
     add(...subconstraints) {
@@ -719,8 +735,10 @@ export class ConstraintStack extends LimitingReturnful {
     }
 
     updateDisplay() {
-        for(let c of this.allconstraints)
-            c.updateDisplay();
+        if(this.visible) {
+            for(let c of this.allconstraints)
+                c.updateDisplay();
+        }
     }
     
     layerSet(val) {
@@ -742,7 +760,7 @@ export class ConstraintStack extends LimitingReturnful {
     _visible = true;
     get visible() {
         let parconstvis = this.parentConstraint == null ? true : this.parentConstraint.visible;
-        return this._visible 
+        return this._visibilityCondition(this, this.forBone)
         && this.forBone.parentArmature.visible 
         && this.forBone.visible
         && parconstvis;

@@ -128,9 +128,9 @@ export class ShadowSkeleton {
         let skipConstraints = stabilizationPasses < 0;
         //if(window.perfing) performance.mark("solveToTargetsp1 start");
         stabilizationPasses = Math.max(0, stabilizationPasses);
-        if (translate) { //special case. translate and rotate the rootbone first to minimize deviation from innermost targets
+        /*if (translate) { //special case. translate and rotate the rootbone first to minimize deviation from innermost targets
             this.traversalArray[endOnIndex].fastUpdateOptimalRotationToPinnedDescendants(translate, true, currentIteration);
-        }
+        }*/
         //if(window.perfing) performance.mark("solveToTargetsp1 end");
         //if(window.perfing) performance.measure("solveToTargetsp1", "solveToTargetsp1 start", "solveToTargetsp1 end");  
         this.accumulatingPain = 0;
@@ -139,7 +139,7 @@ export class ShadowSkeleton {
         for (let j = 0; j <= endOnIndex; j++) {
             const wb = this.traversalArray[j];
             //callbacks?.beforeIteration(wb.forBone, wb.forBone.getFrameTransform(), wb);
-            wb.pullBackTowardAllowableRegion(currentIteration, callbacks);
+            //wb.pullBackTowardAllowableRegion(currentIteration, callbacks);
             wb.fastUpdateOptimalRotationToPinnedDescendants(translate && j === endOnIndex, skipConstraints, currentIteration);
             let bonepain = wb.getOwnPain();
             if (bonepain > this.maxPain) {
@@ -215,6 +215,7 @@ export class ShadowSkeleton {
         for(let b of this.traversalArray) {
             b.simBoneAxes.quickMimic();
             b.simLocalAxes.quickMimic();
+            if(b.simTipAxes != null) b.simTipAxes.quickMimic();
         }
         /*for (let i = 0; i < this.constrainedBoneArray.length; i++) {
             this.constrainedBoneArray[i].mimicDesiredAxes(); //make sure any bones with constraints have reliable data
@@ -316,7 +317,6 @@ export class ShadowSkeleton {
         }
         this.lastPainTotal = this.accumulatingPain;
         this.updateBoneStates(onComplete, callbacks)
-
     }
     debugState = {
         currentTraversalIndex: 0,

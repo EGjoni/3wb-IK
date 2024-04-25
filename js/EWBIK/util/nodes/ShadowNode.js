@@ -35,6 +35,9 @@ export class ShadowNode extends IKNode{
         if(toTrack.trackedBy != null) {
             throw new Error(`Designated Object3d is already tracked by ${toTrack.trackedBy.ikd}`);
         }
+        if(toTrack == null || !(toTrack instanceof Object3D)) {
+            throw new Error(`A ShadowNode must specify an Object3D to track`);
+        }
         super(undefined, undefined, ikd, pool);
         this._toTrack = toTrack;
         ShadowNode.totalShadowNodes++;

@@ -203,6 +203,8 @@ export class ArmatureSegment {
                 const innerWeightArray = [];
                 weightArray.push(innerWeightArray);
                 const targWeight = target.getPinWeight();
+                this.wb_segmentTip.modeCode = target.getModeCode();
+                this.wb_segmentTip.maxModeCode = Math.max(this.wb_segmentTip.modeCode, this.wb_segmentTip.maxModeCode);
                 const modeCode = target.getModeCode();
                 if(targWeight > 0) { 
                     innerWeightArray.push(targWeight * currentFalloff);
@@ -269,6 +271,10 @@ export class ArmatureSegment {
 class WorkingBone {
     /**@type {IKPin}*/
     ikPin = null;
+    simBoneAxes = null;
+    simLocalAxes = null;
+    simTipAxes = null;
+    simTargetAxes = null;
     cosHalfDampen = 0;
     cosHalfReturnDamp = 0;
     returnDamp = 0;
@@ -277,6 +283,12 @@ class WorkingBone {
     currentSoftPain = 0; //pain from distance from returnful constraints
     lastReturnfulResult = null;
     springy = false;
+    parentBone = null;
+    forBone = null;
+    pool = null;
+    modeCode = -1; //the modeCode for this bone's pin if it has one.
+    maxModeCode = -1; //the largest modeCode that's been registered on this bone. This is used internally to avoid expensive regenerations of the shadowSkeleton, since it's usually cheaper to just ignore the irrelevant headings
+    workingRay = null;
     /** @type {(Limiting | Returnful | LimitingReturnful | ConstraintStack)}*/
     constraint = null;
     myWeights = [] //personal copy of the weights array per this bone;
@@ -316,8 +328,11 @@ class WorkingBone {
         /** @type {TransformState} */
         if(forBone.getIKPin() != null) {
             this.ikPin = forBone.getIKPin();
+            this.modeCode = this.ikPin.getModeCode();
+            this.maxModeCode = this.modeCode;
+            this.simTipAxes = this.ikPin.getAffectoredOffset();
             this.simTargetAxes = this.ikPin.targetNode;
-            let np = this.simTargetAxes; let d = 1000;
+            let np = this.simTargetAxes; 
             while(np.parent != null) { 
                 if(np == this) {
                     this.cyclicTargets.add(this.simTargetAxes);
@@ -504,7 +519,7 @@ class WorkingBone {
             const localizedOrig = localizedTargetHeadings[hdx];
             let painScalar = 1;//(1+this.descendantAveragePain[i]);
             outWeights[hdx] = painScalar * baseWeights[hdx];
-            const modeCode = sb.ikPin.getModeCode();
+            const modeCode = sb.ikPin.modeCode;
             hdx++;
             if (modeCode & IKPin.XDir) {
                 outWeights[hdx] = painScalar*baseWeights[hdx];
@@ -548,11 +563,11 @@ class WorkingBone {
             }
             sb.chain.hasFastPass = false;*/
 
-            const tipAxes = sb.simBoneAxes;
+            const tipAxes = sb.simTipAxes;
             tipAxes.updateGlobal();    
             const tipOrigin = tipAxes.origin();        
             const target = sb.ikPin;
-            const modeCode = target.getModeCode();
+            const modeCode = target.modeCode;
 
             const targetAxes = sb.simTargetAxes;
             targetAxes.updateGlobal();

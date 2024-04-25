@@ -166,23 +166,25 @@
             armature.hip_pin.setPinWeight(0.4);
             armature.l_hand_pin.setPinWeight(1);
             armature.l_hand_pin.setXPriority(0.16);
-            armature.l_hand_pin.setYPriority(0.0);
+            armature.l_hand_pin.setYPriority(0.03);
             armature.l_hand_pin.setZPriority(0);
+            armature.l_hand_pin.getAffectoredOffset().translateByLocal(any_Vec3(0, 0.06, 0)).project();
             armature.l_hand_pin.target_threejs.add(axHelp3);
             armature.l_hand_pin.forBone.add(axHelp4);
             axHelp.visible = false; axHelp2.visible = false; axHelp3.visible = false; axHelp4.visible = false;
 
             armature.r_hand_pin.setPinWeight(1);
             armature.r_hand_pin.setXPriority(0.16);
-            armature.r_hand_pin.setYPriority(0);
+            armature.r_hand_pin.setYPriority(0.03);
             armature.r_hand_pin.setZPriority(0);
+            armature.r_hand_pin.getAffectoredOffset().translateByLocal(any_Vec3(0, 0.06, 0)).project();
             armature.r_hand_pin.target_threejs.add(axHelp);
             armature.r_hand_pin.forBone.add(axHelp2);
 
 
 
             let J_Bip_L_Hand_pin = armature.l_hand_pin;
-            J_Bip_L_Hand_pin.target_threejs.position.set(-0.2628872730607969, 1.1320828172882704, -0.058023847915398);
+            J_Bip_L_Hand_pin.target_threejs.position.set(-0.2628872730607969, 1.1320828172882704, -0.108023847915398);
             J_Bip_L_Hand_pin.target_threejs.quaternion.set(-0.466854980946203, -0.4415841689876301, 0.5158273464161427, 0.5665439057606263);
             J_Bip_L_Hand_pin.setTargetPriorities(0.5, 0.5, 0);
             //if(isRestOnly) {//Todo: This correcion shouldn't be necessary. Should figure out what's causing the difference
@@ -192,7 +194,7 @@
             leftInterpolator = new Interpolator(armature.l_hand_pin.targetNode, window.__tempVecPool);
 
             let J_Bip_R_Hand_pin = armature.r_hand_pin;
-            J_Bip_R_Hand_pin.target_threejs.position.set(0.22725199632250082, 1.1271629356945718, -0.059638346652234);
+            J_Bip_R_Hand_pin.target_threejs.position.set(0.22725199632250082, 1.1271629356945718, -0.109638346652234);
             J_Bip_R_Hand_pin.target_threejs.quaternion.set(-0.4635192535441378, 0.4385467682483039, -0.5184121542461977, 0.5692762703491778);
             J_Bip_R_Hand_pin.setTargetPriorities(0.5, 0.5, 0);
             //if(isRestOnly) {//Todo: This correcion shouldn't be necessary. Should figure out what's causing the difference
@@ -241,7 +243,7 @@
         let pounceMostRecentPoint = Date.now();
         let mostRecentPoint = Date.now();
         window.hitboxhintid = -1;
-        window.hitThresh = 0.05;
+        window.hitThresh = 0.1;
         window.flatPos = new Vec3();
         window.flatTarg = new Vec3();
 
@@ -306,11 +308,11 @@
                     lastLeftPounce = Date.now(); 
                     armature.l_hand_pin.setPinWeight(0.5);
                     if(!leftScored ) {
-                        leftScored = maybePoint(armature.l_hand_pin.forBone.trackedBy.getGlobalMBasis(), true);
+                        leftScored = maybePoint(armature.l_hand_pin.getAffectoredOffset(), true);
                     }
                 });
                 leftScored = false;
-                armature.l_hand_pin.setYPriority(0);
+                armature.l_hand_pin.setYPriority(0.03);
                 armature.l_hand_pin.setXPriority(0.2);
                 armature.l_hand_pin.setPinWeight(0.6);
                 if(rightHandResting || rightHandReturning) {
@@ -346,11 +348,11 @@
                     rightHandReturning = false;
                     lastRightPounce = Date.now();
                     if(!rightScored) {
-                        rightScored = maybePoint(armature.r_hand_pin.forBone.trackedBy.getGlobalMBasis(), true);
+                        rightScored = maybePoint(armature.r_hand_pin.getAffectoredOffset(), true);
                     }
                     
                 });            
-                armature.r_hand_pin.setYPriority(0);
+                armature.r_hand_pin.setYPriority(0.03);
                 armature.r_hand_pin.setXPriority(0.2);
                 armature.r_hand_pin.setPinWeight(0.6);
                 rightScored = false;
@@ -369,9 +371,8 @@
             if(mouseVel > 0) { 
                 lastMotion = currTime;
                 prevMouse.set(mouse);
-                prevBoxPos.set(boxPos);
             }
-            if(currTime - lastMotion < 1500 &&  mouseVel < 0.2 && boxMesh.position.z < itxPlane.position.z - 0.05) {
+            if(moveDist > 0.1 && currTime - lastMotion < 1500 &&  mouseVel < 0.2 && boxMesh.position.z < itxPlane.position.z - 0.05) {
                 //console.log(mouseVel);
                 //console.log("can pounce");
                 let pounceWith = null;
@@ -381,8 +382,14 @@
                 let pounceTimeThresh = pounceTimeMinThresh + (2*Math.random()*(pounceTimeAvgThresh - pounceTimeMinThresh));
                 let lastPounce = Math.min(lastLeftPounce, lastRightPounce);
                 if(currTime - lastPounce > pounceTimeThresh) {
-                    if(lhandDist < rhandDist && lhandDist > clearRadius && !leftHandReturning && !isMidPounce_left) initLeftPounce();
-                    if(rhandDist < lhandDist && rhandDist > clearRadius && !rightHandReturning && !isMidPounce_right) initRightPounce();
+                    if(lhandDist < rhandDist && lhandDist > clearRadius && !leftHandReturning && !isMidPounce_left) {
+                        initLeftPounce();
+                        prevBoxPos.set(boxPos);
+                    }
+                    if(rhandDist < lhandDist && rhandDist > clearRadius && !rightHandReturning && !isMidPounce_right) { 
+                        initRightPounce();
+                        prevBoxPos.set(boxPos);
+                    }
                 }
             } else if (boxMesh.position.z <= itxPlane.position.z || currTime - lastMotion > 400) {
                 if(!leftHandReturning && !leftHandResting && currTime - lastLeftPounce > 500) {
@@ -399,8 +406,8 @@
                             leftScored = false;
                         });
                    
-                        armature.r_hand_pin.setXPriority(0.5);
-                    armature.r_hand_pin.setPinWeight(0.6);
+                    armature.l_hand_pin.setXPriority(0.5);
+                    armature.l_hand_pin.setPinWeight(0.6);
                     leftHandReturning = true; 
                     isMidPounce_left = false;
                     leftHandResting = false;
@@ -459,10 +466,10 @@
             const currentFog = scene.fog;
             scene.background = null;
             scene.fog = null;
-            camera.layers.set(1);
+            /*camera.layers.set(1);
             window.renderer.render(scene, camera);
             scene.background = currentBackground;
-            scene.fog = currentFog;
+            scene.fog = currentFog;*/
         }
 
         function onWindowResize() {

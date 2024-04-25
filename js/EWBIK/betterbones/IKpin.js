@@ -72,10 +72,12 @@ export class IKPin extends Saveable{
     /**
      * 
      * @param {Bone} forBone the bone to treat as an effector (which is, the thing that attemptes to align with the target)
-     * @param {Object3D or IKNode} targetNode The IKNode Object3D instance serving as this pin's target. If not provided, one will be created and pre aligned to the bone. 
+     * @param {Object3D | IKNode | ShadowNode} targetNode The IKNode or Object3D instance serving as this pin's target. If not provided, one will be created and pre aligned to the bone (or its effectorOffset). This input respects the scene hierarchy specified by the object.
+     * @param {Object3D | IKNode | IKTransform} affectorOffset the transfrom to attempt to align to the target. If the provided input is null, bone.getIKBoneOrientation will be used. This input is expected in the space of the IKBoneOrientation(), and will be treated as such regardless of any hierarchy information it may otherwise specify. If the input is a ShadowNode already in the space of the bone, it will be used by reference. If it is an Object3D child of bone.getIKBoneOrientation(), the shadowNode already tracking it will be used, or one to track it will be created. 
+     * For all other cases, a new Object3D and backing ShadowNode will be created in the ShadowNode hierarchy and set as a child of bone.getIKBoneOrienation().
      * @param {boolean} disabled if true, will register the pin without activating it (meaning the effector bone won't attempt to solve for the pin). You can manually enable the pin by calling pin.enable()
      */
-    constructor(forBone, targetNode, disabled = false, ikd = 'IKPin-'+(IKPin.totalInstances++), pool=globalVecPool) {
+    constructor(forBone, targetNode, affectoredOffset, disabled = false, ikd = 'IKPin-'+(IKPin.totalInstances++), pool=globalVecPool) {
         super(ikd, 'IKPin', IKPin.totalInstances, pool);
         if(forBone.getIKPin() != null) {
             throw Error("The provided Bone already has an IKPin set.");
@@ -106,10 +108,41 @@ export class IKPin extends Saveable{
 
             this.target_threejs.forPin = this;
         }
+        let affectoredOffset_threejs = new Object3D();
+        this.forBone.getIKBoneOrientation().add(affectoredOffset_threejs);
+        affectoredOffset_threejs.name = `affectoredOffset for ${this.ikd}`;
+        this.affectoredOffset = new ShadowNode(affectoredOffset_threejs);
+        if(affectoredOffset) {
+            this.setAffectoredOffset(affectoredOffset);
+        }
         this.targetNode.registerTrackChangeListener((node, oldtracked, newtracked)=>this.onTargetNodeTrackChange(node, oldtracked, newtracked));
         this.enabled = !disabled;
         this.forBone.setIKPin(this);
         this.setTargetPriorities(this.xPriority, this.yPriority, this.zPriority);
+    }
+
+    /**
+     * an optional attribute to allow aligning the provided transform to the target, atop the one returned by bone.getIKBoneOrientation()
+     * @param {Object3D | IKNode | IKTransform} affectorOffset the transfrom to attempt to align to the target. If the provided input is null, the identity tansform will be used, effectively aligning to bone.getIKBoneOrientation(). This input is expected in the space of the IKBoneOrientation(), and will be treated as such regardless of any hierarchy information it may otherwise specify. The ShadowNode and Object3d pair used by this pin are persistent, so the values of any input you provide will just be adopted by the values the pin already stores. This is so that it is always safe to modify the ShadowNode instance returned by getAffectoredOffset()
+     */
+
+    setAffectoredOffset(affectoredOffset) {
+        if(affectoredOffset == null) {
+            this.affectoredOffset.localMBasis.setToIdentity();
+        } else if(affectoredOffset instanceof ShadowNode) {
+                this.affectoredOffset.adoptLocalValuesFromObject3D(affectoredOffset.toTrack);
+        } else if(affectoredOffset instanceof IKTransform) {
+            this.affectoredOffset.localMBasis.adoptValues(affectoredOffset);
+            
+        } else if(affectoredOffset instanceof Object3D) {
+            this.affectoredOffset.adoptLocalValuesFromObject3D(affectoredOffset);
+        }
+        this.affectoredOffset.markDirty().project();
+        return this;
+    }
+
+    getAffectoredOffset() {
+        return this.affectoredOffset;
     }
 
     isEnabled() {
@@ -219,6 +252,8 @@ export class IKPin extends Saveable{
 	 * Sets  the priority of the orientation bases which effectors reaching for this target will and won't align with. 
 	 * If all are set to 0, then the target is treated as a simple position target. 
 	 * giving a nonzero value to all three is most often redundant and just adds compute time, but you should have at least two non-zero values if you want to fully specify target orientations.
+     * 
+     * Efficiency note: by default, calling this function avoids regenerating the shadow skeleton, even if a priority drops to 0. It only triggers a regeneration if a priority which used to be 0 is now non-zero, necessesitating the allocation of a new heading target. This is to maximize performance if frequently enabling and disabling headings. If you are infrequently enabling and disabling, it is very slightly faster to regenerate the shadowSkeleton once after setting a non-zero priority to 0.   
 	 *
 	 * @param xPriority Determines how much this pin's bone tries to align its x-axis with the target x-axis.
 	 * @param yPriority Determines how much this pin's bone tries to align its y-axis with the target y-axis.	
@@ -231,6 +266,8 @@ export class IKPin extends Saveable{
 		let yDir = yPriority > 0 ? IKPin.YDir : 0;
 		let zDir = zPriority > 0 ? IKPin.ZDir : 0;
         let prevmodecode = this.modeCode;
+        if(this.forBone?.wb?.maxModeCode) 
+            prevmodecode = this.forBone?.wb?.maxModeCode;
         let maxPriority = 0;
         let totalPriority = 0;
         let priorityCount = 0;
@@ -265,7 +302,7 @@ export class IKPin extends Saveable{
 		this.zPriority = priorities[2];	
 		this.targetNode.ensure();
         
-        if(prevmodecode != this.modeCode) {
+        if(prevmodecode < this.modeCode) {
             this.forBone?.parentArmature?.regenerateShadowSkeleton();
         }
         this.forBone?.parentArmature?.updateShadowSkelRateInfo();
@@ -442,9 +479,9 @@ export class IKPin extends Saveable{
         let boneName = p.forBone.name;
         let pinName = `${boneName}_pin`;
         string += `\nlet ${pinName} = new IKPin(armature.bonetags["${boneName}"]);\n`;
-        string += `${pinName}.setPinWeight(${p.getPinWeight().toFixed(3)});\n`;
-        string += `${pinName}.setTargetPriorities(${p.priorities[0].toFixed(3), p.priorities[1].toFixed(3), p.priorities[2].toFixed(3)});\n`;
-        string += `${pinName}.setDepthFalloff(${p.getDepthFalloff().toFixed(3)});\n`;
+        string += `${pinName}.setPinWeight(${p.getPinWeight().toFixed(4)});\n`;
+        string += `${pinName}.setTargetPriorities(${p.priorities[0].toFixed(4)}, ${p.priorities[1].toFixed(4)}, ${p.priorities[2].toFixed(4)});\n`;
+        string += `${pinName}.setDepthFalloff(${p.getDepthFalloff().toFixed(4)});\n`;
         if(!p.enabled) string+=`\n${pinName}.disable();`; 
         let pt = p.target_threejs;
         string += `${pinName}.target_threejs.position.set(${pt.position.x}, ${pt.position.y}, ${pt.position.z});\n`

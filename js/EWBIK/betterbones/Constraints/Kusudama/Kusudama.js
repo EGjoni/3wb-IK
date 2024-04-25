@@ -139,14 +139,6 @@ export class Kusudama extends Limiting {
         this.shell.visible = this._visible; 
     }
 
-    setVisibilityCondition(condition) {
-        if(condition == null)
-            this._visibilityCondition = (cnstrt, forBone) =>  false;
-        else 
-            this._visibilityCondition = condition;
-        return this;
-    }
-
     updateDisplay() {
         this.shell.quaternion.set(0, 0, 0, 1);
         this.shell.position.set(this.forBone.position.x, this.forBone.position.y, this.forBone.position.z);
