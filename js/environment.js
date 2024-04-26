@@ -2,6 +2,11 @@
 
 import * as THREE from 'three';
 
+const dirLight = new THREE.DirectionalLight( 0xffffff, 1 );
+dirLight.color.setHSL( 0.1, 1, 0.95 );
+dirLight.position.set( 1, 1.75, -1 );
+dirLight.position.multiplyScalar( 5 );
+
 export function initEnvironment(scene, renderer, meshesList, layers) {
     renderer.autoClear = false;
     scene.background = new THREE.Color().setHSL( 0.6, 0, 1 );
@@ -15,12 +20,6 @@ export function initEnvironment(scene, renderer, meshesList, layers) {
     hemiLight.position.set( 0, 0, 0 );
     scene.add( hemiLight );
 
-    //
-
-    const dirLight = new THREE.DirectionalLight( 0xffffff, 1 );
-    dirLight.color.setHSL( 0.1, 1, 0.95 );
-    dirLight.position.set( 1, 1.75, -1 );
-    dirLight.position.multiplyScalar( 5 );
     scene.add( dirLight );
 
     dirLight.castShadow = true;
@@ -28,12 +27,8 @@ export function initEnvironment(scene, renderer, meshesList, layers) {
     dirLight.shadow.mapSize.width = 1028;
     dirLight.shadow.mapSize.height = 1028;
 
-    const d = 20;
-
-    dirLight.shadow.camera.left = - d;
-    dirLight.shadow.camera.right = d;
-    dirLight.shadow.camera.top = d*1.5;
-    dirLight.shadow.camera.bottom = - d*.5;
+    setShadowD(20);
+    
 
     dirLight.shadow.camera.far = 500;
     dirLight.shadow.bias = - 0.0001;
@@ -117,6 +112,13 @@ export function initEnvironment(scene, renderer, meshesList, layers) {
     }
 
     renderer.shadowMap.enabled = true;
+}
+
+export function setShadowD(d = 20) {
+    dirLight.shadow.camera.left = - d;
+    dirLight.shadow.camera.right = d;
+    dirLight.shadow.camera.top = d*1.5;
+    dirLight.shadow.camera.bottom = - d*.5;
 }
 
 

@@ -428,12 +428,14 @@ export class Returnful extends Constraint {
       * 
       * @param {Number} val a number from 0-1, interpreted as the maximum percentage of the dampening parameter the joint is allowed 
       * to try to rotate back toward a less painful region.
+      * @return {Constraint} this instance for chaining
       */
      setPainfulness (val) {
          this.painfulness = val;
          if (this.forBone && this.forBone.parentArmature) {
              this.forBone.parentArmature.updateShadowSkelRateInfo(); 
          }
+         return this;
      }
      getPainfulness () {
          return this.painfulness;
@@ -461,6 +463,7 @@ export class Returnful extends Constraint {
      /**
       * 
       * @param {Number} val 0-1 indicating how many iterations into a solver request this constraint resigns itself to just accepting the pain.
+      * @return {Constraint} this instance for chaining
       */
      setStockholmRate (val) {
          this.stockholmRate = val;
@@ -468,6 +471,7 @@ export class Returnful extends Constraint {
          if (this.forBone && this.forBone.parentArmature) {
             this.forBone.parentArmature.updateShadowSkelRateInfo(); 
         }
+        return this;
      }
  
      getStockholmRate () {
@@ -715,6 +719,41 @@ export class ConstraintStack extends LimitingReturnful {
                     this.returnfulled.add(c);
             }
         }
+    }
+
+    /**slow, only use for infrequent tasks. Generates and returns traversable array of all returnfulled or limitingreturnfulled subconstraints*/
+    getReturnfulledArray() {
+        let result = []
+        for(let l of this.returnfulled) {
+            result.push(l);
+            if(l instanceof ConstraintStack) {
+                result.push(...l.getReturnfulledArray());
+            }
+        }
+        return result;
+    }
+
+    /**slow, only use for infrequent tasks. Generates and returns traversable array of all limiting or limitingreturnfulled subconstraints*/
+    getLimitingArray() {
+        let result = []
+        for(let l of this.limiting) {
+            result.push(l);
+            if(l instanceof ConstraintStack) {
+                result.push(...l.getLimitingArray());
+            }
+        }
+        return result;
+    }
+
+    getAllConstraints() {
+        let result = []
+        for(let l of this.allconstraints) {
+            result.push(l);
+            if(l instanceof ConstraintStack) {
+                result.push(...l.getAllConstraints());
+            }
+        }
+        return result;
     }
 
     updateLimitingSet() {
@@ -1072,5 +1111,13 @@ export class LayerGroup {
         this.set = onSet;
         this.onEnable = onEnable;
         this.onDisable = onDisable;
+    }
+
+    enable(val) {
+        this?.onEnable(val);
+    }
+
+    disable(val) {
+        this?.onDisable(val);
     }
 }

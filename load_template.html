@@ -34,7 +34,7 @@
         import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
         import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
         import { Rest, Kusudama, Twist } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
-        import { getMeshDescendants, initEnvironment } from "enviro";
+        import { getMeshDescendants, initEnvironment, setShadowD} from "enviro";
         //import { Rest } from "./js/EWBIK/betterbones/Constraints/Rest/Rest.js"
         addDebugFuncs(THREE);
         window.Rest = Rest;
@@ -62,7 +62,7 @@
         let selectedBone = null;
         let rootBone = null;
         let armature = null;
-        let frameCount = 0;
+        window.frameCount = 0;
         window.instances = [];
 
         const loader = new GLTFLoader();
@@ -157,7 +157,7 @@
         }
 
         window.render = function (incrFrame = false) {
-            if (incrFrame) frameCount++;
+            if (incrFrame) window.frameCount++;
             doSolve();
 
             camera.layers.set(0);

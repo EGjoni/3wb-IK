@@ -111,7 +111,7 @@ async function select(item) {
         window.contextBone = window.selectedPin.forBone;
         window.contextArmature = window.contextBone.parentArmature;
         window.contextConstraint = window.contextBone.getConstraint() ?? null;
-        window.contextBone.add(boneAxesHelper);
+        window.contextBone.getIKBoneOrientation().add(boneAxesHelper);
         boneAxesHelper.layers.set(window.boneLayer);
         window.contextPin.targetNode.toTrack.add(pinAxesHelper);
         pinAxesHelper.layers.set(window.boneLayer);
@@ -133,7 +133,7 @@ async function select(item) {
         window.contextPin = selectedBone.getIKPin() ?? null;
         window.contextArmature = selectedBone.parentArmature;
         window.contextConstraint = selectedBone.getConstraint() ?? null;
-        window.contextBone.add(boneAxesHelper);
+        window.contextBone.getIKBoneOrientation().add(boneAxesHelper);
         boneAxesHelper.layers.set(window.boneLayer);
         window?.contextPin?.targetNode?.toTrack.add(pinAxesHelper);
         pinAxesHelper.layers.set(window.boneLayer);
@@ -215,6 +215,7 @@ function updateGlobalBoneLists() {
     }
     for(let b of boneList) {
         if(b.getConstraint()) {
+            b.getConstraint().layers.disable(window.meshLayer);
             b.getConstraint().layers.set(window.boneLayer);
         }
     }
@@ -379,6 +380,7 @@ function initControls(THREE, renderer) {
 
     boneCtrls = new TransformControls(camera, renderer.domElement);
     boneCtrls.space = 'local';
+    boneCtrls.layers.enableAll();
 
     boneCtrls.addEventListener('dragging-changed', function (event) {
         bone_transformActive = event.value;
@@ -448,7 +450,8 @@ function initControls(THREE, renderer) {
 
     pinOrientCtrls = new TransformControls(camera, renderer.domElement);
     pinOrientCtrls.space = 'local'
-    pinOrientCtrls.addEventListener('change', render);
+    pinOrientCtrls.layers.enableAll();
+    //pinOrientCtrls.addEventListener('change', render);
     pinOrientCtrls.addEventListener('dragging-changed', function (event) {
         pin_transformActive = event.value;
         orbitControls.enabled = !event.value;
@@ -681,14 +684,14 @@ async function switchSelected(key) {
             selectedBoneIdx = (selectedBoneIdx + 1) % boneList.length
             selectedBone = boneList[selectedBoneIdx];
             boneCtrls.attach(selectedBone);
-            selectedBone.add(boneAxesHelper);
+            selectedBone.getIKBoneOrientation().add(boneAxesHelper);
             select(selectedBone)
             break;
         case ']': //next bone
             selectedBoneIdx = (selectedBoneIdx + (boneList.length - 1)) % boneList.length
             selectedBone = boneList[selectedBoneIdx];
             boneCtrls.attach(selectedBone);
-            selectedBone.add(boneAxesHelper);
+            selectedBone.getIKBoneOrientation().add(boneAxesHelper);
             select(selectedBone)
             break;
         case 'p':

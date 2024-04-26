@@ -491,6 +491,22 @@ export class Rot {
         return this;
     }
 
+    /**
+     * same as setFromAxisAngle, but assumes cached input of cos(-angle/2), sin(-angle/2)
+     * @param {Vec3} axis must be unit length
+     * @param {Number} cosNegHalfAngle cos(angle/2)
+     * @param {Number} sinNegHalfAngle sin(-angle/2)
+     */
+    setFromAxisTrigHalfAngles(axis, cosNegHalfAngle, sinNegHalfAngle) {        
+        let coeff =  sinNegHalfAngle/axis.mag();
+        this.w = cosNegHalfAngle;
+        this.x = coeff * axis.x;
+        this.y = coeff * axis.y;
+        this.z = coeff * axis.z;
+        return this;
+
+    }
+
     /**clamps as efficiently as I could come up with contingent on user 
      * having cached the cosine half value. 
      * 

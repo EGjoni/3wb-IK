@@ -187,6 +187,11 @@ export class IKTransform extends Saveable {
 
         if(!extractSkew) {
             this.isUniform = Math.abs(1-(scale.x/scale.y/scale.z)) < 1e-6;
+            if(this.isUniform || this.forceOrthonormality) {
+                this.scale.x = scale.x >= 0 ? 1 : -1;
+                this.scale.y = scale.y >= 0 ? 1 : -1;
+                this.scale.z = scale.y >= 0 ? 1 : -1;
+            }
             this.isOrthogonal = true;
             this.isOrthoNormal = this.isUniform && this.isOrthogonal;
             this.skewMatrix.copy(zeroMat);
@@ -200,7 +205,12 @@ export class IKTransform extends Saveable {
             this.inverseRotation.applyBeforeMatrix4_rot(mat4.elements, this.skewMatrix_e);
             IKTransform.matrixSub(this.scaleMatrix_e, this.skewMatrix_e);
             this._updateOrthoNormalHint();
-            this.state &= ~IKTransform.precompInverseDirty;
+            if(this.isUniform || this.forceOrthonormality) {
+                this.scale.x = scale.x >= 0 ? 1 : -1;
+                this.scale.y = scale.y >= 0 ? 1 : -1;
+                this.scale.z = scale.y >= 0 ? 1 : -1;
+            }
+			this.state &= ~IKTransform.precompInverseDirty;
         }        
     }
 
@@ -376,8 +386,8 @@ export class IKTransform extends Saveable {
         if(this.state & IKTransform.inverseCompositionsDirty) {
             if(this.state & IKTransform.compositionsDirty) {
                 this.recompose();
-                this.inverseComposedMatrix.copy(this.composedMatrix);
             }
+			this.inverseComposedMatrix.copy(this.composedMatrix);
             this.inverseComposedMatrix.invert();
             this.state &= ~IKTransform.inverseCompositionsDirty;
         }

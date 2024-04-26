@@ -8,9 +8,8 @@ export function initWolfGirlConstraints(armature, withRootRest = false) {
     armature.setInternalOrientationFor(armature.l_leg_lower, armature.l_foot.position);
 
     if (withRootRest) {
-        let rootrest = new Rest(armature.c_hips.parent);
-        rootrest.setPainfulness(0.9);
-        rootrest.setStockholmRate(0.9);
+        maybeAddRest(armature.c_hips.parent);
+        maybeAddRest(armature.c_hips);
     }
 
     /*new Kusudama(armature.bonetags["J_Bip_L_UpperLeg"], (cnstrt, bone) => bone == window.contextBone, "Kusudama for J_Bip_L_UpperLeg", armature.stablePool)
@@ -262,8 +261,29 @@ export function initWolfGirlConstraints(armature, withRootRest = false) {
 }
 
 
+function maybeAddRest(bone) {
+    let existingConstraints = bone.getConstraint()?.getReturnfulledArray();
+    existingConstraints = existingConstraints == null ? [] : existingConstraints;
+    let do_it = true;
+    for(let r of existingConstraints) {
+        if(r instanceof Rest) {
+            do_it = false;
+            break;
+        }
+    }
+    if(do_it) {
+        let rootrest = new Rest(bone);
+        rootrest.setPainfulness(0.9);
+        rootrest.setStockholmRate(0.9);
+    }
+}
+
 /**Warning: not to be used in conjunction with initWolfGirlConstraints */
-export function initWolfGirlRestConstraints(armature) {
+export function initWolfGirlRestConstraints(armature, withRootRest) {
+    if (withRootRest) {
+        maybeAddRest(armature.c_hips.parent);
+        maybeAddRest(armature.c_hips);
+    }
     armature.l_arm_upp.rotateX(1.2);
     armature.l_arm_upp.rotateY(1.2);
 
@@ -505,6 +525,12 @@ export function initWolfGirlCosmeticPins(armature) {
     J_Sec_Hair5_05_pin.setDepthFalloff(0.000);
     armature.c_chest.attach(J_Sec_Hair5_05_pin.target_threejs);
     J_Sec_Hair5_05_pin.ensure();
+
+    for (let b of armature.bones) {
+        if (b.name.indexOf("J_Sec") != -1) {
+            b.setIKKickIn(0.8);
+        }
+    }
     armature.regenerateShadowSkeleton(true);
 
 }
@@ -517,7 +543,7 @@ export function initWolfGirl(armature, useLimiting = true, useRest = false, with
         initWolfGirlRestConstraints(armature, withRootRest);
     }
     if (useLimiting) {
-        initWolfGirlConstraints(armature);
+        initWolfGirlConstraints(armature, withRootRest && !useRest);
     }
     initWolfGirlCosmeticPins(armature);
 }

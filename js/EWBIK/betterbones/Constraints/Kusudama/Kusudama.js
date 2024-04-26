@@ -415,8 +415,9 @@ export class Kusudama extends Limiting {
                 inBounds[0] = 1;
                 return inPoint;
             } else {
-                let axis = this.limitCones[0].getControlPoint().cross(point, this.pool.any_Vec3());
-                let toLimit = Rot.fromAxisAngle(axis, this.limitCones[0].getRadius());
+                let lc = this.limitCones[0];
+                let axis = lc.getControlPoint().cross(point, this.pool.any_Vec3());
+                let toLimit = this.tempOutRot.setFromAxisTrigHalfAngles(axis, lc.radiusNegHalfCos, lc.radiusNegHalfSin);
                 return toLimit.applyToVecClone(this.limitCones[0].getControlPoint());
             }
         }

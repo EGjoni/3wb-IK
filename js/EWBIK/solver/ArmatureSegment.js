@@ -1,4 +1,3 @@
-
 import { Vec3 } from "../util/vecs.js";
 import { Ray } from "../util/Ray.js";
 import {Rot} from "../util/Rot.js";
@@ -202,13 +201,12 @@ export class ArmatureSegment {
             if (target != null) {
                 const innerWeightArray = [];
                 weightArray.push(innerWeightArray);
-                const targWeight = target.getPinWeight();
-                this.wb_segmentTip.modeCode = target.getModeCode();
-                this.wb_segmentTip.maxModeCode = Math.max(this.wb_segmentTip.modeCode, this.wb_segmentTip.maxModeCode);
-                const modeCode = target.getModeCode();
+                const targWeight = target.isEnabled() ? target.getPinWeight() : 0;                
                 if(targWeight > 0) { 
+                    this.wb_segmentTip.modeCode = target.getModeCode();
+                    this.wb_segmentTip.maxModeCode = Math.max(this.wb_segmentTip.modeCode, this.wb_segmentTip.maxModeCode);
+                    const modeCode = target.getModeCode();
                     innerWeightArray.push(targWeight * currentFalloff);
-
                     if ((modeCode & IKPin.XDir) != 0) {
                         const subTargetWeight = targWeight * target.getPriority(IKPin.XDir) * currentFalloff;
                         innerWeightArray.push(subTargetWeight);
@@ -224,8 +222,9 @@ export class ArmatureSegment {
                         innerWeightArray.push(subTargetWeight);
                         innerWeightArray.push(subTargetWeight);
                     }
+                    pinSequence.push(this.wb_segmentTip);
                 }
-                pinSequence.push(this.wb_segmentTip);
+                
             }
             const thisFalloff = target == null ? 1 : target.getDepthFalloff();
             for (const s of this.immediateSubSegments) {
@@ -277,8 +276,9 @@ class WorkingBone {
     simTargetAxes = null;
     cosHalfDampen = 0;
     cosHalfReturnDamp = 0;
+    kickInStep = 0;
     returnDamp = 0;
-    stiffdampening = 0;
+    totalDampening = 0;
     currentHardPain = 0; //pain from violating limiting constraints
     currentSoftPain = 0; //pain from distance from returnful constraints
     lastReturnfulResult = null;
@@ -326,7 +326,7 @@ class WorkingBone {
         this.hasPinnedAncestor = this.chain.hasPinnedAncestor;
 
         /** @type {TransformState} */
-        if(forBone.getIKPin() != null) {
+        if(forBone.getIKPin()?.isEnabled()) {
             this.ikPin = forBone.getIKPin();
             this.modeCode = this.ikPin.getModeCode();
             this.maxModeCode = this.modeCode;
@@ -367,8 +367,10 @@ class WorkingBone {
         this.hasLimitingConstraint = this.constraint?.isLimiting();
         const stiffness = this.forBone.getStiffness();
         const defaultDampening = this.chain.getDampening();
-        this.stiffdampening = this.forBone.parent == null ? Math.PI : (1 - stiffness) * defaultDampening;
-        this.cosHalfDampen = Math.cos(this.stiffdampening / 2);
+        let stiffdampening = this.forBone.parent == null ? Math.PI : (1 - stiffness) * defaultDampening;
+        let clampedKickinRate = 1-Math.max(Math.min(.99, this.forBone.IKKickIn), 0);
+        this.totalDampening = stiffdampening/clampedKickinRate;
+        this.cosHalfDampen = Math.cos(this.totalDampening / 2);
     }
 
     setAsSegmentRoot() {
@@ -415,11 +417,10 @@ class WorkingBone {
         //if(window.perfing) performance.measure("slowUpdateOptimalRotationToPinnedDescendants", "slowUpdateOptimalRotationToPinnedDescendants start", "slowUpdateOptimalRotationToPinnedDescendants end");   
     }
 
-    fastUpdateOptimalRotationToPinnedDescendants(translate, skipConstraints) {
+    fastUpdateOptimalRotationToPinnedDescendants(translate, skipConstraints, currentIteration) {
+        if(currentIteration < this.kickInStep) return;
         //if(window.perfing) performance.mark("fastUpdateOptimalRotationToPinnedDescendants start");
         this.updateDescendantsPain();
-        //this.simLocalAxes.getGlobalMBasis().rotation.normalize();
-        //this.simLocalAxes.getLocalMBasis().rotation.normalize();
         
         this.updateTargetHeadings(this.chain.boneCenteredTargetHeadings, this.myWeights, this.painWeights);        
         this.updateTipHeadings(this.chain.boneCenteredTipHeadings, !translate);
@@ -669,10 +670,10 @@ class WorkingBone {
  
      pullBackTowardAllowableRegion(iteration, callbacks) {
         //if(window.perfing) performance.mark("pullBackTowardAllowableRegion start");
-         if (this.springy) {
+         if (this.springy && iteration >= this.kickInStep) {
             this.constraint.markDirty();
             //callbacks?.beforePullback(this.forBone.directRef, this.forBone.getFrameTransform(), this);
-            const res = this.constraint.getClampedPreferenceRotation(this.simLocalAxes, this.simBoneAxes, iteration, this);
+            const res = this.constraint.getClampedPreferenceRotation(this.simLocalAxes, this.simBoneAxes, iteration-this.kickInStep, this);
             this.chain.previousDeviation = Infinity;
             this.lastReturnfulResult = res;
             this.simLocalAxes.rotateByLocal(res.clampedRotation);
@@ -685,8 +686,10 @@ class WorkingBone {
 
     updateReturnfullnessDamp(iterations) {
         //if(window.perfing) performance.mark("updateReturnfullnessDamp start");
+        this.kickInStep = parseInt(iterations * (this.forBone.IKKickIn));
+        this.kickInStep = Math.max(0,Math.min(iterations-1, this.kickInStep));
         if(this.maybeSpringy()) {
-            this.constraint.setPreferenceLeeway(this.stiffdampening);
+            this.constraint.setPreferenceLeeway(this.totalDampening);
             this.constraint.setPerIterationLeewayCache(iterations);
             /**
              * determine maximum pullback that would still allow the solver to converge if applied once per pass 

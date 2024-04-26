@@ -195,7 +195,7 @@
         function initHumanoidRestConstraints(armature) {
 
             initWolfGirlShortcuts(armature);
-            initWolfGirlConstraints(armature);
+            initWolfGirlConstraints(armature, true);
 
             armature.head_pin = new IKPin(armature.c_head);
             armature.hip_pin = new IKPin(armature.c_hips);

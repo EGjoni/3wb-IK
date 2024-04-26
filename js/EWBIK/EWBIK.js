@@ -8,7 +8,7 @@ import { Rot } from "./util/Rot.js";
 import { IKNode, TrackingNode } from "./util/nodes/IKNodes.js";
 import { convexBlob, pcaOrientation } from "./util/mathdump/mathdump.js";
 import { IKPin } from "./betterbones/IKpin.js";
-import { Rest, Twist, Kusudama, LimitCone} from "./betterbones/Constraints/ConstraintStack.js";
+import { Rest, Twist, Kusudama, LimitCone, ConstraintStack} from "./betterbones/Constraints/ConstraintStack.js";
 import { Bone } from "three";
 import { Saveable, Loader } from "./util/loader/saveable.js";
 import { Object3D } from "../three/three.module.js";
@@ -763,6 +763,32 @@ export class EWBIK extends Saveable {
     tempBasis = new IKTransform();
 
 
+    /**slow. only use for infrequent tasks. Returns a flat array of all contraints and any of their subconstraints on this armature
+     * @param {Function} callback an optional function to run once per constraint. function will be provided with a reference to the constraint as an argument
+    */
+    forAllConstraints(callback = null) {
+        let result = [];
+        for(let b of this.bones) {
+            if(b.getConstraint()) {
+                let c = b.getConstraint();
+                if(callback != null) {
+                    callback(c);
+                }
+                result.push(c);
+                if(c instanceof ConstraintStack) {
+                    let subcs = c.getAllConstraints();
+                    if(callback != null) {
+                        for(let sc of subcs) {
+                            callback(sc);
+                        }
+                    }
+                    result.push(...subcs);
+                }
+            }
+        }
+    }
+
+
     /**convenience for if the user wants to manually update the rate info without trying to determine
      * the appropriate number of iterations to keep all other solver behavior the same
      */
@@ -883,6 +909,10 @@ export class EWBIK extends Saveable {
 let betterbones = {
     isIKType: true,
     stiffness: 0,
+    tempLock: false,
+    orientation: null,
+    IKKickIn: 0,
+    stiffness: 0,
     /**
      * temporary version of setIKOrientationLock for convenience in locking things
      * without worrying about if they're already locked.
@@ -917,7 +947,21 @@ let betterbones = {
     getIKOrientationLock() {
         return this.orientationLock || this.tempLock;//_tempLockCallback();
     },
-
+    
+    /**
+     * allows you specify that someBones on the armature should solve for fewer iterations
+     * than others. This can be useful for secondary things on an armature which don't require much accuracy.
+     * a value of 0 means the bone will solve for the full number of iterations. A value of 0.75 means it won't kick in 
+     * until 3/4ths through the solve.
+     * 
+     * Be mindful that the effective dampening on the bone will increase by a corresponding amount to compensate for the decrease in iterations.
+     * If you don't want this to happen, you will need to manually account for it using the stiffness parameter.
+     * @param {Number} kickIn 0-1 defailt 0 (kick in right away).
+     */
+    setIKKickIn(kickIn) {
+        this.IKKickIn = kickIn;
+        this.parentArmature?.updateShadowSkelRateInfo();
+    },
     setStiffness(stiffness) {
         this.stiffness = stiffness;
         this.parentArmature?.updateShadowSkelRateInfo();
@@ -935,7 +979,7 @@ let betterbones = {
      */
     getStiffness() {
         if (this.getIKOrientationLock()) return 1;
-        return this.stiffness ?? 0;
+        return this.stiffness;
     },
 
     getConstraint() {
@@ -1075,18 +1119,12 @@ let betterbones = {
     original_add: THREE.Bone.prototype.add,
 
     add(elem) {
-        //console.log("added");
-
-        if (this.orientation != null && elem instanceof THREE.LineSegments) {
-            this.orientation.add(elem);
-        } else {
-            this.original_add(elem);
-            if (elem instanceof THREE.Bone) {
-                if (this.parentArmature != null) {
-                    elem.registerToArmature(this.parentArmature);
-                    this.parentArmature.recreateBoneList();
-                    this.parentArmature.regenerateShadowSkeleton(true);
-                }
+        this.original_add(elem);
+        if (elem instanceof THREE.Bone) {
+            if (this.parentArmature != null) {
+                elem.registerToArmature(this.parentArmature);
+                this.parentArmature.recreateBoneList();
+                this.parentArmature.regenerateShadowSkeleton(true);
             }
         }
     },

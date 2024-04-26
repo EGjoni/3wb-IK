@@ -1,7 +1,7 @@
 const THREE = await import('three')
 import { Bone, Object3D, Group } from 'three';
 import { Rot } from "../../../util/Rot.js";
-import { Vec3, any_Vec3 } from "../../../util/vecs.js";
+import { Vec3, any_Vec3, any_Vec3fv } from "../../../util/vecs.js";
 import { Ray } from "../../../util/Ray.js";
 import { IKNode, TrackingNode } from "../../../util/nodes/IKNodes.js";
 import { generateUUID } from "../../../util/uuid.js";
@@ -170,7 +170,13 @@ export class Twist extends LimitingReturnful {
      * 
      * @param {Number} baseZ the base angle against which range/2 on either side defines an allowable twist region
      */
-    setBaseZ(baseZ) {
+    setBaseZ(baseZ, ensureTwistAxis = true) {
+        let startTwistAx = this.pool.any_Vec3fv(this.twistAxis);
+        if(!ensureTwistAxis) {
+            this.setCurrentAsReference();
+        } else {
+            this.setTwistAxis(startTwistAx, false);
+        }
         this.baseZ = baseZ;
         this.__frame_internal.emancipate();
         this.__frame_internal.reset();
@@ -198,7 +204,9 @@ export class Twist extends LimitingReturnful {
     /**sets the direction of the twist axis relative to the parent bone frame
      * @param {Vec3|Vector3} vec the twist axis
     */
-    setTwistAxis(vec) {
+    setTwistAxis(vec, ensureBaseZ = true) {
+        let startZ = this.baseZ;
+        this.setCurrentAsReference();
         this.twistAxis.x = vec.x;
         this.twistAxis.y = vec.y;
         this.twistAxis.z = vec.z;
@@ -206,7 +214,9 @@ export class Twist extends LimitingReturnful {
         this.frameCanonical.localMBasis.rotation.setFromVecs(this.pool.any_Vec3(0,1,0), this.twistAxis);
         this.frameCanonical.localMBasis.lazyRefresh();
         this.frameCanonical.markDirty();
-        this.setBaseZ(this.baseZ);
+        if(ensureBaseZ) {
+            this.setBaseZ(startZ, false);
+        }
         return this;
     }
 

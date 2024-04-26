@@ -10,6 +10,8 @@ export class LimitCone extends Saveable {
 
     //radius stored as  cosine to save on the acos call necessary for angleBetween. 
     radiusCosine;
+    radiusNegHalfCos;
+    radiusNegHalfSin;
     radius;
 
     /**@type {Kusudama}*/
@@ -71,8 +73,7 @@ export class LimitCone extends Saveable {
         this.tangentCircleCenterNext1 = direction.getOrthogonal();
         this.tangentCircleCenterNext2 = this.tangentCircleCenterNext1.multClone(-1);
 
-        this.radius = Math.max(1e-12, rad);
-        this.radiusCosine = Math.cos(rad);
+        this.setRadius(Math.max(1e-12, rad));
         this.parentKusudama = parentKusudama;
     }
 
@@ -254,7 +255,7 @@ export class LimitCone extends Saveable {
                 let toNextCos = input.dot(this.tangentCircleCenterNext1);
                 if (toNextCos > this.tangentCircleRadiusNextCos) {
                     let planeNormal = this.tangentCircleCenterNext1.cross(input);
-                    let rotateAboutBy = this.tempRot.setFromAxisAngle(planeNormal, this.tangentCircleRadiusNext);
+                    let rotateAboutBy = this.tempRot.setFromAxisTrigHalfAngles(planeNormal, this.tangentCircleRadiusNextNegHalfCos, this.tangentCircleRadiusNextNegHalfSin);
                     return rotateAboutBy.applyToVecClone(this.tangentCircleCenterNext1);
                 } else {
                     return input;
@@ -268,7 +269,7 @@ export class LimitCone extends Saveable {
             if (input.dot(t2xc1) > 0 && input.dot(c2xt2) > 0) {
                 if (input.dot(this.tangentCircleCenterNext2) > this.tangentCircleRadiusNextCos) {
                     let planeNormal = this.tangentCircleCenterNext2.cross(input);
-                    let rotateAboutBy = this.tempRot.setFromAxisAngle(planeNormal, this.tangentCircleRadiusNext);
+                    let rotateAboutBy = this.tempRot.setFromAxisTrigHalfAngles(planeNormal, this.tangentCircleRadiusNextNegHalfCos, this.tangentCircleRadiusNextNegHalfSin);
                     return rotateAboutBy.applyToVecClone(this.tangentCircleCenterNext2);
                 } else {
                     return input;
@@ -332,7 +333,7 @@ closestToCone(input, inBounds) {
         return null; // input.clone();
     } else {
         let axis = this.getControlPoint().cross(input);
-        let rotTo = this.tempRot.setFromAxisAngle(axis, this.getRadius());
+        let rotTo = this.tempRot.setFromAxisTrigHalfAngles(axis, this.radiusNegHalfCos, this.radiusNegHalfSin);
         let result = rotTo.applyToVec(this.getControlPoint(), this.tempOutVec);
         inBounds[0] = false;
         return result;
@@ -447,6 +448,8 @@ updateTangentHandles(next) {
     setTangentCircleRadiusNext(rad) {
         this.tangentCircleRadiusNext = rad;
         this.tangentCircleRadiusNextCos = Math.cos(this.tangentCircleRadiusNext);
+        this.tangentCircleRadiusNextNegHalfCos = Math.cos(-0.5*this.tangentCircleRadiusNext);
+        this.tangentCircleRadiusNextNegHalfSin = Math.sin(-0.5*this.tangentCircleRadiusNext);
     }
 
     getControlPoint() {
@@ -469,6 +472,8 @@ updateTangentHandles(next) {
     setRadius(radius, updateTangents = true) {
         this.radius = parseFloat(radius);
         this.radiusCosine = Math.cos(radius);
+        this.radiusNegHalfCos = Math.cos(-radius*0.5);
+        this.radiusNegHalfSin = Math.sin(-radius*0.5);
         if(updateTangents) {
             this.requestTangentUpdate();
         }

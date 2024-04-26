@@ -128,9 +128,9 @@ export class ShadowSkeleton {
         let skipConstraints = stabilizationPasses < 0;
         //if(window.perfing) performance.mark("solveToTargetsp1 start");
         stabilizationPasses = Math.max(0, stabilizationPasses);
-        /*if (translate) { //special case. translate and rotate the rootbone first to minimize deviation from innermost targets
-            this.traversalArray[endOnIndex].fastUpdateOptimalRotationToPinnedDescendants(translate, true, currentIteration);
-        }*/
+        //if (translate) { //special case. translate and rotate the rootbone first to minimize deviation from innermost targets
+        //    this.traversalArray[endOnIndex].fastUpdateOptimalRotationToPinnedDescendants(translate, true, currentIteration);
+        //}
         //if(window.perfing) performance.mark("solveToTargetsp1 end");
         //if(window.perfing) performance.measure("solveToTargetsp1", "solveToTargetsp1 start", "solveToTargetsp1 end");  
         this.accumulatingPain = 0;

@@ -28,6 +28,8 @@ window.Bone = THREE.Bone;
 window.armatures = [];
 window.meshLayer = 0;
 window.boneLayer = 1;
+window.showBones = true;
+window.showMesh = true;
 window.pin_transformActive = false;
 window.bone_transformActive = false;
 window.pin_transformDragging = false;
@@ -832,12 +834,13 @@ ${wb.forBone.toString()}
     })
 
     D.byid('show-mesh').addEventListener('change', function (e) {
-        if (rendlrs != null)
+        if (window.rendlrs != null) 
             window.rendlrs?.layerState(window.meshLayer, e.target.checked);
+        window.showMesh = e.target.checked;
     });
 
     D.byid('show-ik-bones').addEventListener('change', function (e) {
-        for (let a of armatures) {
+        /*for (let a of armatures) {
             if (a.ikReady) {
                 for (let b of a.bones) {
                     if (b.bonegeo != null) {
@@ -849,7 +852,8 @@ ${wb.forBone.toString()}
                     }
                 }
             }
-        }
+        }*/
+        window.showBones = e.target.checked;
         if (e.target.checked == false && D.byid('show-nonik-bones').checked == false) {
             if (rendlrs != null)
                 rendlrs?.hide(boneLayer);
@@ -1511,11 +1515,12 @@ window.enforceConstraint = function (bone, cstr) {
         let bonePhysicalAx =constraintEffectPreviewer2; 
         boneFrameAx.adoptLocalValuesFromObject3D(bone);
         bonePhysicalAx.adoptLocalValuesFromObject3D(bone.getIKBoneOrientation());
-    
-        let resultRot = cstr.getAcceptableRotation(
+        let resultRot = new Rot(1,0,0,0);
+        cstr.getAcceptableRotation(
             boneFrameAx,
             bonePhysicalAx,
             Rot.IDENTITY,
+            resultRot,
             this);
         boneFrameAx.rotateByLocal(resultRot);
         TrackingNode.transferLocalToObj3d(boneFrameAx.localMBasis, bone);

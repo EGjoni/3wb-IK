@@ -84,7 +84,8 @@ export function initSpotMiniRig(armature) {
 
 
     new Kusudama(armature.bonetags["spot_shoulder_FR_08"], (t, b) => b == contextBone, "Kusudama for spot_shoulder_FR_08", armature.stablePool)
-        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.9848251429089676, 0.16119644000733915, 0.06430509795725359), 0.19481);//.parentKusudama
+    .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.7835484056874227, 0.15928969573218602, 0.6005653076712354), 0.19481).parentKusudama
+    .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.8119198144875552, 0.03397874381091945, -0.5827792547882308), 0.19481);
     //.addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.9790044689836245, -0.1814820780416558, 0.0928143580475245), 0.27);
     new Twist(armature.bonetags["spot_shoulder_FR_08"], 0.1, undefined,
         armature.stablePool.any_Vec3(0.9866621449859244, -2.5920917152806857e-7, -0.1627814843638773),
@@ -92,7 +93,8 @@ export function initSpotMiniRig(armature) {
         "Twist for spot_shoulder_FR_08", armature.stablePool);
 
     new Kusudama(armature.bonetags["spot_shoulder_FL_03"], (t, b) => b == contextBone, "Kusudama for spot_shoulder_FL_03", armature.stablePool)
-        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.9848251429089676, 0.16119644000733915, 0.06430509795725359), 0.19481);//.parentKusudama
+    .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.7835484056874227, 0.15928969573218602, 0.6005653076712354), 0.19481).parentKusudama
+    .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.8119198144875552, 0.03397874381091945, -0.5827792547882308), 0.19481);
     //.addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.9790044689836245, -0.1814820780416558, 0.0928143580475245), 0.27);
     new Twist(armature.bonetags["spot_shoulder_FL_03"], 0.1, undefined,
         armature.stablePool.any_Vec3(-0.9866621449859244, -2.5920917152806857e-7, -0.1627814843638773),
@@ -100,7 +102,8 @@ export function initSpotMiniRig(armature) {
         "Twist for spot_shoulder_FL_03", armature.stablePool);
 
     new Kusudama(armature.bonetags["spot_shoulder_RR_018"], (t, b) => b == contextBone, "Kusudama for spot_shoulder_RR_018", armature.stablePool)
-        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.9910714809029129, -6.865086594839171e-7, 0.13333161568223845), 0.3);
+        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.7884619800726583, 0.01922590255826843, 0.6147829459660726), 0.3).parentKusudama
+        .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.8301481051974219, -0.0077920538795230605, -0.5574884817944393), 0.3);
     //.addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.9790044689836245, -0.1814820780416558, 0.0928143580475245), 0.27);
     new Twist(armature.bonetags["spot_shoulder_RR_018"], 0.1, undefined,
         armature.stablePool.any_Vec3(0.9866621449859244, -2.5920917152806857e-7, -0.1627814843638773),
@@ -108,7 +111,8 @@ export function initSpotMiniRig(armature) {
         "Twist for spot_shoulder_RR_018", armature.stablePool);
 
     new Kusudama(armature.bonetags["spot_shoulder_RL_013"], (t, b) => b == contextBone, "Kusudama for spot_shoulder_RL_013", armature.stablePool)
-        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.9910714809029129, -6.865086594839171e-7, 0.13333161568223845), 0.3);
+        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.7884619800726583, 0.01922590255826843, 0.6147829459660726), 0.3).parentKusudama
+        .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.8301481051974219, -0.0077920538795230605, -0.5574884817944393), 0.3);
     new Twist(armature.bonetags["spot_shoulder_RL_013"], 0.1, undefined,
         armature.stablePool.any_Vec3(-0.9866621449859244, -2.5920917152806857e-7, -0.1627814843638773),
         -0.13991, (cnstrt, bone) => bone == contextBone,
@@ -205,7 +209,7 @@ spot_upperLeg_RR_019*/
 
 
     let spot_body_02_pin = new IKPin(armature.bonetags["spot_body_02"]);
-    spot_body_02_pin.setPinWeight(0.994);
+    spot_body_02_pin.setPinWeight(0.5);
     spot_body_02_pin.setDepthFalloff(0.800);
 
 
@@ -228,7 +232,9 @@ spot_upperLeg_RR_019*/
     spot_actuator_FR_end_028_pin.targetNode.mimic();
     
 
-    new IKPin(armature.fr_foot);
+    armature.fr_foot_pin = new IKPin(armature.fr_foot);
+    armature.fr_foot_pin.setTargetPriorities(0,0,0);
+    
 
 
     //front left
@@ -251,7 +257,8 @@ spot_upperLeg_RR_019*/
     spot_upperLeg_FL_04_pin.targetNode.mimic();
     
 
-    new IKPin(armature.fl_foot);
+    armature.fl_foot_pin = new IKPin(armature.fl_foot);
+    armature.fl_foot_pin.setTargetPriorities(0,0,0);
 
     let rl_preactuator_pin = new IKPin(armature.bonetags["rl_preactuator"]);
     rl_preactuator_pin.nonInteractive = true;
@@ -270,7 +277,9 @@ spot_upperLeg_RR_019*/
     spot_upperLeg_RL_014_pin.hintMesh.position.set(0, 0, 0);
     spot_upperLeg_RL_014_pin.hintMesh.quaternion.identity();
     spot_upperLeg_RL_014_pin.targetNode.mimic();
-    new IKPin(armature.rl_foot);
+    
+    armature.rl_foot_pin = new IKPin(armature.rl_foot);
+    armature.rl_foot_pin.setTargetPriorities(0,0,0);
 
 
     let rr_preactuator_pin = new IKPin(armature.bonetags["rr_preactuator"]);
@@ -290,6 +299,9 @@ spot_upperLeg_RR_019*/
     spot_upperLeg_RR_019_pin.hintMesh.position.set(0, 0, 0);
     spot_upperLeg_RR_019_pin.hintMesh.quaternion.identity();
     spot_upperLeg_RR_019_pin.targetNode.mimic();
-    new IKPin(armature.rr_foot);
+    
+    armature.rr_foot_pin = new IKPin(armature.rr_foot);
+    armature.rr_foot_pin.setTargetPriorities(0,0,0);
+
     return armature;
 }
