@@ -370,7 +370,7 @@ class WorkingBone {
         let stiffdampening = this.forBone.parent == null ? Math.PI : (1 - stiffness) * defaultDampening;
         let clampedKickinRate = 1-Math.max(Math.min(.99, this.forBone.IKKickIn), 0);
         this.totalDampening = stiffdampening/clampedKickinRate;
-        this.cosHalfDampen = Math.cos(this.totalDampening / 2);
+        this.cosHalfDampen = Math.cos(Math.min(this.totalDampening / 2, 2*Math.PI));
     }
 
     setAsSegmentRoot() {
@@ -690,7 +690,7 @@ class WorkingBone {
         this.kickInStep = Math.max(0,Math.min(iterations-1, this.kickInStep));
         if(this.maybeSpringy()) {
             this.constraint.setPreferenceLeeway(this.totalDampening);
-            this.constraint.setPerIterationLeewayCache(iterations);
+            this.constraint.setPerIterationLeewayCache((iterations-1)-this.kickInStep);
             /**
              * determine maximum pullback that would still allow the solver to converge if applied once per pass 
              */

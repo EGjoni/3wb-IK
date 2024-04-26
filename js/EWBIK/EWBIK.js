@@ -962,6 +962,22 @@ let betterbones = {
         this.IKKickIn = kickIn;
         this.parentArmature?.updateShadowSkelRateInfo();
     },
+
+    /**
+     * The stiffness of a bone determines how much the IK solver should 
+     * prefer to avoid rotating it if it can. A value of 0  means the solver will 
+     * rotate this bone as much as the overall dampening parameter will 
+     * allow it to per iteration. A value of 0.5 means the solver will 
+     * rotate it half as much as the dampening parameter will allow,
+     * and a value of 1 effectively means the solver is not allowed 
+     * to rotate this bone at all.
+     * 
+     * Note that negative numbers are also supported, and interpreted naturally to mean
+     * multiplication over the dampening parameter. by the formula 1-(stiffness)*dampening. 
+     * So, -0.1 = 1.1*dampening, -1 = 2*dampening, -2=3*dampening etc
+     * @param {Number} stiffness a value between -infinity and 1
+     */
+
     setStiffness(stiffness) {
         this.stiffness = stiffness;
         this.parentArmature?.updateShadowSkelRateInfo();
@@ -975,7 +991,7 @@ let betterbones = {
      * rotate it half as much as the dampening parameter will allow,
      * and a value of 1 effectively means the solver is not allowed 
      * to rotate this bone at all. 
-     * @return a value between 1 and 0. 
+     * @return a value between -infinity and 1
      */
     getStiffness() {
         if (this.getIKOrientationLock()) return 1;

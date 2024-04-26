@@ -301,9 +301,11 @@ window.makeUI = function () {
     <fieldset id ="bone-fields" class="hidden">
         <legend>Bone Options:</legend>
         <div>Name: <span id="bone-name"></span> (<span id="internal-bone-name"></span>)</div>
-        <label for="stiffness">Stiffness:</label>
-        <input type="range" id="stiffness" name="stiffness" min="0.001" max="1.986" step="0.001">
-        <output class="un-exp-output">0.1</output>
+        <form class="stiffness-form slider-container">
+            <label for="stiffness">Stiffness:</label>
+            <input type="range" id="stiffness" name="stiffness" min="0" max="4.1" step="0.0001" value="0">
+            <output class="un-exp-output">0</output>
+        </form>
         <fieldset>
             <legend>Pin options:</legend>
             <div class="toggle-button">
@@ -319,7 +321,7 @@ window.makeUI = function () {
                     </form>
                     <form class="pin-falloff-form slider-container">
                         <label for="falloff">Fall-off:</label>
-                        <input type="range" id="falloff" name="falloff" min="0.001" max="1" step="0.001" value="0">
+                        <input type="range" id="falloff" name="falloff" min="0" max="1" step="0.001" value="0">
                         <output id="falloff-output">0</output>
                     </form>
                 </div>
@@ -719,7 +721,17 @@ ${wb.forBone.toString()}
             select(window.contextPin.forBone);
 
         }
-    })
+    });
+
+    D.byid('stiffness').addEventListener('input', (event) => {
+        if(contextBone == null) return;
+        const unexp = event.target.parentNode.qs('.un-exp-output');
+        let sliderVal = parseFloat(event.target.value);
+        let logged = 0.46*Math.PI*Math.log(sliderVal/(Math.PI*0.64));
+        contextBone.setStiffness(Math.min(Math.max(-10, logged),1));
+        unexp.value = window.contextBone.getStiffness().toFixed(4);
+        window.doSolve(contextBone, true);
+    });
 
     D.byid("weight").addEventListener("input", (event) => {
         const unexp = event.target.parentNode.qs('.un-exp-output');
@@ -1310,12 +1322,15 @@ window.updateInfoPanel = async function (item) {
         D.byid("bone-name").innerText = "None Selected";
         D.byid("internal-bone-name").innerText = "None";
         D.byid("stiffness").value = 0;
+        D.byid('stiffness').parentNode.qs('.un-exp-output').value = 0;
         constraintStackControls.remove();
     } else {
         D.byid("bone-fields").classList.remove("hidden");
         D.byid("bone-name").innerText = window.contextBone.name;
         D.byid("internal-bone-name").innerText = window.contextBone.ikd;
-        D.byid("stiffness").value = window.contextBone.getStiffness();
+        let base = window.contextBone.getStiffness();
+        D.byid("stiffness").value =  Math.PI*0.64 * Math.pow(Math.E, base/Math.PI/0.46);
+        D.byid('stiffness').parentNode.qs('.un-exp-output').value = window.contextBone.getStiffness().toFixed(4);
         constraintStackControls.remove();
     }
 

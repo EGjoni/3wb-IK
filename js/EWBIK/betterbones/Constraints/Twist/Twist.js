@@ -157,7 +157,7 @@ export class Twist extends LimitingReturnful {
         this.__frame_calc_internal.adoptLocalValuesFromIKNode(this.frameCanonical);
         this.__bone_calc_internal.adoptLocalValuesFromIKNode(this.boneCanonical);
         this.__bone_calc_internal.setRelativeToParent(this.__frame_calc_internal);
-        this.twistAxis.set(this.frameCanonical.localMBasis.yHeading);
+        this.twistAxis.set(this.boneCanonical.localMBasis.getYHeading());
         this.frameCanonical.localMBasis.rotation.getSwingTwist(this.pool.any_Vec3(0,1,0), this.swing, this.twist);
         this.baseZ = this.twist.getAngle();
         this.frameCanonical.localMBasis.writeToTHREE(this.displayGroup);

@@ -251,11 +251,19 @@ export function initWolfGirlConstraints(armature, withRootRest = false) {
         }
     }*/
     for (let b of armature.bones) {
-
-        if (b.name.indexOf("J_Sec") != -1) {
-            let restconst = new Rest(b);
-            restconst.setPainfulness(0.15);
-            restconst.setStockholmRate(0.5);
+        if (b.name.indexOf("J_Sec") != -1) {let twistconst = new Twist(b);
+            if(b.parent != armature.c_head) {
+                let twistconst = new Twist(b);
+                twistconst.setPainfulness(0.15);
+                twistconst.setStockholmRate(0.5);
+                twistconst.setCurrentAsReference();
+                twistconst.setRange(Math.PI);
+            } else {
+                let restconst = new Rest(b);
+                restconst.setPainfulness(0.15);
+                restconst.setStockholmRate(0.5);
+            }
+            b.setStiffness(-5);
         }
     }
 }
@@ -409,38 +417,38 @@ export function initWolfGirlCosmeticPins(armature) {
     J_Sec_Hair3_03_pin.ensure();
 
     let J_Sec_Hair3_04_pin = new IKPin(armature.bonetags["J_Sec_Hair3_04"]);
-    J_Sec_Hair3_04_pin.setPinWeight(0.2500);
+    J_Sec_Hair3_04_pin.setPinWeight(0.7500);
     J_Sec_Hair3_04_pin.setXPriority(0.5);
     J_Sec_Hair3_04_pin.setYPriority(0.505);
     J_Sec_Hair3_04_pin.setZPriority(0.000);
-    J_Sec_Hair3_04_pin.setDepthFalloff(0.750);
+    J_Sec_Hair3_04_pin.setDepthFalloff(1);
     armature.bonetags["J_Bip_L_Shoulder"].attach(J_Sec_Hair3_04_pin.target_threejs);
     J_Sec_Hair3_04_pin.ensure();
 
     let J_Sec_Hair3_05_pin = new IKPin(armature.bonetags["J_Sec_Hair3_05"]);
-    J_Sec_Hair3_05_pin.setPinWeight(0.25);
+    J_Sec_Hair3_05_pin.setPinWeight(0.75);
     J_Sec_Hair3_05_pin.setXPriority(0.5);
     J_Sec_Hair3_05_pin.setYPriority(0.5);
     J_Sec_Hair3_05_pin.setZPriority(0.0);
-    J_Sec_Hair3_05_pin.setDepthFalloff(0.75);
+    J_Sec_Hair3_05_pin.setDepthFalloff(1);
     armature.bonetags["J_Bip_R_Shoulder"].attach(J_Sec_Hair3_05_pin.target_threejs);
     J_Sec_Hair3_05_pin.ensure();
 
     let J_Sec_Hair3_09_pin = new IKPin(armature.bonetags["J_Sec_Hair3_09"]);
-    J_Sec_Hair3_09_pin.setPinWeight(0.25);
+    J_Sec_Hair3_09_pin.setPinWeight(0.75);
     J_Sec_Hair3_09_pin.setXPriority(0.03);
     J_Sec_Hair3_09_pin.setYPriority(0.5);
     J_Sec_Hair3_09_pin.setZPriority(0.0);
-    J_Sec_Hair3_09_pin.setDepthFalloff(0.75);
+    J_Sec_Hair3_09_pin.setDepthFalloff(1);
     armature.bonetags["J_Bip_R_Shoulder"].attach(J_Sec_Hair3_09_pin.target_threejs);
     J_Sec_Hair3_09_pin.ensure();
 
     let J_Sec_Hair3_10_pin = new IKPin(armature.bonetags["J_Sec_Hair3_10"]);
-    J_Sec_Hair3_10_pin.setPinWeight(0.25);
+    J_Sec_Hair3_10_pin.setPinWeight(0.75);
     J_Sec_Hair3_10_pin.setXPriority(0.030);
     J_Sec_Hair3_10_pin.setYPriority(0.5);
     J_Sec_Hair3_10_pin.setZPriority(0.000);
-    J_Sec_Hair3_10_pin.setDepthFalloff(0.750);
+    J_Sec_Hair3_10_pin.setDepthFalloff(1);
     armature.bonetags["J_Bip_L_Shoulder"].attach(J_Sec_Hair3_10_pin.target_threejs);
     J_Sec_Hair3_10_pin.ensure();
 
@@ -529,6 +537,7 @@ export function initWolfGirlCosmeticPins(armature) {
     for (let b of armature.bones) {
         if (b.name.indexOf("J_Sec") != -1) {
             b.setIKKickIn(0.8);
+            b.setStiffness(-0.5);
         }
     }
     armature.regenerateShadowSkeleton(true);
