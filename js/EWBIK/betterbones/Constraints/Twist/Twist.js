@@ -136,6 +136,30 @@ export class Twist extends LimitingReturnful {
 
         this.setCurrentAsReference()
     }
+
+    updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy) {
+        this.constraintResult.reset(iteration);
+        /**
+         * get the desired orientation in parentbone space from the composition of currentstate*currentboneorienteation
+         * get the rotation that brings framecanonical to the desired orientation.
+         * do a swingtwist decomposition.
+         * apply just the swing to framecanonical's rotation to get back to the twistless version of the desired orientation.
+         * finally, return the difference between the currentstate and the resulting frame orientation
+         */
+        if(iteration >= this.giveup) return this.constraintResult;
+
+        let currentOrientation = currentState.localMBasis.rotation.applyAfter(currentBoneOrientation.localMBasis.rotation, this.tempRot1);
+        let canonToCurrent = this.frameCanonical.getGlobalMBasis().rotation.getRotationTo(currentOrientation, this.tempRot2);
+        this.tempVec1.setComponents(0, 1, 0);
+        this.frameCanonical.localMBasis.rotation.applyToVec(this.tempVec1, this.tempVec1);
+        canonToCurrent.getSwingTwist(this.tempVec1, this.swing, this.twist);
+        //here we can just ignore the twist component, since the full preference rotation is the one that amounts to no twist.
+        let frameToTwistlessCurrentState = this.swing.applyAfter(this.frameCanonical.localMBasis.rotation, this.tempOutRot);
+        currentOrientation.getRotationTo(frameToTwistlessCurrentState, this.constraintResult.fullRotation);
+        this.constraintResult.fullRotation.shorten();      
+        this.constraintResult.markSet(true);
+        return this.constraintResult;
+    }
     
 
     /**sets the reference basis of the bone this constraint is attached to as being whatever pose the bone is currently in
@@ -157,8 +181,8 @@ export class Twist extends LimitingReturnful {
         this.__frame_calc_internal.adoptLocalValuesFromIKNode(this.frameCanonical);
         this.__bone_calc_internal.adoptLocalValuesFromIKNode(this.boneCanonical);
         this.__bone_calc_internal.setRelativeToParent(this.__frame_calc_internal);
-        this.twistAxis.set(this.boneCanonical.localMBasis.getYHeading());
-        this.frameCanonical.localMBasis.rotation.getSwingTwist(this.pool.any_Vec3(0,1,0), this.swing, this.twist);
+        this.twistAxis.set(this.frameCanonical.localMBasis.getYHeading());
+        this.__frame_calc_internal.localMBasis.rotation.getSwingTwist(this.pool.any_Vec3(0,1,0), this.swing, this.twist);
         this.baseZ = this.twist.getAngle();
         this.frameCanonical.localMBasis.writeToTHREE(this.displayGroup);
         this.frameCanonical.markDirty();
@@ -172,15 +196,22 @@ export class Twist extends LimitingReturnful {
      */
     setBaseZ(baseZ, ensureTwistAxis = true) {
         let startTwistAx = this.pool.any_Vec3fv(this.twistAxis);
-        if(!ensureTwistAxis) {
-            this.setCurrentAsReference();
-        } else {
+        /*if(ensureTwistAxis) {
             this.setTwistAxis(startTwistAx, false);
-        }
-        this.baseZ = baseZ;
-        this.__frame_internal.emancipate();
+        }*/
+        this.baseZ = parseFloat(baseZ);
+        this.frameCanonical.localMBasis.rotation.getSwingTwist(this.pool.any_Vec3(0,1,0), this.swing, this.twist);
+        let newZRot = this.tempOutRot.setFromAxisAngle(this.pool.any_Vec3(0,1,0), this.baseZ);
+        this.swing.applyAfter(newZRot, this.frameCanonical.localMBasis.rotation);
+        this.frameCanonical.localMBasis.lazyRefresh();
+        this.frameCanonical.markDirty();
+        this.frameCanonical.updateGlobal();
+        this.__frame_internal.adoptLocalValuesFromIKNode(this.frameCanonical).markDirty();
+        this.__frame_calc_internal.adoptLocalValuesFromIKNode(this.frameCanonical).markDirty();        
+        this.frameCanonical.getGlobalMBasis().writeToTHREE(this.displayGroup);
+        /*this.__frame_internal.emancipate();
         this.__frame_internal.reset();
-        this.__frame_internal.localMBasis.rotation.setFromAxisAngle(this.pool.any_Vec3(0,1,0), baseZ);
+        this.__frame_internal.localMBasis.rotation.setFromAxisAngle(this.pool.any_Vec3(0,1,0), this.baseZ);
         this.__frame_internal.markDirty();
         this.__frame_internal.localMBasis.lazyRefresh();
         let yAlignRot = Rot.fromVecs(this.__frame_internal.localMBasis.getYHeading(), this.twistAxis);
@@ -192,7 +223,7 @@ export class Twist extends LimitingReturnful {
         this.__frame_internal.emancipate();
         this.__frame_internal.reset();
         this.__frame_internal.markDirty();
-        this.__frame_internal.updateGlobal(); 
+        this.__frame_internal.updateGlobal();*/
                
         this.updateDisplay();
         return this;
@@ -311,29 +342,7 @@ export class Twist extends LimitingReturnful {
         return result;
     }
 
-    updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy) {
-        this.constraintResult.reset(iteration);
-        /**
-         * get the desired orientation in parentbone space from the composition of currentstate*currentboneorienteation
-         * get the rotation that brings framecanonical to the desired orientation.
-         * do a swingtwist decomposition.
-         * apply just the swing to framecanonical's rotation to get back to the twistless version of the desired orientation.
-         * finally, return the difference between the currentstate and the resulting frame orientation
-         */
-        if(iteration >= this.giveup) return this.constraintResult;
-
-        let currentOrientation = currentState.localMBasis.rotation.applyAfter(currentBoneOrientation.localMBasis.rotation, this.tempRot1);
-        let canonToCurrent = this.frameCanonical.getGlobalMBasis().rotation.getRotationTo(currentOrientation, this.tempRot2);
-        this.tempVec1.setComponents(0, 1, 0);
-        this.frameCanonical.localMBasis.rotation.applyToVec(this.tempVec1, this.tempVec1);
-        canonToCurrent.getSwingTwist(this.tempVec1, this.swing, this.twist);
-        //here we can just ignore the twist component, since the full preference rotation is the one that amounts to no twist.
-        let frameToTwistlessCurrentState = this.swing.applyAfter(this.frameCanonical.localMBasis.rotation, this.tempOutRot);
-        currentOrientation.getRotationTo(frameToTwistlessCurrentState, this.constraintResult.fullRotation);
-        this.constraintResult.fullRotation.shorten();      
-        this.constraintResult.markSet(true);
-        return this.constraintResult;
-    }
+    
 
     discomfortScale(val) {
         return val;

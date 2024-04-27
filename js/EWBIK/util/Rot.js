@@ -481,7 +481,7 @@ export class Rot {
         const norm = Math.sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
         if (norm === 0) throw new Error("Zero Norm for Rotation defining vector");
 
-        const halfAngle = -0.5 * angle;
+        const halfAngle = 0.5 * angle;
         const coeff = Math.sin(halfAngle) / norm;
 
         this.w = Math.cos(halfAngle);

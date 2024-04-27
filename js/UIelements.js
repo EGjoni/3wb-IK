@@ -1092,6 +1092,7 @@ ${wb.forBone.toString()}
             lc.setControlPoint(dir); 
             forKusudama.updateTangentRadii();
             forKusudama.updateDisplay();
+            lc.refresh();
         });
         coneBefore.addEventListener("click", (event) => {
             let dir = null;
@@ -1233,7 +1234,14 @@ ${wb.forBone.toString()}
         });
         result.qs('.set-current-pose-as-reference').addEventListener('click', (e) => {
             forTwist.setCurrentAsReference();
+            result.refresh();
         });
+        result.refresh = () => {
+            base.qs(".slider").value = forTwist.getBaseZ();
+            baseResult.value = forTwist.getBaseZ();
+            range.qs(".slider").value = forTwist.getRange();
+            rangeOutput.value = forTwist.getRange();
+        }
         
         return wrapper;
     }
