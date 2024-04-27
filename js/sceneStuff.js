@@ -165,12 +165,12 @@ async function select(item) {
 }
 
 
-function addSceneArmature(armature, makePrettyBones = true, initPinList = true) {
+function addSceneArmature(armature, makePrettyBones = true, initPinList = true, prettyBoneMode = 'plate') {
     //window.armatures.push(armature);    
     //armature.inferOrientations(armature.rootBone);
     //initHumanoidRestConstraints(armature);
     if(makePrettyBones) {
-        initPrettyBones(armature);
+        initPrettyBones(armature, prettyBoneMode);
     }
     if(initPinList) {
         makePinsList(1, armature.armatureObj3d, armature);
@@ -222,7 +222,7 @@ function updateGlobalBoneLists() {
 }
 
 
-function makePinMeshHint(ikpin, pinSize, into) { 
+function makePinMeshHint(ikpin, pinSize, into, alignMesh = false) { 
     //let boneHeight = b.height
     let baseSize = ikpin.forBone.height;
     const targHint = ikpin.forBone.bonegeo != null ? ikpin.forBone.bonegeo : ikpin.forBone.getIKBoneOrientation();
@@ -234,13 +234,18 @@ function makePinMeshHint(ikpin, pinSize, into) {
     const material = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
     const targMesh = new THREE.Mesh(geometry, material);
     //targMesh.position.set(0, b.height/2, 0);
-    targMesh.matrix.copy(globalTrans);
-    targMesh.matrix.decompose(targMesh.position, targMesh.quaternion, targMesh.scale);
+    
     let addTo = into;
     if(ikpin.targetNode != null) {
         addTo = ikpin.targetNode.toTrack;
     }
-    addTo.attach(targMesh);
+    if(alignMesh) {
+        targMesh.matrix.copy(globalTrans);
+        targMesh.matrix.decompose(targMesh.position, targMesh.quaternion, targMesh.scale);
+        addTo.attach(targMesh);
+    } else {
+        addTo.add(targMesh);
+    }
     targMesh.name = ikpin.ikd;
     targMesh.ikd = ikpin.ikd;
     targMesh.layers.set(boneLayer);
@@ -265,9 +270,8 @@ function makePinsList(pinSize, into = scene, armature, align = false, domakemesh
             let ikpin = b.getIKPin();
             
             if (ikpin.targetNode.toTrack == null || (domakemesh && ikpin.hintMesh == null)) {
-                ikpin.hintMesh = makePinMeshHint(ikpin, pinSize, ikpin.target_threejs.parent);
-                if(ikpin.targetNode.toTrack == null) ikpin.targetNode.setTracked(ikpin.hintMesh);
-                
+                ikpin.hintMesh = makePinMeshHint(ikpin, pinSize, ikpin.target_threejs.parent, align);
+                if(ikpin.targetNode.toTrack == null) ikpin.targetNode.setTracked(ikpin.hintMesh);                
             } 
             if(align) {
                 ikpin.alignToBone();
@@ -647,16 +651,21 @@ function findThing(startNode, name) {
     }
 }
 
-function findBone(startNode) {
-    if (startNode instanceof THREE.Bone)
-        return startNode;
+function findBone(startNode, multiple = false) {
+    let result = [];
+    if (startNode instanceof THREE.Bone) {
+        if(!multiple) return startNode;
+        return [startNode];
+    }
     for (let c of startNode.children) {
         console.log(c.type + " " + c.name);
-        let result = findBone(c);
-        if (result instanceof THREE.Bone) {
-            return result;
+        let res = findBone(c, multiple);
+        if (!multiple && res instanceof THREE.Bone) {
+            return res;
         }
+        result.push(...res);
     }
+    return result;
 }
 
 
@@ -670,9 +679,9 @@ function printBoneNames(startNode, depth = 0) {
     }
 }
 
-function initPrettyBones(armature, mode, override, depth = 999) {
-    armature._maybeInferOrientation(armature.rootBone, mode, override, depth - 1);
-    armature.showBones(0.1, true);
+function initPrettyBones(armature, prettyBoneMode = 'plate', boneRadius = 0.1, override, depth = 999) {
+    armature._maybeInferOrientation(armature.rootBone, 'statistical', override, depth - 1);
+    armature.showBones(boneRadius, true, prettyBoneMode);
 }
 
 async function switchSelected(key) {

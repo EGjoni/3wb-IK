@@ -268,12 +268,13 @@ export class EWBIK extends Saveable {
      * creates and adds to the scene physical manifestations of each bone on this armature,
      * @param radius width of bones
      * @param solvedOnly if false, will render all bones, not just the solver relevant ones.
+     * @param mode 'cone' or 'plate'. With the latter displahying the convex hull of the union of a cone and the bases of the children
      */
-    showBones(radius = 0.5, solvedOnly = false) {
+    showBones(radius = 0.5, solvedOnly = false, mode = 'plate') {
         this.meshList.slice(0, 0);
         if (this.dirtyShadowSkel) this.regenerateShadowSkeleton();
         for (const bone of this.bones) {
-            this.makeBoneMesh(bone, radius, 'plate');
+            this.makeBoneMesh(bone, radius, mode);
         }
     }
 
@@ -620,9 +621,9 @@ export class EWBIK extends Saveable {
             fromBone.height = fromBone.parent.height;
             if (count > 0) {
                 normeddir = sumVec.div(count).normalize(false);
-                if (mode == 'naive')
-                    fromBone.height = Math.sqrt(sum_sqheight) / Math.sqrt(count);
                 if (mode == 'statistical')
+                    fromBone.height = Math.sqrt(sum_sqheight) / Math.sqrt(count);
+                if (mode == 'naive')
                     fromBone.height = minChild;
             }
 

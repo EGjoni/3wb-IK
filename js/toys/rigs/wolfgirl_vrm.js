@@ -544,6 +544,34 @@ export function initWolfGirlCosmeticPins(armature) {
 
 }
 
+export function addElbowSuggestions(armature) {
+    let J_Bip_L_LowerArm_pin = new IKPin(armature.bonetags["J_Bip_L_LowerArm"]);
+    J_Bip_L_LowerArm_pin.setPinWeight(0.0131);
+    J_Bip_L_LowerArm_pin.setTargetPriorities(0.0000, 0.0305, 0.0000);
+    J_Bip_L_LowerArm_pin.setDepthFalloff(1.0000);    
+    J_Bip_L_LowerArm_pin.alignToBone();
+
+    J_Bip_L_LowerArm_pin.target_threejs.updateMatrix();
+    armature.bonetags['J_Bip_C_Spine'].add(J_Bip_L_LowerArm_pin.target_threejs);    
+    J_Bip_L_LowerArm_pin.target_threejs.position.set(-0.52270832661406373, -0.1282534469002838, 0.06779664647059912);
+    J_Bip_L_LowerArm_pin.target_threejs.quaternion.set(0.697580754957137, 0.25904645982379604, -0.6365929026040323, -0.2025475211409958);
+    J_Bip_L_LowerArm_pin.target_threejs.scale.set(1, 1, 1);
+    J_Bip_L_LowerArm_pin.targetNode.ensure().mimic();
+    
+    let J_Bip_R_LowerArm_pin = new IKPin(armature.bonetags["J_Bip_R_LowerArm"]);
+    J_Bip_R_LowerArm_pin.setPinWeight(0.0131);
+    J_Bip_R_LowerArm_pin.setTargetPriorities(0.0000, 0.0305, 0.0000);
+    J_Bip_R_LowerArm_pin.setDepthFalloff(1.0000);
+    J_Bip_R_LowerArm_pin.alignToBone();
+
+    J_Bip_R_LowerArm_pin.target_threejs.updateMatrix();
+    armature.bonetags['J_Bip_C_Spine'].add(J_Bip_R_LowerArm_pin.target_threejs);    
+    J_Bip_R_LowerArm_pin.target_threejs.position.set(0.52270832661406373, -0.1282534469002838, 0.06779664647059912);
+    J_Bip_R_LowerArm_pin.target_threejs.quaternion.set(0.697580754957137, 0.25904645982379604, -0.6365929026040323, -0.2025475211409958);
+    J_Bip_R_LowerArm_pin.target_threejs.scale.set(1, 1, 1);
+    J_Bip_R_LowerArm_pin.targetNode.ensure().mimic();
+}
+
 
 export function initWolfGirl(armature, useLimiting = true, useRest = false, withRootRest = false) {
     initWolfGirlShortcuts(armature);

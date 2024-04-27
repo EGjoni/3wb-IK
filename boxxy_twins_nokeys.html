@@ -13,6 +13,7 @@
                 "gltf" : "./js/three/jsm/GLTFLoader.js",
                 "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
                 "vrm" : "./js/three/jsm/three-vrm.module.js",
+                "mesh-bvh" : "./js/toys/Boxxy/modules/three-mesh-bvh/index.module.js",
                 "enviro" : "./js/environment.js"
               }
         }
@@ -47,6 +48,8 @@
         import * as THREE from 'three';
         import { OrbitControls } from "./js/three/jsm/OrbitControls.js";
         import { TransformControls } from 'transformControls';
+        import {mergeGeometries} from "./js/three/utils/BufferGeometryUtils.js";
+        import {computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'mesh-bvh';
         import { Boxxy } from "./js/toys/Boxxy/Boxxy.js";
         import { GLTFLoader } from 'gltf';
         import { VRMLoaderPlugin } from 'vrm';
@@ -225,7 +228,7 @@
             );
 
             //armature.boxxy.hips.position.y *= 0.8;
-            armature.boxxy.addTo(scene, groundCubes);
+            armature.boxxy.addTo(scene, intersectables);
 
             armature.boxxy.hips.position.copy(armature.hip_pin.target_threejs.position);
             armature.boxxy.hipsNode.mimic();
@@ -252,14 +255,15 @@
 
         }
 
-        //const groundCubesMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
-        const groundCubesMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
-        const groundCubes = [];//new THREE.Group();
-        window.groundCubes = groundCubes;
+        //const groundGeosMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+        const groundGeosMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
+        const groundGeos = [];//new THREE.Group();
+        const intersectables = [];
+        window.groundMesh = null;
         //scene.add(groundCubes);
         function groundPlane() {
             let planeGeo = new THREE.BoxGeometry(10, 0.01, 10);
-            let gp = new THREE.Mesh(planeGeo, groundCubesMat);
+            let gp = new THREE.Mesh(planeGeo, groundGeosMat);
             groundCubes.push(gp);
             scene.add(gp);
         }
@@ -270,24 +274,30 @@
                 for(let z = 0; z<area; z+=spacing) {
                     let minx = Math.max(Math.random()*sizeDelta*maxdim, minDim);
                     let minz = Math.max(Math.random()*sizeDelta*maxdim, minDim);
-                    //let boxGeo = new THREE.SphereGeometry(Math.random()*minDim*heightDelta, 16, 16); 
-                    let boxGeo = new THREE.BoxGeometry(minx, 1/*Math.random()*minDim*heightDelta*/, minz);//new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //
-                    let boxMesh = new THREE.Mesh(boxGeo, groundCubesMat);
+                    let boxGeo = new THREE.SphereGeometry(Math.random()*minDim*heightDelta, 16, 16); 
+                    
+                    //let boxGeo = new THREE.BoxGeometry(minx, 1/*Math.random()*minDim*heightDelta*/, minz);//new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //
+                    /*let boxMesh = new THREE.Mesh(boxGeo, groundGeosMat);
                     boxMesh.position.x = x; boxMesh.position.z = z;
                     let xd = Math.abs(x-(area/2));
                     let zd = Math.abs(z-(area/2));
                     boxMesh.rotateX(-0.15+(.5*angleDelta - Math.random()*angleDelta)*(2*(xd+zd)/(area)));
                     boxMesh.rotateY((.5*angleDelta - Math.random()*angleDelta)*(2*(xd+zd)/(area)));
                     boxMesh.rotateZ((.5*angleDelta - Math.random()*angleDelta)*(2&(xd+zd)/(area)));
-                    boxMesh.material.side = 0;
-                    groundCubes.push(boxMesh);
-                    
-                    boxMesh.position.x += -area/2;
-                    boxMesh.position.z += -area/2;
-                    boxMesh.position.y += -1;
-                    scene.add(boxMesh)
+                    boxMesh.material.side = 0;*/
+                    groundGeos.push(boxGeo);
+                    window.testMesh = new Mesh(boxGeo, groundGeosMat);
+                    scene.add(testMesh);
+                    boxGeo.translate(-area/2, -1, -area/2);
+                    intersectables.push(groundGeos);
+
+                    //scene.add(boxMesh)
                 }
             }
+            let groundGeo = mergeGeometries(groundGeos, false);
+            window.groundMesh = new THREE.Mesh(groundGeo, groundGeosMat);
+            groundGeo.computeBoundsTree();
+            scene.add(groundMesh);
             /**groundCubes.position.x = -area/2;
             groundCubes.position.z = -area/2;
             groundCubes.position.y = -2;*/
