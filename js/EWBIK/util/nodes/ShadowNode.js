@@ -93,13 +93,14 @@ export class ShadowNode extends IKNode{
         return this;
     }
 
-    /**makes sure the shadowNode expectations are obeyes in case of topology modification */
+    /**makes sure the shadowNode expectations are obeyed in case of topology modification */
     ensure() {
         if(this._toTrack.parent != this.parent?._toTrack) {
             this.setTracked(this._toTrack);
         } else if(this.parent != null) {
             this.parent.ensure();
         }
+        return this;
     }
 
     /**Set the provided object3d as the one this ShadowNode tracks

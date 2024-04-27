@@ -1144,7 +1144,7 @@ function mergeGroups( geometry ) {
 
 	if ( geometry.groups.length === 0 ) {
 
-		console.warn( 'THREE.BufferGeometryUtils.mergeGroups(): No groups are defined. Nothing to merge.' );
+		console.warn( 'THREE..mergeGroups(): No groups are defined. Nothing to merge.' );
 		return geometry;
 
 	}

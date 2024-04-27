@@ -29,7 +29,7 @@
         import { VRMLoaderPlugin } from 'vrm';
         import { EWBIK, IKPin, IKTransform, Rest, ShadowNode, Vec3, Rot, Interpolator, any_Vec3} from "./js/EWBIK/EWBIK.js";
         import { OrbitControls } from "orbitControls";
-        import { initWolfGirl, initWolfGirlShortcuts, initWolfGirlConstraints, initWolfgirlInteractivePins, initWolfGirlCosmeticPins } from "./js/toys/rigs/wolfgirl_vrm.js";
+        import { initWolfGirl, initWolfGirlShortcuts, initWolfGirlConstraints, initWolfgirlInteractivePins, initWolfGirlCosmeticPins, addElbowSuggestions } from "./js/toys/rigs/wolfgirl_vrm.js";
         const loader = new GLTFLoader();
         loader.register((parser) => {
             return new VRMLoaderPlugin(parser);
@@ -146,6 +146,7 @@
             //initPrettyBones(armature);
             //window.updateParseStream("Addings constraints...", loadId);
             initWolfGirl(armature, useLimiting, useRest, false);
+            addElbowSuggestions(armature);
             //initWolfGirlShortcuts(armature);
             //initWolfGirlConstraints(armature);
             //makePinsList(1, armature.armatureObj3d, armature, true, true);

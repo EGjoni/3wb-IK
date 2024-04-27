@@ -867,11 +867,11 @@ ${wb.forBone.toString()}
         }*/
         window.showBones = e.target.checked;
         if (e.target.checked == false && D.byid('show-nonik-bones').checked == false) {
-            if (rendlrs != null)
-                rendlrs?.hide(boneLayer);
+            if (window.rendlrs != null)
+                window.rendlrs?.hide(boneLayer);
         } else {
-            if (rendlrs != null)
-                rendlrs?.show(boneLayer);
+            if (window.rendlrs != null)
+                window.rendlrs?.show(boneLayer);
         }
     });
 
@@ -890,11 +890,11 @@ ${wb.forBone.toString()}
             }
         }
         if (e.target.checked == false && D.byid('show-ik-bones').checked == false) {
-            if (rendlrs != null)
-                rendlrs?.hide(boneLayer);
+            if (window.rendlrs != null)
+                window.rendlrs?.hide(boneLayer);
         } else {
-            if (rendlrs != null)
-                rendlrs?.show(boneLayer);
+            if (window.rendlrs != null)
+                window.rendlrs?.show(boneLayer);
         }
     });
 

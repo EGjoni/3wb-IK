@@ -12,6 +12,7 @@
                 "gltf" : "./js/three/jsm/GLTFLoader.js",
                 "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
                 "vrm" : "./js/three/jsm/three-vrm.module.js",
+                "mesh-bvh" : "./js/toys/Boxxy/modules/three-mesh-bvh/index.module.js",
                 "enviro" : "./js/environment.js"
               }
         }
@@ -44,6 +45,8 @@
         import * as THREE from 'three';
         import {OrbitControls} from "./js/three/jsm/OrbitControls.js";
         import { TransformControls } from 'transformControls';
+        import {mergeGeometries} from "./js/three/utils/BufferGeometryUtils.js";
+        import {computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'mesh-bvh';
         import {Boxxy} from "./js/toys/Boxxy/Boxxy.js";
         import { GLTFLoader } from 'gltf';
         import { VRMLoaderPlugin } from 'vrm';

@@ -13,6 +13,7 @@
                 "gltf" : "./js/three/jsm/GLTFLoader.js",
                 "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
                 "vrm" : "./js/three/jsm/three-vrm.module.js",
+                "mesh-bvh" : "./js/toys/Boxxy/modules/three-mesh-bvh/index.module.js",
                 "enviro" : "./js/environment.js"
               }
         }
@@ -48,6 +49,8 @@
         import * as THREE from 'three';
         import { OrbitControls } from "./js/three/jsm/OrbitControls.js";
         import { TransformControls } from 'transformControls';
+        import {mergeGeometries} from "./js/three/utils/BufferGeometryUtils.js";
+        import {computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'mesh-bvh';
         import { Boxxy } from "./js/toys/Boxxy/Boxxy.js";
         import { GLTFLoader } from 'gltf';
         import { VRMLoaderPlugin } from 'vrm';
@@ -56,7 +59,7 @@
         import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
         import { Rest, Twist, Kusudama } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
         import { Vec3, Vec3Pool } from "./js/EWBIK/util/vecs.js";
-        import { Rot } from "./js/EWBIK/util/Rot.js"
+        import { Rot } from "./js/EWBIK/util/Rot.js";
         import {initWolfGirlShortcuts, initWolfGirlConstraints, initWolfGirlCosmeticPins} from "./js/toys/rigs/wolfgirl_vrm.js";
         
         window.Rest = Rest;
@@ -73,7 +76,7 @@
 
         // Scene, camera, and renderer setup
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.1, 1000);
         window.camera = camera;
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -122,7 +125,7 @@
         const clock = new THREE.Clock();
 
         async function init() {
-            randCubes(0.7, 0.8, 2, 0.9, 16);
+            randCubes(1, 3, 1, 0.9, 16)
             //groundPlane();
             loader.register((parser) => {
                 return new VRMLoaderPlugin(parser);
@@ -160,7 +163,7 @@
             follower_hand.targetNode.toTrack.position.y -= 0.05; follower_hand.targetNode.mimic();
             armature.boxxy.pool.finalize();
             clock.start();
-            //window.bbox = new THREE.BoxHelper(groundCubes, 0xffff00 );
+            //window.bbox = new THREE.BoxHelper(groundGeos, 0xffff00 );
             //window.bbox.update();
             orbitControls.maxDistance = 10;
             orbitControls.minDistance = 8;
@@ -226,7 +229,7 @@
             );
 
             //armature.boxxy.hips.position.y *= 0.8;
-            armature.boxxy.addTo(scene, groundCubes);
+            armature.boxxy.addTo(scene, intersectables);
 
             armature.boxxy.hips.position.copy(armature.hip_pin.target_threejs.position);
             armature.boxxy.hipsNode.mimic();
@@ -253,45 +256,54 @@
 
         }
 
-        //const groundCubesMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
-        const groundCubesMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
-        const groundCubes = [];//new THREE.Group();
-        window.groundCubes = groundCubes;
-        //scene.add(groundCubes);
-        function groundPlane() {
+        //const groundGeosMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+        const groundGeosMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
+        const groundGeos = [];//new THREE.Group();
+        const intersectables = [];
+        window.groundMesh = null;
+        //scene.add(groundGeos);
+        /*function groundPlane() {
             let planeGeo = new THREE.BoxGeometry(10, 0.01, 10);
-            let gp = new THREE.Mesh(planeGeo, groundCubesMat);
-            groundCubes.push(gp);
+            let gp = new THREE.Mesh(planeGeo, intersectables);
+            groundGeos.push(gp);
             scene.add(gp);
-        }
+        }*/
+
+        window.groundMesh = null;
         function randCubes(heightDelta, sizeDelta, spacing, angleDelta, area) {
-            let maxdim = spacing * 1.5;
-            let minDim = spacing;
-            for(let x = 0; x < area; x+=spacing) {
-                for(let z = 0; z<area; z+=spacing) {
+            let maxdim = spacing * 5;
+            let minDim = spacing/2;
+            for(let x = 0; x < area; x += spacing) {
+                for(let z = 0; z < area; z += spacing) {
                     let minx = Math.max(Math.random()*sizeDelta*maxdim, minDim);
                     let minz = Math.max(Math.random()*sizeDelta*maxdim, minDim);
-                    //let boxGeo = new THREE.SphereGeometry(Math.random()*minDim*heightDelta, 16, 16); 
-                    let boxGeo = new THREE.BoxGeometry(minx, 1/*Math.random()*minDim*heightDelta*/, minz);//new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //
-                    let boxMesh = new THREE.Mesh(boxGeo, groundCubesMat);
-                    boxMesh.position.x = x; boxMesh.position.z = z;
+                    let boxGeo = new THREE.SphereGeometry(Math.max(minDim, minDim+Math.random()*sizeDelta), 16, 16); 
+                    //let boxGeo = new THREE.BoxGeometry(minx, 1/*Math.random()*minDim*heightDelta*/, minz);//new THREE.DodecahedronGeometry(minx, 1);//, Math.random()*minDim*heightDelta); //
+                    //let boxMesh = new THREE.Mesh(boxGeo, groundGeosMat);
+
+                    /*boxGeo.position.x = x; boxMesh.position.z = z;
                     let xd = Math.abs(x-(area/2));
                     let zd = Math.abs(z-(area/2));
-                    boxMesh.rotateX(-0.15+(.5*angleDelta - Math.random()*angleDelta)*(2*(xd+zd)/(area)));
-                    boxMesh.rotateY((.5*angleDelta - Math.random()*angleDelta)*(2*(xd+zd)/(area)));
-                    boxMesh.rotateZ((.5*angleDelta - Math.random()*angleDelta)*(2&(xd+zd)/(area)));
-                    boxMesh.material.side = 0;
-                    groundCubes.push(boxMesh);
-                    
-                    boxMesh.position.x += -area/2;
-                    boxMesh.position.z += -area/2;
-                    boxMesh.position.y += -1;
-                    scene.add(boxMesh)
+                    boxGeo.rotateX(-0.15+(.5*angleDelta - Math.random()*angleDelta)*(2*(xd+zd)/(area)));
+                    boxGeo.rotateY((.5*angleDelta - Math.random()*angleDelta)*(2*(xd+zd)/(area)));
+                    boxGeo.rotateZ((.5*angleDelta - Math.random()*angleDelta)*(2&(xd+zd)/(area)));
+                    boxGeo.material.side = 0;*/
+                    groundGeos.push(boxGeo);
+                    //window.testMesh = new THREE.Mesh(boxGeo, groundGeosMat);
+                    //scene.add(testMesh);
+                    boxGeo.translate(x-area/2, -1-(Math.random()*heightDelta), z-area/2);
+                    //scene.add(boxMesh)
                 }
             }
-            /**groundCubes.position.x = -area/2;
-            groundCubes.position.z = -area/2;
-            groundCubes.position.y = -2;*/
+            let groundGeo = mergeGeometries(groundGeos, false);
+            window.groundMesh = new THREE.Mesh( groundGeo, groundGeosMat);
+            intersectables.push(groundMesh);
+            groundGeo.computeBoundsTree();
+            scene.add(groundMesh);
+            
+            /**groundGeos.position.x = -area/2;
+            groundGeos.position.z = -area/2;
+            groundGeos.position.y = -2;*/
         }
 
 

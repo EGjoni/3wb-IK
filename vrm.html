@@ -39,7 +39,7 @@
         import { Rest, Twist, Kusudama } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
         import { getMeshDescendants, initEnvironment } from "enviro";
         import {ArmatureSegment} from "./js/EWBIK/solver/ArmatureSegment.js";
-        import {initWolfGirl} from "./js/toys/rigs/wolfgirl_vrm.js";
+        import {initWolfGirl, addElbowSuggestions} from "./js/toys/rigs/wolfgirl_vrm.js";
         addDebugFuncs(THREE);
         window.Rest = Rest;
         window.ArmatureSegment = ArmatureSegment;
@@ -147,7 +147,9 @@
             initPrettyBones(armature);
             window.updateParseStream("Addings constraints...", loadId);
             initHumanoidRestConstraints(armature);
-            makePinsList(1, armature.armatureObj3d, armature, true, true);
+            makePinsList(1, armature.armatureObj3d, armature, false, true);
+           
+            //makePinsList(1, armature.armatureObj3d, armature, false, true); //to handle the new pins we added, making meshes for them but not aligning them to the bone
             window.updateParseStream("UI stuff...", loadId);
             updateGlobalBoneLists();
             initIK(armature);
@@ -194,6 +196,7 @@
 
         function initHumanoidRestConstraints(armature) {
             initWolfGirl(armature, true, false, true);
+            addElbowSuggestions(armature);
         }
 
         init();

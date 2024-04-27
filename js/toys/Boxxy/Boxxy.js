@@ -8,8 +8,11 @@ import { ShadowNode } from "../../EWBIK/util/nodes/ShadowNode.js";
 const THREE = await import("three");
 import {Rot} from "../../EWBIK/util/Rot.js";
 import { Foot } from "./Foot.js";
+import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'mesh-bvh';
 
-
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
 /**
  * Basic idea: 
  * 
@@ -533,7 +536,7 @@ export class Boxxy {
         let intrxRes = this.rayCaster.intersectObjects(this.groundObjects);
         for(let r of intrxRes) {
             r.normal.applyQuaternion(r.object.quaternion);
-            if(r.normal.dot(this.downVec) < -0.5) {
+            if(r.normal.dot(this.downVec) < -0.3) {
                 outvec.readFromTHREE(r.point);    
                 return r;
             } else break;
