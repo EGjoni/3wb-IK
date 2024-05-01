@@ -269,6 +269,18 @@ export class ShadowNode extends IKNode{
     }
 
 
+    delete() {
+        if (this.getParentAxes() !== null) {
+            this.updateGlobal();
+            this.getLocalMBasis().adoptValues(this.globalMBasis);
+            this.getParentAxes()._disown(this);
+            this.parent = null;
+            this.areGlobal = true;
+            this.markDirty();
+            this.updateGlobal();
+            this.toTrack.trackedBy = null;
+        }
+    }
     emancipate() {
         if (this.getParentAxes() !== null) {
             this.updateGlobal();

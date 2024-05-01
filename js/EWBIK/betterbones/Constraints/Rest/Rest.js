@@ -37,11 +37,11 @@ export class Rest extends Returnful {
      * 
      * Note that the solver needs to run at least 2 iterations per solve in order for this to accomplish anything. And the more iterations the merrier
      */
-    constructor(forBone, ikd='RestConstraint-'+(Rest.totalInstances++), pool = null) {
+    constructor(forBone, visibilityCondition = undefined, ikd='RestConstraint-'+(Rest.totalInstances++), pool) {
         super(forBone, undefined, ikd, pool);
         if(!Constraint.loadMode) {
             /**@type {IKNode}*/
-            this.boneFrameRest = new IKNode(null, null, undefined); //inferred orientation of the boneframe which would be required for IKBoneOrientation to be align with the transform the user specified.
+            this.boneFrameRest = new IKNode(undefined, undefined, undefined); //inferred orientation of the boneframe which would be required for IKBoneOrientation to be align with the transform the user specified.
             this.restPose_three = null;
             if (this.forBone != null) {            
                 //if(restPose != null)

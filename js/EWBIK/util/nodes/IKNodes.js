@@ -121,13 +121,13 @@ export class IKNode extends Saveable {
     }
 
     static fromObj3dGlobal(object3d) {
-        let result = new IKNode(null, null, undefined, this.pool);
+        let result = new IKNode(undefined, undefined, undefined, this.pool);
         result.adoptGlobalValuesFromObject3D(object3d);
         return result;
     }
 
     static fromObj3dLocal(object3d) {
-        let result = new IKNode(null, null, undefined, this.pool);
+        let result = new IKNode(undefined, undefined, undefined, this.pool);
         result.adoptLocalValuesFromObject3D(object3d);
         return result;
     }
@@ -523,6 +523,20 @@ export class IKNode extends Saveable {
         this.globalMBasis.lazyRefresh();
     }
 
+    
+    setToOrthon_XHeading(vec) {
+        if(this.dirty) this.updateGlobal();
+        return this.globalMBasis.setToOrthon_XHeading(vec);
+    }
+    setToOrthon_YHeading(vec) {
+        if(this.dirty) this.updateGlobal();
+        return this.globalMBasis.setToOrthon_YHeading(vec);
+    }
+    setToOrthon_ZHeading(vec) {
+        if(this.dirty) this.updateGlobal();
+        return this.globalMBasis.setToOrthon_ZHeading(vec);
+    }
+
     setToXHeading(vec) {
         if(this.dirty) this.updateGlobal();
         return this.globalMBasis.setToXHeading(vec);
@@ -556,6 +570,26 @@ export class IKNode extends Saveable {
             this.getGlobalMBasis().rotation.equals(ax.globalMBasis.rotation) &&
             this.getGlobalMBasis().origin().equals(ax.origin_)
         );
+    }
+
+    /**
+     * determines if the given node is a descendant of this one (inclusive)
+     * @param {IKNode | ShadowNode} node 
+     * @returns true if the given node is a descendant of this one, false otherwise
+     */
+    hasDescendant(node) {
+        return node.hasAncestor(this);
+    }
+
+    /**
+     * determines if the given node is an ancestor of this one (inclusive)
+     * @param {IKNode | ShadowNode} node 
+     * @returns true if the given node is a descendant of this one, false otherwise
+     */
+    hasAncestor(node) {
+        if(node == this) return true;
+        else if(this.parent == null) return false;
+        return this.parent.hasAncestor(node);
     }
 
     /**
@@ -652,12 +686,15 @@ export class IKNode extends Saveable {
         }
         if(!isCommon) {
             for(let i =0; i<nodelist.length; i++) {
-                    nodelist[i] = nodelist[i].parent
+                if(nodelist[i].parent != null) {
+                    nodelist[i] = nodelist[i].parent;
+                }
             }
             return IKNode.getCommonAncestor(nodelist, shallowest-1);
         }
         else return common;
     }
+    
 
     /**visual comparison of two IKNode's local and global values*/
     static compareWith(node1, node2) {

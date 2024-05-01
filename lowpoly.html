@@ -123,7 +123,7 @@
             armature.inferOrientations(armature.rootBone);
             printBoneNames(rootBone);            
             initHumanoidRestConstraints(armature);
-            armature.showBones(0.1, true);
+            armature.generateBoneMeshes(0.1, true);
             initIK(armature);
             updateGlobalPinLists();
             updateGlobalBoneLists();

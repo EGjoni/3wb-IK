@@ -179,21 +179,6 @@
             render(true);
         }
 
-
-        window.render = function (incrFrame = false) {
-            camera.layers.set(0);
-            window.renderer.render(scene, camera);
-            window.renderer.clearDepth();
-            const currentBackground = scene.background;
-            const currentFog = scene.fog;
-            scene.background = null;
-            scene.fog = null;
-            camera.layers.set(1);
-            window.renderer.render(scene, camera);
-            scene.background = currentBackground;
-            scene.fog = currentFog;
-        }
-
         window.addEventListener('resize', onWindowResize, false);
         init();
     </script>

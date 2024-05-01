@@ -15,7 +15,7 @@ export class Constraint extends Saveable {
     /**
      * @type {IKTransform}
      */
-    boneOrientationBasis = new IKTransform(null, null, null, null, null);
+    boneOrientationBasis = new IKTransform(undefined, undefined, undefined, undefined, undefined);
     forBone = null;
 
     /**
@@ -77,7 +77,7 @@ export class Constraint extends Saveable {
      * this doesn't need to be explicitly parented to anything, but will always be interpreted as being parented
      * to whatever the bone is parent to. If one isn't provide, it's taken to mean one isn't needed
     * */    
-    constructor(forBoneOrConstraint, basis=null, ikd = `Constraint-${Constraint.totalInstances++}`, pool=null) {
+    constructor(forBoneOrConstraint, basis=null, ikd = `Constraint-${Constraint.totalInstances++}`, pool) {
         super(ikd, new.target.name, new.target.totalInstances, pool);
         
         let bone = forBoneOrConstraint;
@@ -239,7 +239,7 @@ export class Constraint extends Saveable {
      asNode(maybeNotNode) {
         let result = null;
         if(maybeNotNode instanceof Object3D) {  
-            result = new IKNode(null, null, undefined, this.pool);
+            result = new IKNode(undefined, undefined, undefined, this.pool);
             result.adoptLocalValuesFromObject3D(maybeNotNode);
             result.markDirty();
         } else if (maybeNotNode instanceof IKNode) {
@@ -636,7 +636,7 @@ export class ConstraintStack extends LimitingReturnful {
      * @param {*} ikd 
      * @param {*} pool 
      */
-    constructor(forBoneOrConstraint, ikd='ConstraintStack-'+ConstraintStack.totalInstances++, pool=null) {
+    constructor(forBoneOrConstraint, ikd='ConstraintStack-'+ConstraintStack.totalInstances++, pool) {
         super(forBoneOrConstraint, null, ikd, pool);
         if(this.forBone != null && this.parentConstraint == null) {
             this.forBone.setConstraint(this); 
@@ -648,12 +648,12 @@ export class ConstraintStack extends LimitingReturnful {
     }
 
     initNodes() {
-        this.lastPrefState = new IKNode(null, null, undefined);
-        this.lastBoneOrientation = new IKNode(null, null, undefined);
+        this.lastPrefState = new IKNode(undefined, undefined, undefined, this.pool);
+        this.lastBoneOrientation = new IKNode(undefined, undefined, undefined, this.pool);
         this.lastBoneOrientation.setParent(this.lastPrefState); 
         this.lastBoneOrientation.adoptLocalValuesFromObject3D(this.forBone?.getIKBoneOrientation());
-        this.lastLimitState = new IKNode(null, null, undefined);
-        this.lastLimitBoneOrientation = new IKNode(null, null, undefined);
+        this.lastLimitState = new IKNode(undefined, undefined, undefined, this.pool);
+        this.lastLimitBoneOrientation = new IKNode(undefined, undefined, undefined, this.pool);
         this.lastLimitBoneOrientation.setParent(this.lastLimitState); 
         this.lastLimitBoneOrientation.adoptLocalValuesFromObject3D(this.forBone?.getIKBoneOrientation());
         if(this.parentConstraint != null) this.setVisibilityCondition(this.parentConstraint.visible);

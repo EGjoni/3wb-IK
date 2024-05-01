@@ -15,11 +15,14 @@ export class IKPin extends Saveable{
     /**@type {IKNode} */
     targetNode = null;
     pinWeight = 0.5;
-    depthFalloff = 0;
+    influenceOpacity = 1;
     modeCode = 3;
     xPriority = 0.5;
     yPriority = 0.5;
     zPriority = 0;
+    xScale = 1;
+    yScale = 1; 
+    zScale = 1;
     
     static XDir = 0b001;
     static YDir = 0b010;
@@ -33,7 +36,7 @@ export class IKPin extends Saveable{
         result.zPriority = this.zPriority;
         result.modeCode = this.modeCode;
         result.isEnabled = this.enabled;
-        result.depthFalloff = this.depthFalloff;
+        result.influenceOpacity = this.influenceOpacity;
         return result;
     }
 
@@ -161,6 +164,9 @@ export class IKPin extends Saveable{
             this.targetNode.setTracked(this.target_threejs);
         }
         this.targetNode.mimic();
+        this.targetNode.markDirty();
+        this.affectoredOffset.ensure();	
+		this.affectoredOffset.markDirty();
     }
 
     toggle() {
@@ -204,19 +210,19 @@ export class IKPin extends Saveable{
 	 * @param depth
 	 */
 
-    setDepthFalloff(depth) {
-        let prevDepth = this.depthFalloff;        
-		this.depthFalloff = parseFloat(depth);
-		if((this.depthFalloff == 0 && prevDepth != 0) 
-		|| (this.depthFalloff != 0 && prevDepth == 0)) {
+    setInfluenceOpacity(depth) {
+        let prevDepth = this.influenceOpacity;        
+		this.influenceOpacity = parseFloat(depth);
+		if((this.influenceOpacity == 1 && prevDepth != 1) 
+		|| (this.influenceOpacity != 1 && prevDepth == 1)) {
 			this.forBone?.parentArmature?.regenerateShadowSkeleton();
 		} else {
 			this.forBone?.parentArmature?.updateShadowSkelRateInfo();
 		}
     }
 
-    getDepthFalloff() {
-        return this.depthFalloff;
+    getInfluenceOpacity() {
+        return this.influenceOpacity;
     }
 
     getPinWeight() {
@@ -224,26 +230,19 @@ export class IKPin extends Saveable{
     }
 
     setPinWeight(weight) {
-        const prevWeight = this.pinWeight;
+        //const prevWeight = this.pinWeight;
         this.pinWeight = Math.max(weight, 0);
         this.targetNode.ensure();
+        this.setPSTPriorities(this.positionPriority, this.swingPriority, this.twistPriority);
         this.forBone?.parentArmature.updateShadowSkelRateInfo();
-        if(this.isEnabled()) {
-            if(prevWeight <= 0 && this.pinWeight > 0) {
-                this.forBone?.parentArmature?.regenerateShadowSkeleton();
-            } 
-            if(this.pinWeight <= 0 && prevWeight >= 0)  {
-                this.forBone?.parentArmature?.regenerateShadowSkeleton();
-            }
-        }
     }
     
     /**returns the normalized priority for the requested basis direction */
-    getPriority(basisDirection) {
+    getNormedPriority(basisDirection) {
         switch(basisDirection) {
-            case IKPin.XDir: return this.xPriority;
-            case IKPin.YDir: return this.yPriority;
-            case IKPin.ZDir: return this.zPriority; 
+            case IKPin.XDir: return this.normed_priorities[0];
+            case IKPin.YDir: return this.normed_priorities[1];
+            case IKPin.ZDir: return this.normed_priorities[2]; 
         }
     }
 
@@ -294,12 +293,13 @@ export class IKPin extends Saveable{
             maxPriority = Math.max(priorities[2], maxPriority);
             priorityCount++;
         }
-        this.priorities = priorities;
-        this.priorities = priorities.map(priority => totalPriority == 0 || maxPriority == 0 ? 0 : (priority / totalPriority)*maxPriority);
+        this.normed_priorities = priorities;
+        this.normed_priorities = priorities.map(priority => totalPriority == 0 || maxPriority == 0 ? 0 : (priority / totalPriority)*maxPriority);
 		
         this.xPriority = priorities[0];
 		this.yPriority = priorities[1];
-		this.zPriority = priorities[2];	
+		this.zPriority = priorities[2];
+        this.affectoredOffset.ensure();	
 		this.targetNode.ensure();
         
         if(prevmodecode < this.modeCode) {
@@ -307,6 +307,62 @@ export class IKPin extends Saveable{
         }
         this.forBone?.parentArmature?.updateShadowSkelRateInfo();
         return this;
+    }
+
+
+
+    /**
+     * Experimental, more concise and expressive method for specifying target priorities.
+     * Instead of a redundantly specifying three orientation heading weights, this distributes the weight across three bases consistently such that 
+     * swing_weight + (2*twist_weight) = (swing_priority + twist_priority)/2. 
+     * The swing priority maps onto the weight of the y heading, and the twist priority maps on to the x and z headings.
+     * Which means if swing_priority and twist_priority are both 1, the weights on the corresponding axes are
+     * x= 0.5, y = 1, z=0.5.  The x and z axes get half the weight of the y axis because they will get doubled up by the minimizer.
+     * 
+     * 
+     * @param {Number} position a value from 0-1, indicating how much the affected bone should try to match its affectored position to the pin's position. A value of 0 keeps the bone where it is. A value of 1 tries to get it to where the target is, and any value inbetween tries to get it somewhere inbetween (this is per solve iteration, so the only situations in whhere this doesn't ultimately end up reaching the target position are ones where this value is 0, or being drowned out by other considerations) 
+     * @param {Number} swing a value from 0 to 1, indicating how strongly the solver should attempt to align the bone's y-axis with the target y axis
+     * @param {Number} twist a value from 0 to 1, indicating how strongly the solver should attempt to align the bone's xz axes with the target's xz axes. 
+     */
+    setPSTPriorities(position, swing, twist) {
+        this.position_Weight = position; 
+        let norm = (swing+twist/2);
+        this.x_Weight = (norm*twist)/2;
+        this.y_Weight = norm*swing;
+        this.z_Weight = (norm*twist)/2;
+        this.normed_weights[this.position_Weight, this.x_Weight, this.y_Weight, this.z_Weight];
+        this.forBone?.parentArmature?.updateShadowSkelRateInfo();
+    }
+
+    get positionPriority() {return this._positionPriority;}
+    set positionPriority(val) {
+        this._positionPriority = val;
+        this.setPSTPriorities(this._positionPriority, this._swingPriority, this._twistPriority);
+    }
+
+    get swingPriority() {return this._swingPriority;}
+    set swingPriority(val) {
+        this._swingPriority = val;
+        this.setPSTPriorities(this._positionPriority, this._swingPriority, this._twistPriority);
+    }
+
+    get twistPriority() {return this._twistPriority;}
+    set twistPriority(val) {
+        this._twistPriority = val;
+        this.setPSTPriorities(this._positionPriority, this._swingPriority, this._twistPriority);
+    }
+
+
+    /**Sets the magnitude of the basis vectors of this target. This has a different effect it than changing the priorites of those same directions. 
+     * It's a bit difficult to convey the difference in words but, to a reasonable approximation, you can think of this as controlling how much ancestor of the effect care about the orientation of the effector. 
+     * With low scales, ancestor bones won't care very much about descendant orientation, attempting to mostly match on position. whereas with large scales ancestor bones will care a lot. 
+     * the pinned bone itself shouldn't be too affected by these values.
+     * 
+    */
+    setTargetScales(xScale, yScale, zScale) {
+        this.xScale = xScale;
+        this.yScale = yScale;
+        this.zScale = zScale;
     }
 
 
@@ -345,7 +401,7 @@ export class IKPin extends Saveable{
     getXPriority() {
         return this.xPriority;
     }
-
+    
     getYPriority() {
         return this.yPriority;
     }
@@ -480,8 +536,8 @@ export class IKPin extends Saveable{
         let pinName = `${boneName}_pin`;
         string += `\nlet ${pinName} = new IKPin(armature.bonetags["${boneName}"]);\n`;
         string += `${pinName}.setPinWeight(${p.getPinWeight().toFixed(4)});\n`;
-        string += `${pinName}.setTargetPriorities(${p.priorities[0].toFixed(4)}, ${p.priorities[1].toFixed(4)}, ${p.priorities[2].toFixed(4)});\n`;
-        string += `${pinName}.setDepthFalloff(${p.getDepthFalloff().toFixed(4)});\n`;
+        string += `${pinName}.setPSTPriorities(${p.positionPriority.toFixed(4)}, ${p.swingPriority[1].toFixed(4)}, ${p.twistPriority[2].toFixed(4)});\n`;
+        string += `${pinName}.setInfluenceOpacity(${p.getInfluenceOpacity().toFixed(4)});\n`;
         if(!p.enabled) string+=`\n${pinName}.disable();`; 
         let pt = p.target_threejs;
         string += `${pinName}.target_threejs.position.set(${pt.position.x}, ${pt.position.y}, ${pt.position.z});\n`
@@ -500,6 +556,7 @@ export class IKPin extends Saveable{
         //this.targetNode.alignGlobalsTo(this.forBone.getIKBoneOrientation().trackedBy.getGlobalMBasis());
         this.targetNode.adoptGlobalValuesFromObject3D(this.forBone.getIKBoneOrientation());
         this.targetNode.project();
+        this.affectoredOffset.ensure();
         return this;
     }
 

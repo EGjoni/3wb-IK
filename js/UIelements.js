@@ -26,10 +26,14 @@ window.IKPin = IKPin;
 window.Bone = THREE.Bone;
 
 window.armatures = [];
+
 window.meshLayer = 0;
 window.boneLayer = 1;
+window.constraintLayer = 3;
 window.showBones = true;
 window.showMesh = true;
+window.showConstraints = true;
+window.renderableLayers = [showMesh, showBones, showBones, showConstraints];
 window.pin_transformActive = false;
 window.bone_transformActive = false;
 window.pin_transformDragging = false;
@@ -88,7 +92,35 @@ const defaultStack = `
         ${stackInnards}
     </fieldset>
 </div>
-`
+`;
+
+window.render = function (incrFrame = false) {
+    if (incrFrame) window.frameCount++;
+    doSolve();
+    if(window.renderableLayers[0]) {
+        camera.layers.set(0);
+        window.renderer.render(scene, camera);
+    }
+    window.renderer.clearDepth();
+    const currentBackground = scene.background;
+    const currentFog = scene.fog;
+    scene.background = null;
+    scene.fog = null;
+    if(window.renderableLayers[1]) {
+        camera.layers.set(1);
+        window.renderer.render(scene, camera);
+    }
+    if(window.renderableLayers[2]) {
+        camera.layers.set(2);
+        window.renderer.render(scene, camera);
+    }
+    if(window.renderableLayers[3]) {
+        camera.layers.set(3);
+        window.renderer.render(scene, camera);
+    }
+    scene.background = currentBackground;
+    scene.fog = currentFog;
+}
 
 
 
@@ -382,6 +414,8 @@ window.makeUI = function () {
         <label for="show-ik-bones">IK bones</label>
         <input type="checkbox" id="show-nonik-bones" name="show-nonik-bones" checked>
         <label for="show-nonik-bones">Irrelevant bones</label>
+        <input type="checkbox" id="show-constraints" name="show-constraints" checked>
+        <label for="show-constraints">Constraints (on focused bone)</label>
     </fieldset>
     <div> 
         <button id="save">Save Constraints</button>
@@ -715,7 +749,7 @@ ${wb.forBone.toString()}
             window.contextPin.disable();
             contextPin.forBone.parentArmature.regenerateShadowSkeleton(true); //force regeneration so we can update the preview
             makePinsList(1, window.contextBone.parentArmature.armatureObj3d, window.contextBone.parentArmature);
-            //window.contextBone.parentArmature.showBones(0.1, true);
+            //window.contextBone.parentArmature.generateBoneMeshes(0.1, true);
             updateGlobalPinLists();
             updateGlobalBoneLists();
             select(window.contextPin.forBone);
@@ -741,27 +775,24 @@ ${wb.forBone.toString()}
     });
     D.byid("falloff").addEventListener("input", (event) => {
         const fall = event.target.parentNode.qs('#falloff-output');
-        window.contextPin?.setDepthFalloff(event.target.value);
+        window.contextPin?.setInfluenceOpacity(event.target.value);
         fall.value = event.target.value;
         window.doSolve(contextPin.forBone, true);
     });
 
     D.byid("x-priority").addEventListener("input", (event) => {
-        const unexp = event.target.parentNode.qs('.un-exp-output');
         window.contextPin?.setXPriority(Math.pow(Math.E, event.target.value) - 1);;
-        unexp.value = window.contextPin.getXPriority().toFixed(4);
+        updateNormedPriorities(event.target.parentNode.parentNode, window.contextPin);
         window.doSolve(contextPin.forBone, true);
     });
     D.byid("y-priority").addEventListener("input", (event) => {
-        const unexp = event.target.parentNode.qs('.un-exp-output');
         window.contextPin?.setYPriority(Math.pow(Math.E, event.target.value) - 1);;
-        unexp.value = window.contextPin.getYPriority().toFixed(4);
+        updateNormedPriorities(event.target.parentNode.parentNode, window.contextPin);
         window.doSolve(contextPin.forBone, true);
     });
     D.byid("z-priority").addEventListener("input", (event) => {
-        const unexp = event.target.parentNode.parentNode.qs('.un-exp-output');
-        window.contextPin?.setZPriority(Math.pow(Math.E, event.target.value) - 1);;
-        unexp.value = window.contextPin.getZPriority().toFixed(4);
+        window.contextPin?.setZPriority(Math.pow(Math.E, event.target.value) - 1);
+        updateNormedPriorities(event.target.parentNode.parentNode, window.contextPin);
         window.doSolve(contextPin.forBone, true);
     });
 
@@ -849,9 +880,10 @@ ${wb.forBone.toString()}
         if (window.rendlrs != null) 
             window.rendlrs?.layerState(window.meshLayer, e.target.checked);
         window.showMesh = e.target.checked;
+        window.renderableLayers[meshLayer] = showMesh;
     });
 
-    D.byid('show-ik-bones').addEventListener('change', function (e) {
+    D.byid('show-nonik-bones').addEventListener('change', function (e) {
         /*for (let a of armatures) {
             if (a.ikReady) {
                 for (let b of a.bones) {
@@ -865,18 +897,19 @@ ${wb.forBone.toString()}
                 }
             }
         }*/
-        window.showBones = e.target.checked;
-        if (e.target.checked == false && D.byid('show-nonik-bones').checked == false) {
+        if (e.target.checked == false) {
+            window.renderableLayers[boneLayer+1] = false;
             if (window.rendlrs != null)
-                window.rendlrs?.hide(boneLayer);
+                window.rendlrs?.hide(boneLayer+1);
         } else {
+            window.renderableLayers[boneLayer+1] = true;
             if (window.rendlrs != null)
-                window.rendlrs?.show(boneLayer);
+                window.rendlrs?.show(boneLayer+1);
         }
     });
 
-    D.byid('show-nonik-bones').addEventListener('change', function (e) {
-        for (let a of armatures) {
+    D.byid('show-ik-bones').addEventListener('change', function (e) {
+        /*for (let a of armatures) {
             if (a.ikReady) {
                 for (let b of a.bones) {
                     if (b.bonegeo != null && a.shadowSkel?.isSolvable(b) == null) {
@@ -888,17 +921,29 @@ ${wb.forBone.toString()}
                     }
                 }
             }
-        }
-        if (e.target.checked == false && D.byid('show-ik-bones').checked == false) {
+        }*/
+        if (e.target.checked == false) {
+            window.renderableLayers[boneLayer] = false;
             if (window.rendlrs != null)
                 window.rendlrs?.hide(boneLayer);
         } else {
+            window.renderableLayers[boneLayer] = true;
             if (window.rendlrs != null)
                 window.rendlrs?.show(boneLayer);
         }
     });
 
-
+    D.byid("show-constraints").addEventListener('change', function (e) { 
+        if (e.target.checked == false) {
+            window.renderableLayers[constraintLayer] = false;
+            if (window.rendlrs != null)
+                window.rendlrs?.hide(constraintLayer);
+        } else {
+            window.renderableLayers[constraintLayer] = true;
+            if (window.rendlrs != null)
+                window.rendlrs?.show(constraintLayer);
+        }
+    });
 
     window.emptyConstraintNode = D.byid("default-stack").qs('.constraint-stack');
 
@@ -1092,7 +1137,7 @@ ${wb.forBone.toString()}
             lc.setControlPoint(dir); 
             forKusudama.updateTangentRadii();
             forKusudama.updateDisplay();
-            lc.refresh();
+            lcc.refresh();
         });
         coneBefore.addEventListener("click", (event) => {
             let dir = null;
@@ -1252,6 +1297,14 @@ ${wb.forBone.toString()}
     setDOMtoInternalState();
 }
 
+function updateNormedPriorities(pinDom, forPin) {
+    pinDom.qs("#x-priority").parentNode.qs(".un-exp-output").value = `${forPin.getXPriority().toFixed(4)} \
+    (${forPin.getNormedPriority(IKPin.XDir).toFixed(4)})`;        
+    pinDom.qs("#y-priority").parentNode.qs(".un-exp-output").value = `${forPin.getYPriority().toFixed(4)} \
+    (${forPin.getNormedPriority(IKPin.YDir).toFixed(4)})`;        
+    pinDom.qs("#z-priority").parentNode.qs(".un-exp-output").value = `${forPin.getZPriority().toFixed(4)} \
+    (${forPin.getNormedPriority(IKPin.ZDir).toFixed(4)})`;
+}
 
 window.updateInfoPanel = async function (item) {
     let armature = null;
@@ -1365,14 +1418,14 @@ window.updateInfoPanel = async function (item) {
         pinToggle.checked = true;
         pinDom.qs("#weight").value = Math.log(window.contextPin.getPinWeight() + 1);
         pinDom.qs("#weight").parentNode.qs(".un-exp-output").value = window.contextPin.getPinWeight().toFixed(4);
-        pinDom.qs("#falloff").value = window.contextPin.getDepthFalloff();
-        pinDom.qs("#falloff").parentNode.qs("#falloff-output").value = window.contextPin.getDepthFalloff();
+        pinDom.qs("#falloff").value = window.contextPin.getInfluenceOpacity();
+        pinDom.qs("#falloff").parentNode.qs("#falloff-output").value = window.contextPin.getInfluenceOpacity();
         pinDom.qs("#x-priority").value = Math.log(window.contextPin.getXPriority() + 1);
-        pinDom.qs("#x-priority").parentNode.qs(".un-exp-output").value = window.contextPin.getXPriority().toFixed(4);
         pinDom.qs("#y-priority").value = Math.log(window.contextPin.getYPriority() + 1);
-        pinDom.qs("#y-priority").parentNode.qs(".un-exp-output").value = window.contextPin.getYPriority().toFixed(4);
         pinDom.qs("#z-priority").value = Math.log(window.contextPin.getZPriority() + 1);
-        pinDom.qs("#z-priority").parentNode.qs(".un-exp-output").value = window.contextPin.getZPriority().toFixed(4);
+        updateNormedPriorities(pinDom, window.contextPin);
+        
+        
         if (window.contextPin?.targetNode?.toTrack?.parent) {
             pinDom.qs("#pin-parent-mode-hint").innerText = "Current parent: ";
             let obj3dParentobj3d = window.contextPin.targetNode.toTrack.parent;
@@ -1519,8 +1572,8 @@ function initRest(corb) {
 }
 
 
-const constraintEffectPreviewer1 = new IKNode(null,null,null, window.globalVecPool);
-const constraintEffectPreviewer2 = new IKNode(null,null, null, window.globalVecPool); 
+const constraintEffectPreviewer1 = new IKNode(undefined,undefined,undefined, window.globalVecPool);
+const constraintEffectPreviewer2 = new IKNode(undefined,undefined, undefined, window.globalVecPool); 
 constraintEffectPreviewer2.setParent(constraintEffectPreviewer1);
 
 /**constrains the bone on user input

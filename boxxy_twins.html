@@ -145,7 +145,7 @@
             armature.r_arm_upp.rotateZ(-1);
 
             follower.hip_pin.setPinWeight(0.1);
-            follower.hip_pin.setDepthFalloff(0.95);
+            follower.hip_pin.setInfluenceOpacity(1-0.95);
             follower.head_pin.setPinWeight(0.2);
             follower.l_arm_upp.rotateZ(1);
             let frhand = window.follower.bonetags["J_Bip_R_Hand"];
@@ -209,7 +209,7 @@
             armature.hipsTracker = window.hipsTracker;
             armature.hipPinNode = armature.hip_pin.targetNode;
             armature.hip_pin.setPinWeight(0.1);
-            armature.hip_pin.setDepthFalloff(0.9);
+            armature.hip_pin.setInfluenceOpacity(1-0.9);
             armature.head_pin.setPinWeight(0.4);
             armature.hip_pin.alignToBone();
             armature.head_pin.alignToBone();

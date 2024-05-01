@@ -2,11 +2,12 @@ const { Object3D, Bone } = await import("three");
 
 export class Saveable {
     static loadingList = [];
-    constructor(ikd, type, instanceNumber, pool) {
+    constructor(ikd, type, instanceNumber, pool=globalVecPool) {
         this.ikd = ikd;
         this.type = type;
         this.instanceNumber = instanceNumber;
         this.pool = pool;
+        this.pool.unfinalize(this); //since finalize gets called by the backing armature segment on regeneration anyway.
         this.autoBind();
     }
 

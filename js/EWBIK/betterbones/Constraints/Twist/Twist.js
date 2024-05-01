@@ -27,7 +27,7 @@ export class Twist extends LimitingReturnful {
     stockholmRate = 0.2;
     
     static fromJSON(json, loader, pool, scene) {
-        let result = new Twist(null, json.range, null, null, json.ikd, pool);
+        let result = new Twist(null, json.range, undefined, undefined, json.ikd, pool);
         return result;
     }
     async postPop(json, loader, pool) {
@@ -66,7 +66,7 @@ export class Twist extends LimitingReturnful {
     constructor(forBone, range=2*Math.PI-0.0001, referenceBasis = undefined, twistAxis = undefined, baseZ = undefined, visibilityCondition=undefined, ikd = 'Twist-'+(Twist.totalInstances++), pool=globalVecPool) {
         let basis = referenceBasis;
         if(referenceBasis == null && !Constraint.loadMode)
-            basis = new IKNode(null, null, null, pool);
+            basis = new IKNode(undefined, undefined, undefined, pool);
         super(forBone, basis, ikd, pool);
         
         
@@ -184,8 +184,8 @@ export class Twist extends LimitingReturnful {
         this.twistAxis.set(this.frameCanonical.localMBasis.getYHeading());
         this.__frame_calc_internal.localMBasis.rotation.getSwingTwist(this.pool.any_Vec3(0,1,0), this.swing, this.twist);
         this.baseZ = this.twist.getAngle();
-        this.frameCanonical.localMBasis.writeToTHREE(this.displayGroup);
         this.frameCanonical.markDirty();
+        this.display.updateGeo(this.range, this.forBone.height);
         this.updateDisplay();
         return this;
     }
@@ -248,6 +248,7 @@ export class Twist extends LimitingReturnful {
         if(ensureBaseZ) {
             this.setBaseZ(startZ, false);
         }
+        this.display.updateGeo(this.range, this.forBone.height);
         return this;
     }
 
@@ -284,6 +285,7 @@ export class Twist extends LimitingReturnful {
     setRange(range) {
         this.range = range;
         this.coshalfhalfRange = Math.cos(0.25*range); // set to a fourth, because the range is defined as being on either side of the reference orientation.
+        this.display.updateGeo(this.range, this.forBone.height);
         this.updateDisplay();
         return this;
     }
@@ -303,12 +305,10 @@ export class Twist extends LimitingReturnful {
     }
 
     updateDisplay() {        
-        this.frameCanonical.localMBasis.writeToTHREE(this.displayGroup);
         if(this.display.parent == null && this.forBone?.parent != null)
             this.forBone.parent.add(this.displayGroup);
         if(this.display.parent == null)
             this.displayGroup.add(this.display);
-        this.display.updateGeo(this.range, this.forBone.height);
         this.updateZHint();
     }
 
@@ -457,6 +457,7 @@ class TwistConstraintDisplay extends THREE.Mesh {
     }
 
     updateGeo(range = this?.forTwist?.range ?? null, radius = this.displayRadius) {
+        this.forTwist.frameCanonical.localMBasis.writeToTHREE(this);
         if(range == null) 
             throw new Error("needs a range");
         this.displayRadius = radius;

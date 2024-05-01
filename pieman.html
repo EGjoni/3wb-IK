@@ -126,7 +126,7 @@
             armature.right_hand_pin = new IKPin(armature.bonetags["forearmR_039"]);
             armature.left_hand_pin = new IKPin(armature.bonetags["handL001_033"]);
             armature.left_hand_pin.setPinWeight(0.038);
-            armature.left_hand_pin.setDepthFalloff(0.947);
+            armature.left_hand_pin.setInfluenceOpacity(1-0.947);
             let handL004_036_pin = new IKPin(armature.bonetags["handL004_036"]);
             handL004_036_pin.setPinWeight(0.943);
             armature.delicious_pin = new IKPin(armature.bonetags["spine004_05"]);

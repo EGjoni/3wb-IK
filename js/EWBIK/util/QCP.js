@@ -199,16 +199,22 @@ export class QCP {
 		let g1 = 0, g2 = 0;
 
 		let Sxx=0,Sxy=0, Sxz=0, Syx=0, Syy=0, Syz=0, Szx=0, Szy=0, Szz=0;
+		let ci1x, ci1y, ci1z, ci2x, ci2y, ci2z;  
+		let c1xidx, c2xidx;
+		let w = this.weight[i];
 
 		if (this.weight != null) {
 			// wsum = 0;
 			let x1, y1, z1;
+			
 			for (let i = 0; i < this.weight.length; i++) {
-				const ci1x = coords1[i].x, ci1y = coords1[i].y, ci1z = coords1[i].z;
-				const ci2x = coords2[i].x, ci2y = coords2[i].y, ci2z = coords2[i].z;
+				c1xidx = coords1[i].baseIdx;
+				c2xidx = coords2[i].baseIdx;
+				ci1x = coords1[c1xidx], ci1y = coords1[c1xidx+1], ci1z = coords1[c1xidx+2];
+				ci2x = coords2[c2xidx], ci2y = coords2[c2xidx+1], ci2z = coords2[c2xidx+2];
 
 				//we have to compute the S__ values that get used later, so we can't simplify g1 like we do g2 unfortunately :(
-				const w = this.weight[i];
+				w = this.weight[i];
 				x1 = w*ci1x;
 				y1 = w*ci1y;
 				z1 = w*ci1z;
@@ -231,8 +237,10 @@ export class QCP {
 			}
 		} else {
 			for (let i = 0; i < coords1.length; i++) {
-				const ci1x = coords1[i].x, ci1y = coords1[i].y, ci1z = coords1[i].z;
-				const ci2x = coords2[i].x, ci2y = coords2[i].y, ci2z = coords2[i].z;
+				c1xidx = coords1[i].baseIdx;
+				c2xidx = coords2[i].baseIdx;
+				ci1x = coords1[c1xidx], ci1y = coords1[c1xidx+1], ci1z = coords1[c1xidx+2];
+				ci2x = coords2[c2xidx], ci2y = coords2[c2xidx+1], ci2z = coords2[c2xidx+2];
 				
 				g1 += ci1x * ci1x + ci1y * ci1y + ci1z * ci1z;
 				g2 += ci2x * ci2x + ci2y * ci2y + ci2z * ci2z;

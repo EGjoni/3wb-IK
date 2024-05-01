@@ -96,6 +96,11 @@ async function select(item) {
         }
     }
 
+    if(window.activeSelection == item && item instanceof THREE.Bone && item.getIKPin() != null)
+        item = item.getIKPin();
+    if(window.activeSelection == item && item instanceof IKPin) 
+        item = item.forBone;
+
     if (item instanceof IKPin) {
         window.selectedPin = item;
         window.selectedPinIdx = pinsList.indexOf(selectedPin);
@@ -112,11 +117,14 @@ async function select(item) {
         window.contextArmature = window.contextBone.parentArmature;
         window.contextConstraint = window.contextBone.getConstraint() ?? null;
         window.contextBone.getIKBoneOrientation().add(boneAxesHelper);
-        boneAxesHelper.layers.set(window.boneLayer);
+        boneAxesHelper.layers.enableAll();
         window.contextPin.targetNode.toTrack.add(pinAxesHelper);
-        pinAxesHelper.layers.set(window.boneLayer);
+        pinAxesHelper.layers.enableAll();
+        window.activeSelection = contextPin;
+        item.forBone.parent.previouslySelectedDescendant = item.forBone.parent.getChildBoneList().indexOf(item.forBone);
         if(item.nonInteractive)
             item = item.forBone;
+        
     }
 
     if (item instanceof THREE.Bone) {
@@ -134,10 +142,11 @@ async function select(item) {
         window.contextArmature = selectedBone.parentArmature;
         window.contextConstraint = selectedBone.getConstraint() ?? null;
         window.contextBone.getIKBoneOrientation().add(boneAxesHelper);
-        boneAxesHelper.layers.set(window.boneLayer);
+        boneAxesHelper.layers.enableAll();
         window?.contextPin?.targetNode?.toTrack.add(pinAxesHelper);
-        pinAxesHelper.layers.set(window.boneLayer);
-        
+        pinAxesHelper.layers.enableAll();
+        window.activeSelection = contextBone;
+        item.parent.previouslySelectedDescendant = item.parent?.getChildBoneList().indexOf(item) ?? 0;
     }
     
     if (contextBone != window.prevContextBone) {
@@ -149,15 +158,15 @@ async function select(item) {
     camVec.readFromTHREE(camera.position);
     let camTarg = new window.Vec3();
     camTarg.readFromTHREE(orbitControls.target);
-    let lookDir = camTarg.subClone(camVec);
+    let lookDir = camTarg.subClone(camVec).normalize();
     if(contextPin != null) {
         let newTarg = new Vec3(); 
-        contextPin.targetNode.origin().subClone(camVec).projectedOn(lookDir, newTarg).add(camVec);
+        contextPin.targetNode.mimic().origin().subClone(camVec).projectedOn(lookDir, newTarg).add(camVec);
         newTarg.writeToTHREE(orbitControls.target);
     }
     if(contextBone != null && contextBone.trackedBy != null) {
         let newTarg = new Vec3(); 
-        contextBone.trackedBy.origin().subClone(camVec).projectedOn(lookDir, newTarg).add(camVec);
+        contextBone.trackedBy.mimic().origin().subClone(camVec).projectedOn(lookDir, newTarg).add(camVec);
         newTarg.writeToTHREE(orbitControls.target);
     }
     if(window.updateInfoPanel)
@@ -170,7 +179,7 @@ function addSceneArmature(armature, makePrettyBones = true, initPinList = true, 
     //armature.inferOrientations(armature.rootBone);
     //initHumanoidRestConstraints(armature);
     if(makePrettyBones) {
-        initPrettyBones(armature, prettyBoneMode);
+        initPrettyBones(armature, prettyBoneMode, undefined, false, undefined);
     }
     if(initPinList) {
         makePinsList(1, armature.armatureObj3d, armature);
@@ -216,7 +225,14 @@ function updateGlobalBoneLists() {
     for(let b of boneList) {
         if(b.getConstraint()) {
             b.getConstraint().layers.disable(window.meshLayer);
-            b.getConstraint().layers.set(window.boneLayer);
+            b.getConstraint().layers.set(window.constraintLayer);
+        }
+        if(b?.parentArmature && b.bonegeo) {
+            if(b.parentArmature?.shadowSkel?.isSolvable(b)) {
+                b.bonegeo.layers.set(window.boneLayer);
+            } else {
+                b.bonegeo.layers.set(window.boneLayer + 1);
+            }
         }
     }
 }
@@ -239,12 +255,16 @@ function makePinMeshHint(ikpin, pinSize, into, alignMesh = false) {
     if(ikpin.targetNode != null) {
         addTo = ikpin.targetNode.toTrack;
     }
-    if(alignMesh) {
-        targMesh.matrix.copy(globalTrans);
+    targMesh.matrix.copy(globalTrans);
         targMesh.matrix.decompose(targMesh.position, targMesh.quaternion, targMesh.scale);
+    if(alignMesh) {
         addTo.attach(targMesh);
+        targMesh.position.set(0,0,0);
+        targMesh.quaternion.set(0,0,0,1);
+        targMesh.updateMatrix();
     } else {
         addTo.add(targMesh);
+        
     }
     targMesh.name = ikpin.ikd;
     targMesh.ikd = ikpin.ikd;
@@ -320,10 +340,7 @@ async function doSolve(bone = null, interacted = false, preSolveCallback = null,
             }
         }
     }
-    //} 
-    if (bone != null) {
-        updateInfoPanel(bone);
-    }
+    
 }
 
 /**fucks with the scene hard. Makes everything from the rootnode up orthonormal*/
@@ -371,6 +388,7 @@ function initControls(THREE, renderer) {
     window.THREE = THREE;
     raycaster = new THREE.Raycaster();
     raycaster.layers.enable(window.boneLayer);
+    raycaster.layers.enable(window.boneLayer+1);
     window.mouse = new THREE.Vector2();
     window.orbitControls = new OrbitControls(camera, renderer.domElement);
     orbitControls.startTarget = orbitControls.target.clone();
@@ -384,7 +402,9 @@ function initControls(THREE, renderer) {
 
     boneCtrls = new TransformControls(camera, renderer.domElement);
     boneCtrls.space = 'local';
-    boneCtrls.layers.enableAll();
+    boneCtrls.layers.disable(0);
+    boneCtrls.layers.enable(boneLayer);
+    boneCtrls.layers.enable(boneLayer+1);
 
     boneCtrls.addEventListener('dragging-changed', function (event) {
         bone_transformActive = event.value;
@@ -420,7 +440,8 @@ function initControls(THREE, renderer) {
         bone_transformActive = event.value;
         pinOrientCtrls.enabled = !event.value;
         //pinTranslateCtrls.enabled = !event.value;
-        select(boneList[selectedBoneIdx]);
+        if(contextBone !== boneList[selectedBoneIdx])
+            select(boneList[selectedBoneIdx]);
         /*if (selectedBone.getConstraint() && selectedBone.wb) {
             selectedBone?.wb?.simLocalAxes.adoptLocalValuesFromObject3D(selectedBone);
             let resultRot = selectedBone?.getConstraint()?.getAcceptableRotation(
@@ -454,7 +475,8 @@ function initControls(THREE, renderer) {
 
     pinOrientCtrls = new TransformControls(camera, renderer.domElement);
     pinOrientCtrls.space = 'local'
-    pinOrientCtrls.layers.enableAll();
+    pinOrientCtrls.layers.enable(boneLayer);
+    pinOrientCtrls.layers.enable(boneLayer+1);
     //pinOrientCtrls.addEventListener('change', render);
     pinOrientCtrls.addEventListener('dragging-changed', function (event) {
         pin_transformActive = event.value;
@@ -519,8 +541,10 @@ function initControls(THREE, renderer) {
     setLayerrec(boneCtrls, window.boneLayer);
     setLayerrec(pinOrientCtrls, window.boneLayer);
     pinOrientCtrls.mode = 'combined';
-    pinOrientCtrls.getRayCaster().layers.set(boneLayer);
-    boneCtrls.getRayCaster().layers.set(boneLayer);
+    pinOrientCtrls.getRayCaster().layers.enable(boneLayer); 
+    pinOrientCtrls.getRayCaster().layers.enable(boneLayer+1);
+    boneCtrls.getRayCaster().layers.enable(boneLayer); 
+    boneCtrls.getRayCaster().layers.enable(boneLayer+1);
     pinOrientCtrls.size = 1;
     //pinOrientCtrls.size = 0.5;
     //pinTranslateCtrls.size = 1.2;
@@ -573,8 +597,9 @@ function initControls(THREE, renderer) {
         }
     });
 
-    boneCtrls.layers.set(window.boneLayer);
-    pinOrientCtrls.layers.set(window.boneLayer);
+    /*boneCtrls.layers.enable(boneLayer);
+    boneCtrls.layers.enable(boneLayer+1);*/
+    pinOrientCtrls.layers.enableAll();
     pin_transformActive = false;
     pin_transformDragging = false;
     selectedPinIdx = -1;
@@ -607,7 +632,8 @@ function initControls(THREE, renderer) {
             window.setDOMtoInternalState();
     }, false);
 
-    boneCtrls.layers.set(window.boneLayer);
+    //boneCtrls.layers.enable(window.boneLayer); 
+    //boneCtrls.layers.enable(window.boneLayer+1);
     //boneCtrls.getRayCaster().layers.set(window.boneLayer);
 
     document.addEventListener('keydown', function (event) {
@@ -681,10 +707,17 @@ function printBoneNames(startNode, depth = 0) {
 
 function initPrettyBones(armature, prettyBoneMode = 'plate', boneRadius = 0.1, override, depth = 999) {
     armature._maybeInferOrientation(armature.rootBone, 'statistical', override, depth - 1);
-    armature.showBones(boneRadius, true, prettyBoneMode);
+    armature.generateBoneMeshes(boneRadius, true, prettyBoneMode);
 }
 
 async function switchSelected(key) {
+    let active, activePar, candidateSiblings, toSelect;
+    active = window.contextBone; 
+    activePar = active?.parent; 
+    if(activePar != null) {
+        activePar.previouslySelectedDescendant = activePar.previouslySelectedDescendant ?? 0;
+        candidateSiblings = activePar instanceof Bone ? activePar.getChildBoneList() : activePar.children;
+    }
     switch (key) {
         case 'Escape':
             window.cancelInterstice()
@@ -703,6 +736,34 @@ async function switchSelected(key) {
             selectedBone.getIKBoneOrientation().add(boneAxesHelper);
             select(selectedBone)
             break;
+        case 'ArrowLeft': //previous sibling
+            if(activePar == null) break;
+            toSelect = candidateSiblings[(activePar.previouslySelectedDescendant + 1) % candidateSiblings.length];
+            if(toSelect == null || toSelect == active) break;
+            select(toSelect);
+            break;
+        case 'ArrowRight': //next sibling
+            if(activePar == null) break;
+            toSelect = candidateSiblings[(activePar.previouslySelectedDescendant + (candidateSiblings.length - 1)) % candidateSiblings.length];
+            if(toSelect == null || toSelect == active) break;
+            select(toSelect);
+            break;
+        case 'ArrowUp': //previously selected descendant if one was set, or first descendant otherwise
+            if(active == null) break;
+            let candidateChildren = active.getChildBoneList();
+            if(candidateChildren.length == 0) break;
+            active.previouslySelectedDescendant ??= 0;
+            toSelect = candidateChildren[Math.max(0, active.previouslySelectedDescendant) % candidateSiblings.length];
+            if(toSelect == null) break;
+            select(toSelect);
+            break;
+        case 'ArrowDown': //ancestor
+            if(activePar == null || !(activePar instanceof Bone)) break;
+            select(activePar);
+            break;
+        case ' ': //select again (for contextual selection cycles on between, for example, a bone and its target)
+            select(active);
+            break; 
         case 'p':
             selectedPinIdx = (selectedPinIdx + 1) % pinsList.length;
             if(!targetsMeshList[selectedPinIdx].nonInteractive) {

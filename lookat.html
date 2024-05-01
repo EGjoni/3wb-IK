@@ -163,7 +163,7 @@
 
         function initPose(armature) {
             armature.hip_pin.target_threejs.position.y -= .2;
-            armature.hip_pin.setDepthFalloff(0.8);
+            armature.hip_pin.setInfluenceOpacity(1-0.8);
             armature.hip_pin.setPinWeight(0.4);
             armature.l_hand_pin.setPinWeight(1);
             armature.l_hand_pin.setXPriority(0.16);
@@ -187,7 +187,7 @@
             let J_Bip_L_Hand_pin = armature.l_hand_pin;
             J_Bip_L_Hand_pin.target_threejs.position.set(-0.2628872730607969, 1.1320828172882704, -0.108023847915398);
             J_Bip_L_Hand_pin.target_threejs.quaternion.set(-0.466854980946203, -0.4415841689876301, 0.5158273464161427, 0.5665439057606263);
-            J_Bip_L_Hand_pin.setTargetPriorities(0.5, 0.5, 0);
+            J_Bip_L_Hand_pin.setTargetPriorities(1, 0.5,  0.5);
             //if(isRestOnly) {//Todo: This correcion shouldn't be necessary. Should figure out what's causing the difference
             //    J_Bip_L_Hand_pin.target_threejs.rotateZ(-1.5); 
             //}
@@ -197,7 +197,7 @@
             let J_Bip_R_Hand_pin = armature.r_hand_pin;
             J_Bip_R_Hand_pin.target_threejs.position.set(0.22725199632250082, 1.1271629356945718, -0.109638346652234);
             J_Bip_R_Hand_pin.target_threejs.quaternion.set(-0.4635192535441378, 0.4385467682483039, -0.5184121542461977, 0.5692762703491778);
-            J_Bip_R_Hand_pin.setTargetPriorities(0.5, 0.5, 0);
+            J_Bip_R_Hand_pin.setTargetPriorities(1, 0.5,  0.5);
             //if(isRestOnly) {//Todo: This correcion shouldn't be necessary. Should figure out what's causing the difference
             //    J_Bip_R_Hand_pin.target_threejs.rotateZ(1.5); 
             //}
@@ -214,13 +214,13 @@
             J_Bip_C_Hips_pin.target_threejs.position.set(-0.015845857272104392, 1.0629170260866243, 0.17429608236224103);
             J_Bip_C_Hips_pin.target_threejs.quaternion.set(0.9917688869306138, 0, 0, 0.12804091110426974);
 
-            let J_Bip_R_Foot_pin = armature.r_foot_pin;
+            /*let J_Bip_R_Foot_pin = armature.r_foot_pin;
             J_Bip_R_Foot_pin.target_threejs.position.set(0.13900366790462393, 0.43675138580707074, 0.08515916548568987);
             J_Bip_R_Foot_pin.target_threejs.quaternion.set(0.873397558546335, 0, 0, -0.48700791033134283);
 
             let J_Bip_L_Foot_pin = armature.l_foot_pin;
             J_Bip_L_Foot_pin.target_threejs.position.set(-0.19254600138696348, 0.3626079408726957, 0.12299547884725825);
-            J_Bip_L_Foot_pin.target_threejs.quaternion.set(0.873397558546335, 0, 0, -0.48700791033134283);
+            J_Bip_L_Foot_pin.target_threejs.quaternion.set(0.873397558546335, 0, 0, -0.48700791033134283);*/
         }
 
         async function loadModel(loadId, onloaded = (vrmscene) => { return vrmscene }) {

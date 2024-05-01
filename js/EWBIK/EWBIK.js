@@ -11,8 +11,9 @@ import { IKPin } from "./betterbones/IKpin.js";
 import { Rest, Twist, Kusudama, LimitCone, ConstraintStack} from "./betterbones/Constraints/ConstraintStack.js";
 import { Bone } from "three";
 import { Saveable, Loader } from "./util/loader/saveable.js";
-import { Object3D } from "../three/three.module.js";
+import { Object3D, Vector3 } from "../three/three.module.js";
 import { ShadowNode } from "./util/nodes/ShadowNode.js";
+import { ArmatureEffectors } from "./solver/effector.js";
 
 //import * as THREE from 'three';
 //import { LineSegments, Bone } from "three";
@@ -99,9 +100,10 @@ export class EWBIK extends Saveable {
     static __default_dampening = 0.1;
     static __dfitr = 15;
     static totalInstances = 0;
-    static XDIR = new Vec3(1, 0, 0);
-    static YDIR = new Vec3(0, 1, 0);
-    static ZDIR = new Vec3(0, 0, 1);
+    static XDIR = Object.freeze(new THREE.Vector3(1, 0, 0));
+    static YDIR = Object.freeze(new THREE.Vector3(0, 1, 0));
+    static ZDIR = Object.freeze(new THREE.Vector3(0, 0, 1));
+    _defaultPointingAxis = EWBIK.YDIR;
     defaultIterations = 15;
     dampening = EWBIK.__default_dampening;
     defaultStabilizingPassCount = 0;
@@ -129,6 +131,13 @@ export class EWBIK extends Saveable {
      * This is essentially a convenience to let the user specify that the last bone should make a best effort to orientation match while still allowing other bones in the chain to make less than a best effort.
      **/
     independentTerminal = true;
+
+    /**@type {Vec3Pool} pool of persistent data. Anything in here lives across multiple regenerations of the shadowSkeleton*/
+    stablePool = null;
+    /**@type {Vec3Pool} pool of stuff that gets deleted any time a shadowskeleton is regenerated*/
+    volatilePool = null;
+    /**@type {ArmatureEffectors} stores data shared by all effectors on an armature in pursuit of efficiency, but not shared across armatures due to cowardice*/
+    effectorBuffers = null;
 
     static async fromJSON(json, loader, pool, scene) {
         let foundBone = Loader.findSceneObject(json.requires.rootBone, scene);
@@ -194,11 +203,12 @@ export class EWBIK extends Saveable {
      * @param {*} defaultIterations 
      * @param {*} ikd 
      */
-    constructor(root, defaultIterations = EWBIK.__dfitr, ikd = `EWBIK-${EWBIK.totalInstances++}`, pool = new Vec3Pool(10000)) {
+    constructor(root, defaultIterations = EWBIK.__dfitr, ikd = `EWBIK-${EWBIK.totalInstances++}`, pool) {
         super(ikd, 'EWBIK', EWBIK.totalInstances, pool);
+        if(pool == null) this.pool = new Vec3Pool(10000, this, 10, 'stabelPool');
         this.rootBone = EWBIK.findRootBoneIn(root);
         this.stablePool = this.pool;
-        this.volatilePool = new Vec3Pool(this.pool.tempSize);
+        this.volatilePool = new Vec3Pool(this.pool.tempSize, this, 10, 'volatilePool');
         if(this.rootBone.trackedBy == null) this.rootBone.trackedBy = new ShadowNode(this.rootBone, undefined, this.stablePool);
         this.armatureObj3d = root.trackedBy.nodeDepth < this.rootBone.parent.nodeDepth ? root : this.rootBone.parent;
         this.armatureObj3d.ikd = 'EWBIK_armature_root-' + this.instanceNumber;
@@ -208,6 +218,8 @@ export class EWBIK extends Saveable {
         }        
         this.rootBone.registerToArmature(this);
         this.defaultIterations = defaultIterations;
+        /**this reserves a buffer with enough space for 100 simultaneous target effector pairs along all basis directions. Which is way more simultaneous pairs then you should ever use on a single armature**/
+        this.effectorBuffers = new ArmatureEffectors(350, tip.forBone.parentArmature);
         this.recreateBoneList();
     }
 
@@ -220,7 +232,7 @@ export class EWBIK extends Saveable {
         if (this.armatureObj3d != null) {
             this.armatureNode.mimic(true);
         }
-        this.tempNode = new IKNode();
+        this.tempNode = new IKNode(undefined, undefined, 'temp_node_for-'+this.ikd, this.stablePool);
         this.tempNode.setParent(this.armatureNode);        
     }
     /**
@@ -236,7 +248,8 @@ export class EWBIK extends Saveable {
         return this.defaultIterations;
     }
 
-    makeBoneGeo(boneRef, height, radius, mat, hullpoints) {
+    makeBoneGeo(boneRef, minHeight, radius, mat, hullpoints) {
+        const height = boneRef.height ?? boneRef.inferHeight('statistical', minHeight); 
         const cone = new THREE.ConeGeometry(radius * height, height, 5);
         cone.translate(0, height / 2, 0);
         const hull = hullpoints.length > 0 ? convexBlob(cone, ...hullpoints) : cone;
@@ -247,7 +260,6 @@ export class EWBIK extends Saveable {
         boneplate.forBone = boneRef;
         boneplate.bonegeo = boneplate;
         boneplate.name = 'bonegeo';
-        boneplate.layers.set(window.boneLayer);
         boneplate.visible = true;
         return boneplate;
     }
@@ -269,44 +281,42 @@ export class EWBIK extends Saveable {
      * @param radius width of bones
      * @param solvedOnly if false, will render all bones, not just the solver relevant ones.
      * @param mode 'cone' or 'plate'. With the latter displahying the convex hull of the union of a cone and the bases of the children
+     * @param minHeight the minimum height in global space
      */
-    showBones(radius = 0.5, solvedOnly = false, mode = 'plate') {
+    generateBoneMeshes(radius = 0.5, solvedOnly = false, mode = 'plate', minHeight=0.001) {
         this.meshList.slice(0, 0);
         if (this.dirtyShadowSkel) this.regenerateShadowSkeleton();
         for (const bone of this.bones) {
-            this.makeBoneMesh(bone, radius, mode);
+            this.makeBoneMesh(bone, radius, mode, minHeight);
         }
     }
 
     /**creates or recreates mesh and geometry to display the given bone*/
-    makeBoneMesh(bone, radius, mode = 'cone') {
-        const minSize = 0.001;
+    makeBoneMesh(bone, radius, mode = 'cone', minHeight = 0.001) {
         let oldGeo = bone.bonegeo;
         let idx = this.meshList.indexOf(oldGeo);
         let orientation = bone.getIKBoneOrientation();
-        //if (orientation.children.length == 0) {
-            let matObj = null;
-            if (this.shadowSkel?.isSolvable(bone) == null || bone.parent == null) {
-                matObj = { color: new THREE.Color(0.2, 0.2, 0.8), transparent: true, opacity: 0.6 };
-            } else {
-                matObj = { color: bone.color, transparent: true, opacity: 0.6 };
+        let matObj = null;
+        if (this.shadowSkel?.isSolvable(bone) == null || bone.parent == null) {
+            matObj = { color: new THREE.Color(0.2, 0.2, 0.8), transparent: true, opacity: 0.6 };
+        } else {
+            matObj = { color: bone.color, transparent: true, opacity: 0.6 };
+        }
+        let hullPoints = [];
+        if(mode =='plate') {                
+            for (let c of bone.childBones()) {
+                c.updateWorldMatrix();
+                hullPoints.push(orientation.worldToLocal(bone.localToWorld(c.position.clone())));
             }
-            let hullPoints = [];
-            if(mode =='plate') {                
-                for (let c of bone.childBones()) {
-                    c.updateWorldMatrix();
-                    hullPoints.push(orientation.worldToLocal(bone.localToWorld(c.position.clone())));
-                }
-            }
-            
-            let thisRadius = bone.parent instanceof THREE.Bone ? radius : radius / 2; //sick and tired of giant root bones. Friggen whole ass trunks.
-            let bonegeo = this.makeBoneGeo(bone, Math.max(bone.height ?? bone.parent?.height ?? minSize, minSize), thisRadius, matObj, hullPoints);
-            orientation.bonegeo = bonegeo;
-            bone.setBonegeo(bonegeo);
-            bone.bonegeo.layers.set(window.boneLayer);
-            bone.bonegeo.displayradius = radius; 
-            bone.visible = true;
-        //}
+        }
+        let wradius = radius/bone.getWorldScale(bone.scale.clone()).z;
+        let thisRadius = bone.parent instanceof THREE.Bone ? wradius : wradius / 2; //sick and tired of giant root bones. Friggen whole ass trunks.
+        let bonegeo = this.makeBoneGeo(bone, minHeight, thisRadius, matObj, hullPoints);
+        orientation.bonegeo = bonegeo;
+        bone.setBonegeo(bonegeo);
+        bone.bonegeo.displayradius = thisRadius; 
+        bone.visible = true;
+
         if(idx != -1) {
             this.meshList[idx] = bone.bonegeo;
         } else {
@@ -384,6 +394,7 @@ export class EWBIK extends Saveable {
             if(this.shadowSkel == null) this.regenerateShadowSkeleton(true);
             if (bone == null || this.shadowSkel.isSolvable(bone)) {
                 if(frameNumber > this.lastFrameNumber) {
+                    this.stablePool.finalize(); //just to be sure.
                     this.activeSolve = doSolve(this, bone, literal, iterations, stabilizingPasses, onComplete, debug_callbacks);                    
                 }
                 this.lastFrameNumber = frameNumber;
@@ -412,6 +423,10 @@ export class EWBIK extends Saveable {
      * internal async version of solve()
      * automatically solves the IK system of this armature from the given bone using
      * the given parameters.
+     * 
+     * Honestly, making this async is absolutely a case of dressing the programming language we want (parallel), and not the one we have (merely concurrent), but hopefully all of the vector pooling and async stuff will eventually converge to a system that requires minimum overhead for 
+     * webworker and wasm invocation. At which point, async will be great because you can solve armatures on one thread while doing other stuff on other threads
+     *
      * 
      * @param {Bone} bone optional, if given, the solver will only solve for the segment the given bone is on (and any of its descendant segments). Otherwise, the solver will solve for all segments.
      * @param {Boolean} literal optional, default faule, if true, the bone above will be treated as a literal stopping point, meaning no ancestors prior to it will be solved for, even if this results in an incomplete segment
@@ -546,6 +561,18 @@ export class EWBIK extends Saveable {
     inferOrientations(fromBone, mode, override = false, depth = Infinity) {
         this._maybeInferOrientation(fromBone, mode, override, depth - 1);
         this.regenerateShadowSkeleton();
+        return this;
+    }
+    /**
+     * Specifies that all bones should be interpreted to point in the direction of the provided axis (in the space of their parent bones)
+     * This basically just calls setInternalOrientationFor(vec) on all bones in the armature
+     * @param {Vec3|Vector3} vec 
+     */
+    declareDefaultOrientation(vec) {
+        for(let b of this.bones) {
+            this.setInternalOrientationFor(b, vec);
+        }
+        return this;
     }
 
     /**convenience function for overriding undesirable result of inferOrientations. 
@@ -559,17 +586,17 @@ export class EWBIK extends Saveable {
             throw new Error("This function cannot be used on bones that have already had constraints defined. It's dangerous and complicated.")
         }
         let orientation = forBone.getIKBoneOrientation();
-        let normeddir = this.pool.any_Vec3(0,0,0).readFromTHREE(pointTo);
-        forBone.height = normeddir.mag();
+        let normeddir = this.volatilePool.any_Vec3(0,0,0).readFromTHREE(pointTo);
         normeddir.normalize(false);
-        let rotTo = Rot.fromVecs(EWBIK.YDIR, normeddir);        
+        let defaultAxis = this.volatilePool.any_Vec3().readFromTHREE(this._defaultPointingAxis);
+        let rotTo = Rot.fromVecs(defaultAxis, normeddir);        
         orientation.quaternion.set(-rotTo.x, -rotTo.y, -rotTo.z, rotTo.w);
         
         if(forBone.bonegeo != null) {
             this.makeBoneMesh(forBone, forBone?.bonegeo?.displayradius, 'cone');
         }
         forBone.setIKBoneOrientation(orientation);
-        orientation?.trackedBy?.mimic();        
+        orientation?.trackedBy?.mimic();  
     }
 
 
@@ -598,7 +625,7 @@ export class EWBIK extends Saveable {
         if(depth == 0) return;
         let orientation = fromBone.getIKBoneOrientation();
         if (orientation.placeholder == true || override) {
-            let sumVec = this.pool.any_Vec3(0, 0, 0);
+            let sumVec = this.volatilePool.any_Vec3(0, 0, 0);
             let sumheight = fromBone.height ?? 0;
             let count = 0;
             let minChild = 999;
@@ -607,7 +634,7 @@ export class EWBIK extends Saveable {
             let childPoints = [this.volatilePool.any_Vec3(0,0,0)]; //always include this bone's base position
             for (let cb of fromBone.childBones()) {
                 count++;
-                let childvec = this.pool.any_Vec3(cb.position.x, cb.position.y, cb.position.z);
+                let childvec = this.volatilePool.any_Vec3(cb.position.x, cb.position.y, cb.position.z);
                 let childMagSq = childvec.magSq();
                 let childMag = Math.sqrt(childMagSq);
                 sum_sqheight += childMagSq; //helps weigh in favor of further bones, because a lot of rigs do weird annoying things with twist bones.
@@ -618,21 +645,13 @@ export class EWBIK extends Saveable {
                 childPoints.push(childvec);
             }
             let normeddir = sumVec;
-            fromBone.height = fromBone.parent.height;
-            if (count > 0) {
-                normeddir = sumVec.div(count).normalize(false);
-                if (mode == 'statistical')
-                    fromBone.height = Math.sqrt(sum_sqheight) / Math.sqrt(count);
-                if (mode == 'naive')
-                    fromBone.height = minChild;
-            }
 
             let rotTo = /*pcaOrientation(childPoints, fromBone, 
               (vecs, refBasis) => {
                 if(normeddir.magSq() == 0 || vecs.length == 0) {
                     return new Rot(1,0,0,0);
                 }                    
-                let result = */Rot.fromVecs(EWBIK.YDIR, normeddir);
+                let result = */Rot.fromVecs(this.volatilePool.any_Vec3().readFromTHREE(EWBIK.YDIR), normeddir);
                 /*if(isNaN(result.w)) return new Rot(1,0,0,0);
                 return result;
               }
@@ -652,11 +671,11 @@ export class EWBIK extends Saveable {
     _regenerateShadowSkeleton() {
         this.armatureNodeUpdated = false;
         this.volatilePool.reclaim();
-        this.stablePool.unfinalize();
+        this.stablePool.unfinalize(this);
 
         this.shadowSkel = new ShadowSkeleton(this, this.rootBone, this.armatureNode, this.getDampening());
-        
-        
+        this.recorderSolveCallStart = 0;
+
         this.lastRequestedSolveFromBone = null;
         this.dirtyShadowSkel = false;
         this._updateShadowSkelRateInfo();
@@ -803,6 +822,28 @@ export class EWBIK extends Saveable {
     }
 
 
+    recordHeadings = false;
+    recordSteps = -1;
+    recorderPool = null;
+    recorderSolveCallStart = 0;
+
+    _init_debug_recorder(recordStepCount) {
+        this.recordSteps = recordStepCount;
+        this.recordHeadings = true;
+        if(this.recorderPool == null)
+            this.recorderPool = new Vec3Pool(1000, this);
+        else this.recorderPool.unfinalize(this);
+        
+        this.recorderSolveCallStart = this.shadowSkel.solveCalls;
+    }
+
+    _dispose_debug_recorder() {
+        this.recordSteps = -1;
+        this.recordHeadings = false;
+        this.recorderPool.dispose();
+        delete this.recorderPool; 
+    }
+
 
     _debug_iteration(solveFrom, iterations = this.defaultIterations, callbacks = null) {
         if (this.dirtyShadowSkel)
@@ -900,6 +941,7 @@ export class EWBIK extends Saveable {
         }
         
     }*/
+    __tempVec3 = new THREE.Vector3(0,0,0);
 }
 
 
@@ -1026,9 +1068,7 @@ let betterbones = {
      * @param {Object3d} newOrientation 
      */
     setIKBoneOrientation(newOrientation) {
-        if (this.orientation == null)
-            this.orientation = newOrientation
-        else if (newOrientation != this.orientation) {
+        if (newOrientation != this.getIKBoneOrientation()) {
             this.orientation.copy(newOrientation);
         }
         this.orientation.placeholder = false;
@@ -1134,7 +1174,61 @@ let betterbones = {
         return this;
     },
     original_add: THREE.Bone.prototype.add,
-
+    original_copy: THREE.Bone.prototype.copy,
+    copy(elem, recursive) {
+        let res = this.original_copy(elem, recursive);
+        this.setIKBoneOrientation(elem.getIKBoneOrientation().clone(recursive));
+        if(elem.bonegeo != null) {
+            this.setBonegeo(elem.bonegeo.clone(recursive));
+        }
+        this.height = elem.height;
+        return res;
+    },
+    /**
+     * Mostly just useful for cosmetic stuff, but this
+     * infers a height for this bone based on its childrens position. Inference mode can be 'statistical' or 'naive'. 
+     * the former will attempt to determine an ideal height based on the weighted average distance of its children,
+     * the latter will set it to the distance to its closest child, unless that distance is closer than the provided minHeight value.
+     * 
+     * the computed value gets cached internally and can be called with bone.height. only use this function when you want to reinfer the height
+    * @param {*} mode 
+    * @param {*} minHeight the minimum bone height in global space
+    * @return {Number} the inferred height.
+    */
+    inferHeight(mode = 'statistical', minHeight = 0.001) {
+        let wMinHeight = minHeight/this.getWorldScale(this.scale.clone()).y;
+        let pool = this.parentArmature?.volatilePool ?? window.globalVecPool;
+        let sumVec = pool.any_Vec3(0, 0, 0);
+        let sumheight = 0;
+        let count = 0;
+        let minChild = 999;
+        let maxChild = -1;
+        let sum_sqheight = sumheight;
+        let childPoints = [pool.any_Vec3(0,0,0)]; //always include this bone's base position
+        for (let cb of this.childBones()) {
+            count++;
+            let childvec = pool.any_Vec3(cb.position.x, cb.position.y, cb.position.z);
+            let childMagSq = childvec.magSq();
+            let childMag = Math.sqrt(childMagSq);
+            sum_sqheight += childMagSq; //helps weigh in favor of further bones, because a lot of rigs do weird annoying things with twist bones.
+            sumheight += childMag;
+            minChild = Math.max(Math.min(minChild, childMag), wMinHeight);
+            maxChild = Math.max(maxChild, sumheight);
+            sumVec.add(childvec);
+            childPoints.push(childvec);
+        }
+        let normeddir = sumVec;
+        this.height = wMinHeight;
+        if (count > 0) {
+            normeddir = sumVec.div(count).normalize(false);
+            if (mode == 'statistical')
+                this.height = Math.sqrt(sum_sqheight) / Math.sqrt(count);
+            if (mode == 'naive')
+                this.height = minChild;
+        }
+        this.height = Math.max(wMinHeight, this.height);
+        return this.height;
+    },
     add(elem) {
         this.original_add(elem);
         if (elem instanceof THREE.Bone) {
@@ -1145,7 +1239,22 @@ let betterbones = {
             }
         }
     },
+    original_removeFromParent: THREE.Bone.prototype.removeFromParent,
+    removeFromParent() {
+        this.original_removeFromParent();        
+        this?.trackedBy?.delete();
+        if (this.parentArmature != null) {
+            this.parentArmature.recreateBoneList();
+            this.parentArmature.regenerateShadowSkeleton(true);
+        }
+        if(this?.bonegeo != null && this?.parentArmature != null) {
+            let idx = this.parentArmature.meshList.indexOf(this.bonegeo)
+            this.parentArmature.meshList.splice(idx, 1);
+        }
+        this?.bonegeo?.geometry?.dispose();
+        this?.geometry?.dispose();
 
+    },
     *childBones() {
         for (let i = 0; i < this.children.length; i++) {
             if (this.children[i] instanceof THREE.Bone)

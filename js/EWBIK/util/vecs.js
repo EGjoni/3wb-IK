@@ -194,7 +194,18 @@ export class Vec3 {
 
     /**manhattan distance of this vec from the origin */
     magnhattan() {
-        return Math.abs(this.x+this.y+this.z);
+        const baseX = this.baseIdx;
+        const db = this.dataBuffer;
+        return Math.abs(db[baseX])+
+            Math.abs(db[baseX+1])+
+            Math.abs(db[baseX+2]);
+    }
+
+    /**sum of components of this vector */
+    sum() {
+        const baseX = this.baseIdx;
+        const db = this.dataBuffer;
+        return db[baseX]+db[baseX+1]+db[baseX+2];
     }
 
 
@@ -356,12 +367,24 @@ export class Vec3 {
         return result;
     }
 
+
     mult(scalar) {
         const baseX = this.baseIdx;
         this.dataBuffer[baseX] *= scalar;
         this.dataBuffer[baseX+1] *= scalar;
         this.dataBuffer[baseX+2] *= scalar;
         return this;
+    }
+
+    
+    multInto(scalar, result) {
+        const resBuf = result.dataBuffer;
+        const baseX = this.baseIdx;
+        const resBaseX = result;
+        resBuf[resBaseX] = this.dataBuffer[baseX]*scalar;
+        resBuf[resBaseX+1] = this.dataBuffer[baseX+1]*scalar;
+        resBuf[resBaseX+2] = this.dataBuffer[baseX+2]*scalar;
+        return result;
     }
 
     multClone(scalar, result = this.clone()) {
@@ -435,6 +458,16 @@ export class Vec3 {
         result.set(this);
         result.sub(v);
         return result;
+    }
+
+    /**subtract the provided value from all components */
+    allSub(amount) {
+        const db = this.dataBuffer;
+        const baseX = this.baseX;
+        db[baseX] -= amount;
+        db[baseX+1] -= amount;
+        db[baseX+2] -= amount;
+        return this;
     }
 
 
@@ -562,28 +595,64 @@ export class Vec3Pool {
     isUnfinalized = false;
     pendingFirstReInsert = false;
     lru = -1;
+    newVecsCreated = 0;
+    newVecsCreatedSinceOwnerUnfinalized = 0;
+    lastUnfinalizedBy = null;
+    owner = null;
+    limitScale = 10;
 
-    constructor(tempSize = 10000) {
+    /**
+     * 
+     * @param {Number} tempSize number of vectors to make a pool for. This will create two buffers of the same size. One for scratchpad vectors that gets reused in an LRU cycl,
+     * and one for persistent vectors that don't get touch after finalize is called. 
+     * @param {Object} owner the entity instantiating this vector pool. anyone can call unfinalize to add new persistent vectors, but only the owner can finalize it, and the number of new entries is limited when unfinalized by anyone but the owner
+     * @param {Number} limitScale some number to throw an error if too many vectors are added without the owner's knowledge. "too many" == tempSize*limitScale. You can disable this error by giving a value of -1
+     */
+    constructor(tempSize = 1000, owner, limitScale = 10, poolName = 'pool') {
+        this.owner = owner;
+        this.limitScale = limitScale;
+        this.poolName = poolName;
         this.setTempPoolSize(tempSize);
     }
 
-
-    unfinalize() {
+    unfinalize(calledBy) {
+        
+        if(calledBy == this.owner) {
+            //console.group(this.poolName+' '+calledBy.ikd);     
+            this.newVecsCreatedSinceOwnerUnfinalized = 0;
+            this.lastUnfinalizedBy = calledBy;
+        }
+        if(this.lastUnfinalizedBy != this.owner || this.lastUnfinalizedBy == null)
+            this.lastUnfinalizedBy = calledBy ?? this.lastUnfinalizedBy;
+        
+        if(this.isFinalized) {
+            this.pendingFirstReInsert = true;
+            this.newVecsCreated = 0;
+            
+        } else if(this.limitScale > 0) {
+            if(this.newVecsCreatedSinceOwnerUnfinalized > this.tempSize * this.limitScale
+                && this.lastUnfinalizedBy != this.owner && this.lastUnfinalizedBy != null) {
+                    throw new Error("Buffer uncontrolled buffer insertion limit exceeded. You can not insert more new vectors than the pool was initialized with unless the pool was unlocked by the owner");
+            } 
+        }
         this.isFinalized = false;
         this.isUnfinalized = true;
-        this.pendingFirstReInsert = true;
     }
 
     reclaim() {
-        this.isFinalized = false;  
+        this.isFinalized = false; 
+        this.lastUnfinalizedBy = null; 
+        this.pendingFirstReInsert = false;
+        this.isUnfinalized = false;
         this.lru = -1;
+        this.newVecsCreated = 0;
         if(this.persistentPool?.length > 0) {
             this.reclaimedPool = this.persistentPool;//.push(...this.persistentPool);
             this.inProgressPool = [];
             this.persistentPool = [];
         }
         this.releaseTemp();
-        console.log("RECLAIMED: " + this.reclaimedPool.length);
+        console.log(this.poolName+ " RECLAIMED: " + this.reclaimedPool.length);
     }
 
     
@@ -633,6 +702,9 @@ export class Vec3Pool {
                 this.inProgressPool.push(newV);
             } else {
                 newV = new Vec3(x, y, z);
+                this.newVecsCreated++;
+                if(this.lastUnfinalizedBy != this.owner)
+                    this.newVecsCreatedSinceOwnerUnfinalized++;
                 this.inProgressPool.push(newV);
             }
             return newV;
@@ -667,6 +739,9 @@ export class Vec3Pool {
                 this.inProgressPool.push(newV);
             } else {
                 newV = new Vec3(x, y, z);
+                this.newVecsCreated++;
+                if(this.lastUnfinalizedBy != this.owner)
+                    this.newVecsCreatedSinceOwnerUnfinalized++;
                 this.inProgressPool.push(newV);
             }
             return newV;
@@ -740,33 +815,124 @@ export class Vec3Pool {
     }
 
     finalize() {
-        if(this.reclaimedPool.length > 0) {
-            this.persistentPool = this.inProgressPool;
-            this.inProgressPool = [];   
-            this.isFinalized = true; 
-            this.isUnfinalized = false; 
-            this.pendingFirstReInsert = false;         
-            return;
-        }
-        const newBuffer  = new Float64Array(this.inProgressPool.length * 3);
-        const oldBuffer = this.persistentBuffer;
-        for (let i = 0; i < this.inProgressPool.length; i++) {
-            const baseIdx = i*3;
-            const vec = this.inProgressPool[i];
-            const vx = vec.x, vy = vec.y, vz = vec.z;
-            newBuffer[baseIdx] = vx;
-            newBuffer[baseIdx+1] = vy;
-            newBuffer[baseIdx+2] = vz;
-            vec.dataBuffer = newBuffer;
-            vec.baseIdx = baseIdx;
-        }
-        this.persistentBuffer = newBuffer;
+        if(this.isFinalized) return;
+        let endgroup = true;
+        this.lastUnfinalizedBy = null;
+        if(this.pendingFirstReInsert) {
+            this.pendingFirstReInsert = false;
+        } else {
+            if(this.newVecsCreated > 0) {
+                //console.log(this.poolName+' size has grown by ' + this.newVecsCreated+'. New pool size is '+ this.inProgressPool.length); 
+            }
+            if(this.reclaimedPool.length > 0 || this.newVecsCreated == 0 && this.inProgressPool.length > 0) {
+                this.persistentPool = this.inProgressPool;
+                this.inProgressPool = [];   
+                this.isFinalized = true; 
+                this.isUnfinalized = false; 
+                this.pendingFirstReInsert = false; 
+                if(this.reclaimedPool.length > 0) {
+                 //   console.log(this.poolName+" UNCLAIMED Vectors: " +this.reclaimedPool.length +'. New pool size is '+ this.inProgressPool.length+'\nCall trim() if you wish to free them from memory');
+                }
+                this.newVecsCreated = 0; 
+                this.newVecsCreatedSinceOwnerUnfinalized = 0;
+                //if(endgroup) console.groupEnd(this.poolName+' '+ this.owner);
+                return;
+            }
+            //if(endgroup) console.groupEnd(this.poolName+' '+ this.owner);
 
-        this.persistentPool = this.inProgressPool;
-        this.inProgressPool = [];
-        console.log("REMAINING: " +this.reclaimedPool);
+            const newBuffer  = new Float64Array(this.inProgressPool.length * 3);
+            const oldBuffer = this.persistentBuffer;
+            for (let i = 0; i < this.inProgressPool.length; i++) {
+                const baseIdx = i*3;
+                const vec = this.inProgressPool[i];
+                const vx = vec.x, vy = vec.y, vz = vec.z;
+                newBuffer[baseIdx] = vx;
+                newBuffer[baseIdx+1] = vy;
+                newBuffer[baseIdx+2] = vz;
+                vec.dataBuffer = newBuffer;
+                vec.baseIdx = baseIdx;
+            }
+            this.persistentBuffer = newBuffer;
+
+            this.persistentPool = this.inProgressPool;
+        }
+        this.inProgressPool = [];        
         this.isFinalized = true;
+        this.isUnfinalized = false; 
+        this.pendingFirstReInsert = false; 
         this.lru = -1;
+        this.newVecsCreated = 0; 
+        this.newVecsCreatedSinceOwnerUnfinalized = 0;
+        return this; 
+    }
+    /**
+     * trims excess from the persistemt buffer
+     * @param {Number} shrinkTemp 0-1, if provided, will shrink the temp buffer to persistentBuffer * resizeTemp elements, cycling the lru as necessary. will not grow the temp buffer unless a value greater than 1 is used
+     * @returns this pool for chaining
+     */
+    trim(shrinkTemp = false) {
+        if(!this.isFinalized) {
+            throw new Error("Can only trim finalized pools");
+        }
+
+        if(this.reclaimedPool.length > 0 || this.persistentPool.length * 3 < this.persistentBuffer.length) {
+            const newBuffer = new Float64Array(this.persistentPool.length * 3);
+            const oldBuffer = this.persistentBuffer;
+            for (let i = 0; i < this.persistentPool.length; i++) {
+                const baseIdx = i*3;
+                const vec = this.persistentPool[i];
+                const vx = vec.x, vy = vec.y, vz = vec.z;
+                newBuffer[baseIdx] = vx;
+                newBuffer[baseIdx+1] = vy;
+                newBuffer[baseIdx+2] = vz;
+                vec.dataBuffer = newBuffer;
+                vec.baseIdx = baseIdx;
+            }
+            let v = this.reclaimedPool.pop();
+            while(v != null) {
+                v.dataBuffer = null;
+                v = this.reclaimedPool.pop();
+            }
+            this.persistentBuffer = newBuffer;
+            console.log('Trimmed '+ ((oldBuffer.length -newBuffer.length)/3) + 'entries');
+        }
+        
+
+        if(shrinkTemp != false) {
+            
+            if(shrinkTemp * this.persistentPool.length < this.tempSize * shrinkTemp) {
+                let newLRU = this.lru % this.tempPool.length;
+                let newTempPool = []; 
+                while(newTempPool.length < this.tempPool.length && newTempPool.length < this.tempSize * shrinkTemp) {
+                    newTempPool.push(this.tempPool[newLRU]); 
+                    newLRU = (newLRU + (this.tempPool.length - 1)) % this.tempPool.length;
+                }
+                
+                let newLength = Math.max(newTempPool.length, this.tempSize * shrinkTemp);
+
+                let newTempBuff = new Float64Array(newLength * 3);
+                for (let i = 0; i < newTempPool.length; i++) {
+                    const baseIdx = i*3;
+                    const vec = newTempPool[i];
+                    const vx = vec.x, vy = vec.y, vz = vec.z;
+                    newTempBuff[baseIdx] = vx;
+                    newTempBuff[baseIdx+1] = vy;
+                    newTempBuff[baseIdx+2] = vz;
+                    vec.dataBuffer = newTempBuff;
+                    vec.baseIdx = baseIdx;
+                }
+                while(newTempPool.length < this.tempSize * shrinkTemp) {
+                    let vec = new Vec3(0,0,0,newTempBuff);
+                    newTempPool.push(vec);
+                    vec.amFree = true;
+                    vec.baseIdx = (newTempPool.length-1)*3;
+                }
+                this.tempBuffer = newTempBuff;
+                this.tempPool = newTempPool;
+                this.lru = newLRU % newTempPool.length;
+            }            
+        } 
+        return this;
     }
 
     /**
@@ -799,6 +965,19 @@ export class Vec3Pool {
     any_Vec3fv(v) {
         return this.temp_acquirefv(v);
     }
+
+    /**kills this pool and any vecs pointing to it*/
+    dispose() {
+        for(let v of this.tempPool) v.dataBuffer = null;
+        for(let v of this.inProgressPool) v.dataBuffer = null;
+        for(let v of this.persistentPool) v.dataBuffer = null; 
+        for(let v of this.reclaimedPool) v.dataBuffer = null;
+        delete this.persistentBuffer;
+        delete this.tempBuffer;
+        delete this.tempPool;
+        delete this.persistentPool;
+        delete this.reclaimedPool; 
+    }
 }
 
 
@@ -823,7 +1002,7 @@ export function any_Vec3fv(v) {
 }
 
 export class NoPool {
-    
+    constructor() {}    
     new_Vec3(x=0, y=0, z=0) {
         return new Vec3(x, y, z);
     }
@@ -841,6 +1020,8 @@ export class NoPool {
     releaseTemp() {
         
     }
+    unfinalize() {}
+    finalize() {}
 }
 
 //I feel like anyone can spare 60kb for this convenience. 

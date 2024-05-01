@@ -42,9 +42,9 @@ export function initSpideyShortcuts(armature) {
 
 export function initSpideyPins(armature) {
     armature.head_pin = new IKPin(armature.c_head);
-    armature.hip_pin = new IKPin(armature.c_hips).setDepthFalloff(0.8);
-    armature.l_hand_pin = new IKPin(armature.l_hand).setTargetPriorities(0.5, 0.035, 0);
-    armature.r_hand_pin = new IKPin(armature.r_hand).setTargetPriorities(0.5, 0.035, 0);
+    armature.hip_pin = new IKPin(armature.c_hips).setInfluenceOpacity(1-0.8);
+    armature.l_hand_pin = new IKPin(armature.l_hand).setTargetPriorities(1, 0.5,  0.035);
+    armature.r_hand_pin = new IKPin(armature.r_hand).setTargetPriorities(1, 0.5,  0.035);
     armature.l_foot_pin = new IKPin(armature.l_foot);
     armature.r_foot_pin = new IKPin(armature.r_foot);
 }

@@ -187,11 +187,11 @@ export class SkeletonState {
      * @param {string} transform_id - The id string of the transform defining the target's translation, rotation, and scale, relative to the skeleton transform.
      * @param {string} forBoneid - The id string of the effector bone this target is for.
      * @param {number[]} [priorities=[1.0, 1.0, 0.0]] - The orientation priorities for this target, indicating the importance of matching the target's orientation along the x, y, and z components.
-     * @param {number} [depthFalloff=0.0] - A value from 0 to 1 indicating the visibility of effectors downstream of this target to ancestors of this target's effector.
+     * @param {number} [influenceOpacity=0.0] - A value from 0 to 1 indicating the visibility of effectors downstream of this target to ancestors of this target's effector.
      * @param {number} [weight=1.0] - The weight of this target in the solving process.
      */
-    addTarget(id, transform_id, forBoneid, priorities = [1.0, 1.0, 0.0], depthFalloff = 0.0, weight = 1.0) {
-        const result = new IKPin(id, transform_id, forBoneid, priorities, depthFalloff, weight, this);
+    addTarget(id, transform_id, forBoneid, priorities = [1.0, 1.0, 0.0], influenceOpacity = 0.0, weight = 1.0) {
+        const result = new IKPin(id, transform_id, forBoneid, priorities, influenceOpacity, weight, this);
         this.targetMap[id] = result;
         return result;
     }
@@ -515,17 +515,17 @@ export class TransformState {
 }
 
 export class IKPin {
-    constructor(id, transform_id, forBoneid, priorities, depthFalloff, weight, parentSkelState) {
-        this.init(id, transform_id, forBoneid, priorities, depthFalloff, weight);
+    constructor(id, transform_id, forBoneid, priorities, influenceOpacity, weight, parentSkelState) {
+        this.init(id, transform_id, forBoneid, priorities, influenceOpacity, weight);
         this.skeletonState = parentSkelState;
     }
 
-    init(id, transform_id, forBoneid, priorities, depthFalloff, weight) {
+    init(id, transform_id, forBoneid, priorities, influenceOpacity, weight) {
         this.ikd = id;
         this.forBone_id = forBoneid;
         this.transform_id = transform_id;
         this.modeCode = 0;        
-        this.depthFalloff = depthFalloff;
+        this.influenceOpacity = influenceOpacity;
         this.weight = weight;
         this.priorities = priorities;
         const xDir = this.priorities[0] > 0;
@@ -564,8 +564,8 @@ export class IKPin {
         return this.modeCode;
     }
 
-    getDepthFalloff() {
-        return this.depthFalloff;
+    getInfluenceOpacity() {
+        return this.influenceOpacity;
     }
 
     getWeight() {
@@ -576,7 +576,7 @@ export class IKPin {
         return this.index;
     }
 
-    getPriority(basisDirection) {
+    getNormedPriority(basisDirection) {
         return this.priorities[Math.floor(basisDirection /2)];
     }
  

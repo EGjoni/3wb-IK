@@ -20,13 +20,16 @@ export class IKTransform extends Saveable {
     static normal_ref = new Vec3(1,1,1);
     static zeroMat = new Matrix4().set(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
 
-    static compositionsDirty =          0b00001;
-    static inverseCompositionsDirty =   0b00010;
-    static precompInverseDirty =        0b00100;
-    static headingsDirty =              0b01000;
-    static raysDirty =                  0b10000;
-    static allDirty =                   0b11111;
+    static compositionsDirty =          0b000001;
+    static inverseCompositionsDirty =   0b000010;
+    static precompInverseDirty =        0b000100;
+    static headingsDirty =              0b001000;
+    static orthonHeadingsDirty =        0b010000;
+    static raysDirty =                  0b100000;
+    static allDirty =                   0b111111;
     state = 0b0;
+
+    xNormDir = 1; yNormDir = 1; zNormDir = 1; //used for orthonormal heading direction
 
     /**@type {Vec3}*/
     xScaled_only = null;
@@ -48,8 +51,17 @@ export class IKTransform extends Saveable {
     /**@type {Vec3} full zheading after rotation, scale, and skew (no translation)*/
     _zHeading = null;
 
+    /**@type {Vec3} full xheading after rotation (no scale skew or translation), though negation is preserved*/
+    _orthon_xHeading = null;
+    /**@type {Vec3} full yheading after rotation (no scale skew or translation), though negation is preserved*/
+    _orthon_yHeading = null;
+    /**@type {Vec3} full zheading after rotation (no scale skew or translation), though negation is preserved*/
+    __orthon_zHeading = null;
+
     id = IKTransform.totalTransforms;
-    forceOrthonormality = true;
+    forceOrthonormality = false;
+    forceUniformity = false;
+    forceOrthogonality = false;
     isUniform = true;
     isOrthogonal = true;
     isOrthoNormal = true;
@@ -60,6 +72,8 @@ export class IKTransform extends Saveable {
      * @defaultValue `Rot.IDENTITY.clone()`
      */
     rotation = Rot.IDENTITY.clone();
+    scale = null; //vector containing scale on each axis
+    mag = null; //vector containing magnitude of each axis
     /**@type {Rot} */
     _inverseRotation = Rot.IDENTITY.conjugated();
     /** the skew matrix, as represented by taking the literal additive difference from each basis of the scale matrix. This just gets added back in upon recomposition.
@@ -79,6 +93,7 @@ export class IKTransform extends Saveable {
     tempTransVector3 = new THREE.Vector3();
     tempScaleVector3 = new THREE.Vector3();
     tempWhateverVector3 = new THREE.Vector3();
+    
 
     toJSON() {
         let result = super.toJSON();
@@ -95,7 +110,7 @@ export class IKTransform extends Saveable {
     }
 
     static fromJSON(json, loader, pool, scene) {
-        let result = new IKTransform(null, null, null, null, json.ikd);
+        let result = new IKTransform(undefined,undefined,undefined,undefined,json.ikd, pool);
         result.rotation = Rot.fromJSON(json.rotation);
         result.scale = Vec3.fromJSON(json.scale, pool, scene);
         result.skewMatrix.elements = json.skewMatrix;
@@ -115,12 +130,17 @@ export class IKTransform extends Saveable {
         super(ikd, 'IKTransform', IKTransform.totalTransforms, pool);
         this.translate = this.pool.new_Vec3(0,0,0);
         this.scale = this.pool.new_Vec3(1,1,1);
+        this.mag = this.pool.new_Vec3(1,1,1);
         this.xScaled_only = this.pool.new_Vec3fv(IKTransform.xBase);
         this.yScaled_only = this.pool.new_Vec3fv(IKTransform.yBase);
         this.zScaled_only = this.pool.new_Vec3fv(IKTransform.zBase);
         this._xHeading = this.pool.new_Vec3();
         this._yHeading = this.pool.new_Vec3();
-        this._zHeading = this.pool.new_Vec3();        
+        this._zHeading = this.pool.new_Vec3();
+        this._orthon_xHeading = this.pool.new_Vec3();
+        this._orthon_yHeading = this.pool.new_Vec3();
+        this._orthon_zHeading = this.pool.new_Vec3();
+               
         if (origin instanceof IKTransform) {
             this.initializeBasisAtOrigin(origin);
         } else if (origin instanceof Ray && x instanceof Ray && y instanceof Ray) {
@@ -136,7 +156,7 @@ export class IKTransform extends Saveable {
 
 
     static newPooled(pool) {
-        return new IKTransform(null, null, null, null, null, pool);
+        return new IKTransform(undefined, undefined, undefined, undefined, undefined, pool);
     }
 
     initializeBasisAtOrigin(origin) {
@@ -175,26 +195,24 @@ export class IKTransform extends Saveable {
     setFromMatrix4(mat4, extractSkew = true) {
         const pos = this.tempTransVector3;
         const quat = this.tempQuat;
-        const scale = this.tempScaleVector3; 
+        const scale = this.tempScaleVector3;
+        this.isOrthoNormal = this.forceOrthonormality;
+        this.isOrthogonal = this.forceOrthogonality;
+        this.isUniform = this.forceUniformity;
         mat4.decompose(pos, quat, scale);
         this.translate.setComponents(pos.x, pos.y, pos.z);
         this.rotation.setComponents(quat.w, -quat.x, -quat.y, -quat.z);
         this.scale.setComponents(scale.x, scale.y, scale.z);
+        this._updateNorms();
         this.rotation.normalize();
-        this.scaleMatrix.makeScale(scale.x, scale.y, scale.z);
+        let avgMag = this.mag.sum()/3;
+        //this.scaleMatrix.makeScale(scale.x, scale.y, scale.z);
 
         this.state |= IKTransform.allDirty;
+        
 
         if(!extractSkew) {
-            this.isUniform = Math.abs(1-(scale.x/scale.y/scale.z)) < 1e-6;
-            if(this.isUniform || this.forceOrthonormality) {
-                this.scale.x = scale.x >= 0 ? 1 : -1;
-                this.scale.y = scale.y >= 0 ? 1 : -1;
-                this.scale.z = scale.y >= 0 ? 1 : -1;
-            }
-            this.isOrthogonal = true;
-            this.isOrthoNormal = this.isUniform && this.isOrthogonal;
-            this.skewMatrix.copy(zeroMat);
+            this._updateOrthoDefaults(avgMag);
         } else {
             /** 
             * this only touches the rotational components, and writes directly into the skewmatrix values,
@@ -203,29 +221,65 @@ export class IKTransform extends Saveable {
             */
             this.rotation.setToInversion(this._inverseRotation);
             this.inverseRotation.applyBeforeMatrix4_rot(mat4.elements, this.skewMatrix_e);
-            IKTransform.matrixSub(this.scaleMatrix_e, this.skewMatrix_e);
-            this._updateOrthoNormalHint();
-            if(this.isUniform || this.forceOrthonormality) {
-                this.scale.x = scale.x >= 0 ? 1 : -1;
-                this.scale.y = scale.y >= 0 ? 1 : -1;
-                this.scale.z = scale.y >= 0 ? 1 : -1;
-            }
-			this.state &= ~IKTransform.precompInverseDirty;
-        }        
+            this._updateOrthoDefaults(avgMag);
+            this._calcSkewMat(mat4.elements);
+            this._updateOrthoNormalHint(avgMag);
+        }
+        if(this.isOrthogonal)
+            this.skewMatrix.copy(IKTransform.zeroMat);        
+    }
+
+    _updateNorms() {
+        this.mag.setComponents(Math.abs(this.scale.x), Math.abs(this.scale.y), Math.abs(this.scale.z));
+        this.xNormDir = this.scale.x < 0 ? -1 : 1;
+        this.yNormDir = this.scale.y < 0 ? -1 : 1;
+        this.zNormDir = this.scale.z < 0 ? -1 : 1;
     }
 
 
+    _updateOrthoDefaults(avgMag = this.mag.sum()/3) {        
+        if(this.isOrthoNormal) {
+            this.scale.setComponents(this.xNormDir, this.yNormDir, this.zNormDir);
+            this.mag.setComponents(1,1,1);
+            this.isOrthogonal = true;
+        } else if(this.isUniform) {                
+            this.scale.x = this.scale.x < 0 ? -avgMag : avgMag;
+            this.scale.y = this.scale.y < 0 ? -avgMag : avgMag;
+            this.scale.z = this.scale.z < 0 ? -avgMag : avgMag;
+            this.isUniform = true;
+        }
+        if(this.isOrthogonal) {
+            this.skewMatrix.copy(IKTransform.zeroMat);
+        }
+        this.scaleMatrix.makeScale(this.scale.x, this.scale.y, this.scale.z);
+        this.isOrthogonal = true;
+        this.isOrthoNormal = this.isUniform && Math.abs(avgMag-1) < 1e-6;      
+    }
+
+    _calcSkewMat(mat4_e) {
+        this.rotation.setToInversion(this._inverseRotation);
+        this.inverseRotation.applyBeforeMatrix4_rot(mat4_e, this.skewMatrix_e);
+        IKTransform.matrixSub(this.scaleMatrix_e, this.skewMatrix_e);
+        this.state &= ~IKTransform.precompInverseDirty;
+    }
 
     /**Warning: presumes the skew has already been calculated */
-    _updateOrthoNormalHint() {
+    _updateOrthoNormalHint(avgMag = this.mag.sum()/3) {
         let v = this.pool.any_Vec3();
-        this.isUniform = Math.abs(1-(this.scale.x/this.scale.y/this.scale.z)) < 1e-6;
-        if(v.readFrom(this.skewMatrix_e, 0).magnhattan() > 1e-6)  this.isOrthogonal = false;
-        if(v.readFrom(this.skewMatrix_e, 4).magnhattan() > 1e-6)  this.isOrthogonal = false;
-        if(v.readFrom(this.skewMatrix_e, 8).magnhattan() > 1e-6)  this.isOrthogonal = false;
-        if(!this.isOrthogonal) this.isUniform = false;
-        this.isOrthoNormal = this.isUniform && this.isOrthogonal;
-    }    
+        let deltaScale = v.setComponents(avgMag, avgMag, avgMag).sub(this.mag).magnhattan()/3;
+        this.isUniform = this.forceUniformity || deltaScale < 1e-6;
+        this.isOrthogonal = true;
+        this.forceOrthogonality = this.forceOrthogonality || this.forceOrthonormality; 
+        if(!this.forceOrthogonality) {
+            if(v.readFrom(this.skewMatrix_e, 0).magnhattan() > 1e-6)  this.isOrthogonal = false;
+            if(v.readFrom(this.skewMatrix_e, 4).magnhattan() > 1e-6)  this.isOrthogonal = false;
+            if(v.readFrom(this.skewMatrix_e, 8).magnhattan() > 1e-6)  this.isOrthogonal = false;
+            if(!this.isOrthogonal) this.isUniform = false;
+        } else {
+            this.isOrthogonal = this.forceOrthogonality;            
+        }
+        this.isOrthoNormal = this.forceOrthonormality || this.isOrthogonal && this.isUniform && avgMag == 1   
+    }
 
     /**Note, extracts skew by default*/
     setFromGlobalizedObj3d(object3d, extractSkew = true) {
@@ -276,7 +330,6 @@ export class IKTransform extends Saveable {
         this.rotation.y = input.rotation.y;
         this.rotation.z = input.rotation.z;
         this.isOrthogonal = input.isOrthogonal;
-        this.isNormal = input.isNormal;
         this.isOrthoNormal = input.isOrthoNormal;
         if(!input.isOrthoNormal) {
             input.recompose();
@@ -309,6 +362,8 @@ export class IKTransform extends Saveable {
         this.scaleMatrix.makeScale(this.scale.x, this.scale.y, this.scale.z);
         this.skewMatrix.copy(IKTransform.zeroMat);
         this.rotation.setComponents(rotation[0], rotation[1], rotation[2], rotation[3], normalize);
+        this.isUniform = this.forceUniformity || Math.abs(1-(scale.x/scale.y/scale.z)) < 1e-6;
+        this._updateOrthoNormalHint();
         this.lazyRefresh();
         return this;
     }
@@ -398,7 +453,16 @@ export class IKTransform extends Saveable {
         this._xHeading.readFrom(this.composedMatrix_e, 0);
         this._yHeading.readFrom(this.composedMatrix_e, 4);
         this._zHeading.readFrom(this.composedMatrix_e, 8);
-        this.state &= IKTransform.headingsDirty;
+        
+        this.state &= ~IKTransform.headingsDirty;
+    }
+
+    updateOrthonHeadings() {
+        if(!this.state & IKTransform.orthonHeadingsDirty) return;
+        this.rotation.applyToVec(IKTransform.xBase, this._orthon_xHeading).mult(this.xNormDir);
+        this.rotation.applyToVec(IKTransform.yBase, this._orthon_yHeading).mult(this.yNormDir);
+        this.rotation.applyToVec(IKTransform.zBase, this._orthon_zHeading).mult(this.zNormDir);
+        this.state &= ~IKTransform.orthonHeadingsDirty;
     }
    
     get xHeading() {
@@ -413,6 +477,34 @@ export class IKTransform extends Saveable {
         if(this.state & IKTransform.headingsDirty) this.updateHeadings();
         return this._zHeading;
     }
+
+    get orthon_xHeading() {
+        if(this.state & IKTransform.orthonHeadingsDirty) this.updateOrthonHeadings();
+        return this._orthon_xHeading;
+    }
+    get orthon_yHeading() {
+        if(this.state & IKTransform.orthonHeadingsDirty) this.updateOrthonHeadings();
+        return this._orthon_yHeading;
+    }
+    get orthon_zHeading() {
+        if(this.state & IKTransform.orthonHeadingsDirty) this.updateOrthonHeadings();
+        return this._orthon_zHeading;
+    }
+
+    setToOrthon_XHeading(vec) {
+        if(this.state & IKTransform.orthonHeadingsDirty) this.updateOrthonHeadings();
+        return vec.set(this._orthon_xHeading);
+    }
+
+    setToOrthon_YHeading(vec) {
+        if(this.state & IKTransform.orthonHeadingsDirty) this.updateOrthonHeadings();
+        return vec.set(this._orthon_yHeading);
+    }
+
+    setToOrthon_ZHeading(vec) {
+        if(this.state & IKTransform.orthonHeadingsDirty) this.updateOrthonHeadings();
+        return vec.set(this._orthon_zHeading);
+    } 
 
     setToXHeading(vec) {
         if(this.state & IKTransform.headingsDirty) this.updateHeadings();
@@ -459,6 +551,9 @@ export class IKTransform extends Saveable {
             localoutput.scale.set(globalinput.scale).mult(sRecip);
             localoutput.scaleMatrix.copy(globalinput.scaleMatrix).multiplyScalar(sRecip);
             localoutput.skewMatrix.copy(globalinput.skewMatrix).multiplyScalar(sRecip);
+            localoutput._updateNorms();
+            localoutput._updateOrthoNormalHint();
+            localoutput._updateOrthoDefaults();            
             //and in the end, was it even worth it? Only the profiler knows.
         }
         localoutput.lazyRefresh();
@@ -481,19 +576,21 @@ export class IKTransform extends Saveable {
     }
 
     setTransformToGlobalOf(localInput, globalOutput) {
-        if(this.isOrthoNormal) {
+        if(this.isOrthoUniform) {
             globalOutput.translate.set(localInput.translate).compMult(this.scale);
-            globalOutput.scale.set(localInput.scale).compMult(this.scale); //only works if orthonormal, which we are. We checked. It's fine. Relax.
+            globalOutput.scale.set(localInput.scale).compMult(this.scale); //only works if orthoUniform, which we are. We checked. It's fine. Relax.
 		    this.rotation.applyAfter(localInput.rotation, globalOutput.rotation);
             globalOutput.rotation.normalize();
 		    this.setVecToGlobalOf(localInput.translate, globalOutput.translate);
-            globalOutput.scaleMatrix.makeScale(globalOutput.scale.x, globalOutput.scale.y, globalOutput.scale.z);		
+            globalOutput.scaleMatrix.makeScale(globalOutput.scale.x, globalOutput.scale.y, globalOutput.scale.z);
+            globalOutput._updateNorms();
+            globalOutput._updateOrthoNormalHint();
+            globalOutput._updateOrthoDefaults();    
 		    globalOutput.lazyRefresh();
         } else {
             this.recompose();
             localInput.recompose();
             globalOutput.setFromMatrix4(this.secretMatrix.multiplyMatrices(this.composedMatrix, localInput.composedMatrix));
-
         }
         return globalOutput;
  	}
@@ -626,6 +723,16 @@ export class IKTransform extends Saveable {
         return this.zHeading;
     }
 
+    getOrthon_XHeading() {
+        return this.orthon_xHeading;
+    }
+    getOrthon_YHeading() {
+        return this.orthon_yHeading;
+    }
+    getOrthon_ZHeading() {
+        return this.orthon_zHeading;
+    }
+
     updateRays() {
         if(this.state & IKTransform.compositionsDirty) this.recompose();
         if(this.state & IKTransform.raysDirty) {                        
@@ -744,11 +851,13 @@ ${headingstr}`
     }
 
     clone() {
-		return  new IKTransform().adoptValues(this); 
+		return  IKTransform.newPooled(this.pool).adoptValues(this); 
 	}
 
-    static IDENTITY = new IKTransform();
+    static IDENTITY = Object.freeze(new IKTransform());
 }
+
+
 
 export class CartesianTransform extends IKTransform {
 

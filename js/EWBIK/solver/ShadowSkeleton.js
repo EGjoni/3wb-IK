@@ -7,6 +7,8 @@ export class ShadowSkeleton {
     targetList = []; //a list of all active targets everywhere on the armature
     commonAncestor = null; //the ShadowNode that everything being solved for has in common (for efficiency when solving otherwise shallow things deep in the node hierarchy)
     lastLiteral = false;
+    debugState = null;
+    effectorBuffers = null;
     /**
      * 
      * @param {EWBIK} parentArmature a reference to the vector pool this shadow skeleton should make use of for internal calculations
@@ -18,6 +20,7 @@ export class ShadowSkeleton {
      */
     constructor(parentArmature, rootBone, rootNode =null, baseDampening = Math.PI, precision = 64) {
         this.parentArmature = parentArmature;
+        this.effectorBuffers = parentArmature.effectorBuffers;
         this.volatilePool = parentArmature.volatilePool;
         this.stablePool = parentArmature.stablePool; 
         this.precision = precision;
@@ -33,6 +36,7 @@ export class ShadowSkeleton {
         this.traversalArray = [];
         this.boneWorkingBoneIndexMap = new Map();
         this.buildArmaturSegmentHierarchy();
+        this.debugState = new DebugState(this);
     }
 
     /**doesn't solve for anything, 
@@ -92,7 +96,8 @@ export class ShadowSkeleton {
 
         //if(window.perfing) performance.mark("shadowSkelSolve end");
         //if(window.perfing) performance.measure("shadowSkelSolve", "shadowSkelSolve start", "shadowSkelSolve end");   
-        this.updateBoneStates(onComplete, callbacks);        
+        this.updateBoneStates(onComplete, callbacks);
+        this.debugState.solveCalls++;      
     }
 
     pullBackAll(iterations, endOnIndex, callbacks = null, currentIteration) {
@@ -318,21 +323,7 @@ export class ShadowSkeleton {
         this.lastPainTotal = this.accumulatingPain;
         this.updateBoneStates(onComplete, callbacks)
     }
-    debugState = {
-        currentTraversalIndex: 0,
-        currentIteration: 0,
-        currentStep: 0,
-        endOnIndex: null,
-        accumulatingPain: 0,
-        maxPain: 0,
-        solveCalls: 0,
-        steps: [
-            'pullback',
-            'preTarget',
-            'postTarget',
-            'pain',
-        ]
-    }
+    debugState = new DebugState(this);
 
 
 
@@ -384,7 +375,7 @@ export class ShadowSkeleton {
         let translate = endOnIndex === this.traversalArray.length - 1;
         let skipConstraints = stabilizationPasses < 0;
         stabilizationPasses = Math.max(0, stabilizationPasses);
-        if (translate && ds.completedSolve) { //special case. translate and rotate the rootbone first to minimize deviation from innermost targets
+        if (translate && ds.completedIteration) { //special case. translate and rotate the rootbone first to minimize deviation from innermost targets
             wb.fastUpdateOptimalRotationToPinnedDescendants(translate, true, ds.currentIteration);
         }
 
@@ -413,7 +404,7 @@ export class ShadowSkeleton {
             ds.currentStep++;
             return;
         } else if (ds.steps[ds.currentStep] == 'postTarget') {
-            wb.fastUpdateOptimalRotationToPinnedDescendants(translate && ds.currentTraversalIndex == endOnIndex, false);
+            wb.fastUpdateOptimalRotationToPinnedDescendants(translate && ds.currentTraversalIndex == endOnIndex, false, ds.currentIteration);
             wb.updateTargetHeadings(wb.chain.boneCenteredTargetHeadings, wb.chain.weights, wb.myWeights);
             wb.updateTipHeadings(wb.chain.boneCenteredTipHeadings, !translate);
             callbacks?.afterIteration(wb);
@@ -466,4 +457,60 @@ export class ShadowSkeleton {
         if(bone?.wb == null) return false;
         return this.boneWorkingBoneIndexMap.has(bone); 
     }
+
+
+    /**prints the traversal array for this skeleton to the console, as well as the values of any solvable working bones in the array at the time this is called.
+     * 
+     * Note, the list is prented in reverse order, as this allows for printing a single root
+     *  
+     * @param {Bone | WorkingBone} markActive keeps this node expanded by default
+    */
+    toConsole(markActive = null) {
+        markActive = markActive instanceof Bone ? markActive.wb : markActive;
+        let prevB = null;
+        let prevGroupName = null;
+        for(let i =  this.lastRequestedEndIndex; i>= 0; i--) {
+            let b = this.traversalArray[i];
+            let groupName = b.forBone.name;
+            if(markActive != null && b.forBone.trackedBy.hasDescendant(markActive.forBone.trackedBy)) {
+                console.group(groupName)
+            } else {
+                console.groupCollapsed(groupName); 
+            }
+            b.toConsole();
+            if((prevB?.parent ?? false) && prevB?.parent != b) {
+                console.groupEnd(prevGroupName);
+            }
+            prevB = b;
+            prevGroupName = groupName;
+        }
+    }
+}
+
+
+class DebugState {
+        shadowSkel = null;
+        currentTraversalIndex = 0;
+        currentIteration= 0;
+        currentStep= 0;
+        endOnIndex= null;
+        accumulatingPain = 0;
+        maxPain = 0;
+        _solveCalls = 0;
+
+        constructor(shadowSkel) {this.shadowSkel = shadowSkel;}
+        get solveCalls(){return this._solveCalls;}
+        set solveCalls(val) {
+            this._solveCalls = val;
+            if(this.shadowSkel.parentArmature.recordHeadings && this.shadowSkel.parentArmature.recordSteps == this._solveCalls) {
+                this.shadowSkel.parentArmature.recorderPool.finalize();
+            }
+        };
+        steps = [
+            'pullback',
+            'preTarget',
+            'postTarget',
+            'pain',
+        ]
+    
 }
