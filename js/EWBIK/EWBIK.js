@@ -13,7 +13,7 @@ import { Bone } from "three";
 import { Saveable, Loader } from "./util/loader/saveable.js";
 import { Object3D, Vector3 } from "../three/three.module.js";
 import { ShadowNode } from "./util/nodes/ShadowNode.js";
-import { ArmatureEffectors } from "./solver/effector.js";
+import { ArmatureEffectors } from "./solver/Effector.js";
 
 //import * as THREE from 'three';
 //import { LineSegments, Bone } from "three";

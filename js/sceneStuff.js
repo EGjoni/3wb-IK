@@ -98,7 +98,7 @@ async function select(item) {
 
     if(window.activeSelection == item && item instanceof THREE.Bone && item.getIKPin() != null)
         item = item.getIKPin();
-    if(window.activeSelection == item && item instanceof IKPin) 
+    if(window.activeSelection == item && item instanceof IKPin && !window.pinsOnly) 
         item = item.forBone;
 
     if (item instanceof IKPin) {

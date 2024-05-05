@@ -236,7 +236,7 @@ spot_upperLeg_RR_019*/
 
 
     armature.fl_foot_pin = new IKPin(armature.fl_foot);
-    armature.fl_foot_pin.setPSTPriorities(1.0000, 1, 0);
+    armature.fl_foot_pin.setPSTPriorities(1.0000, 0, 0);
 
 
     let spot_actuator_FL_07_pin = new IKPin(armature.bonetags["spot_actuator_FL_07"]);
@@ -264,7 +264,7 @@ spot_upperLeg_RR_019*/
     rl_preactuator_pin.nonInteractive = true;
 
     armature.rl_foot_pin = new IKPin(armature.rl_foot);
-    armature.rl_foot_pin.setPSTPriorities(1, 1, 0);
+    armature.rl_foot_pin.setPSTPriorities(1, 0, 0);
 
 
 
@@ -281,7 +281,7 @@ spot_upperLeg_RR_019*/
 
 
     armature.fr_foot_pin = new IKPin(armature.fr_foot);
-    armature.fr_foot_pin.setPSTPriorities(1, 1, 0);
+    armature.fr_foot_pin.setPSTPriorities(1, 0, 0);
 
 
     let rr_preactuator_pin = new IKPin(armature.bonetags["rr_preactuator"]);
@@ -307,7 +307,7 @@ spot_upperLeg_RR_019*/
     spot_actuator_RR_021_pin.nonInteractive = true;
 
     armature.rr_foot_pin = new IKPin(armature.rr_foot);
-    armature.rr_foot_pin.setPSTPriorities(1, 1, 0);
+    armature.rr_foot_pin.setPSTPriorities(1, 0, 0);
 
     /*
     

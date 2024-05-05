@@ -38,11 +38,9 @@
         import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
         import { Rest, Twist, Kusudama } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
         import { getMeshDescendants, initEnvironment, setShadowD, setLuminosity} from "enviro";
-        import {ArmatureSegment} from "./js/EWBIK/solver/ArmatureSegment.js";
         import {initWolfGirl, addElbowSuggestions} from "./js/toys/rigs/wolfgirl_vrm.js";
         addDebugFuncs(THREE);
         window.Rest = Rest;
-        window.ArmatureSegment = ArmatureSegment;
         window.OrbitControls = OrbitControls;
         window.TransformControls = TransformControls;
         window.IKNode = IKNode;

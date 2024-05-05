@@ -1,7 +1,5 @@
 import { IKNode } from "../util/nodes/IKNodes.js";
 import { Vec3Pool } from "../util/vecs.js";
-import { ArmatureSegment } from "./ArmatureSegment.js";
-import { ArmatureEffectors } from "./effector.js";
 
 export class ShadowSkeleton {
     /**@type {[ShadowNode]}*/

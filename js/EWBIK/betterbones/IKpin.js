@@ -341,6 +341,9 @@ export class IKPin extends Saveable{
      * @param {Number} twist a value from 0 to 1, indicating how strongly the solver should attempt to align the bone's xz axes with the target's xz axes. 
      */
     setPSTPriorities(position, swing, twist) {
+        this._positionPriority = position;
+        this._twistPriority = twist;
+        this._swingPriority = swing;
         let norm = (swing+twist+position);
         if(norm>0) norm = 1/norm;
         this.position_normed_priority = position*norm; 

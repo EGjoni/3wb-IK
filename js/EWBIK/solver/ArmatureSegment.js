@@ -6,7 +6,7 @@ import { Rest } from "../betterbones/Constraints/Rest/Rest.js";
 import { Limiting, LimitingReturnful, Returnful } from "../betterbones/Constraints/Constraint.js";
 import { IKNode } from "../util/nodes/IKNodes.js";
 import { WorkingBone } from "./WorkingBone.js";
-import { FakeEffector } from "./effector.js";
+import { FakeEffector } from "./Effector.js";
 
 export class ArmatureSegment {
     boneCenteredTargetHeadings = [];
