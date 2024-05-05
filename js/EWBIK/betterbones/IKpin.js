@@ -5,6 +5,7 @@ const THREE = await import('three');
 import { Object3D } from "three";
 import { Saveable } from "../util/loader/saveable.js";
 import { ShadowNode } from "../util/nodes/ShadowNode.js";
+import { NoPool } from "../util/vecs.js";
 
 
 export class IKPin extends Saveable{
@@ -17,6 +18,9 @@ export class IKPin extends Saveable{
     pinWeight = 0.5;
     influenceOpacity = 1;
     modeCode = 3;
+    _swingPriority = 1;
+    _twistPriority = 1;
+    _positionPriority = 1;
     xPriority = 0.5;
     yPriority = 0.5;
     zPriority = 0;
@@ -81,11 +85,22 @@ export class IKPin extends Saveable{
      * @param {boolean} disabled if true, will register the pin without activating it (meaning the effector bone won't attempt to solve for the pin). You can manually enable the pin by calling pin.enable()
      */
     constructor(forBone, targetNode, affectoredOffset, disabled = false, ikd = 'IKPin-'+(IKPin.totalInstances++), pool=globalVecPool) {
-        super(ikd, 'IKPin', IKPin.totalInstances, pool);
+
+        if((pool == null || pool instanceof NoPool || pool == globalVecPool) &&
+            forBone?.parentArmature != null ) {
+                pool = forBone.parentArmature.stablePool;
+        }
+        let pinName = forBone?.name ? 'IKPin_for '+forBone.name : ikd;
+        super(pinName, 'IKPin', IKPin.totalInstances, pool);
         if(forBone.getIKPin() != null) {
             throw Error("The provided Bone already has an IKPin set.");
         }
         this.forBone = forBone;
+        this.affectoredOffset_threejs = new Object3D();
+        this.forBone.getIKBoneOrientation().add(this.affectoredOffset_threejs);
+        this.affectoredOffset_threejs.name = `affectoredOffset for ${this.ikd}`;
+        this.affectoredOffset = new ShadowNode(this.affectoredOffset_threejs, undefined, this.pool);
+        
         if(!Saveable.loadMode) {
             if (targetNode == null) {
                 let targthree = new THREE.Object3D();
@@ -93,14 +108,14 @@ export class IKPin extends Saveable{
                 targthree.matrix.copy(forBone.getIKBoneOrientation().matrixWorld);
                 targthree.matrix.decompose(targthree.position, targthree.quaternion, targthree.scale);
                 forBone.parentArmature.armatureObj3d.attach(targthree);
-                this.targetNode = new ShadowNode(targthree, 'ShadowNode-of-target_'+this.ikd, pool);
+                this.targetNode = new ShadowNode(targthree, 'ShadowNode-of-target_'+this.ikd, this.pool);
                 this.targetNode.updateGlobal();
                 this.targetNode.project();
             } else if(targetNode instanceof THREE.Object3D) {
                 if(targetNode.trackedBy != null) {
                     this.targetNode = targetNode.trackedBy;
                 } else {
-                    this.targetNode = new ShadowNode(targetNode, undefined, pool);
+                    this.targetNode = new ShadowNode(targetNode, undefined, this.pool);
                 }
             } else {
                 this.targetNode = targetNode;
@@ -111,17 +126,12 @@ export class IKPin extends Saveable{
 
             this.target_threejs.forPin = this;
         }
-        let affectoredOffset_threejs = new Object3D();
-        this.forBone.getIKBoneOrientation().add(affectoredOffset_threejs);
-        affectoredOffset_threejs.name = `affectoredOffset for ${this.ikd}`;
-        this.affectoredOffset = new ShadowNode(affectoredOffset_threejs);
-        if(affectoredOffset) {
-            this.setAffectoredOffset(affectoredOffset);
-        }
+        
+        this.setAffectoredOffset(affectoredOffset);
         this.targetNode.registerTrackChangeListener((node, oldtracked, newtracked)=>this.onTargetNodeTrackChange(node, oldtracked, newtracked));
         this.enabled = !disabled;
         this.forBone.setIKPin(this);
-        this.setTargetPriorities(this.xPriority, this.yPriority, this.zPriority);
+        this.setPSTPriorities(1, 1, 1);
     }
 
     /**
@@ -140,6 +150,7 @@ export class IKPin extends Saveable{
         } else if(affectoredOffset instanceof Object3D) {
             this.affectoredOffset.adoptLocalValuesFromObject3D(affectoredOffset);
         }
+        this.affectoredOffset.ensure();
         this.affectoredOffset.markDirty().project();
         return this;
     }
@@ -165,6 +176,9 @@ export class IKPin extends Saveable{
         }
         this.targetNode.mimic();
         this.targetNode.markDirty();
+        if(this.affectoredOffset_threejs?.parent != this.forBone.getIKBoneOrientation()) {
+            this.forBone.getIKBoneOrientation().add(this.affectoredOffset_threejs);
+        }
         this.affectoredOffset.ensure();	
 		this.affectoredOffset.markDirty();
     }
@@ -319,18 +333,29 @@ export class IKPin extends Saveable{
      * Which means if swing_priority and twist_priority are both 1, the weights on the corresponding axes are
      * x= 0.5, y = 1, z=0.5.  The x and z axes get half the weight of the y axis because they will get doubled up by the minimizer.
      * 
+     * These combined values then get normalized with respect to the position priority, such that position + x + y + z = 1. This is so that we have a natural baseline magnitude for each heading when using distance scaling. Specifically, the minimum magnitude of a heading will be 1-position of this normed position priorty. Which only goes to 0 when we have 0 heading priority
+     * 
      * 
      * @param {Number} position a value from 0-1, indicating how much the affected bone should try to match its affectored position to the pin's position. A value of 0 keeps the bone where it is. A value of 1 tries to get it to where the target is, and any value inbetween tries to get it somewhere inbetween (this is per solve iteration, so the only situations in whhere this doesn't ultimately end up reaching the target position are ones where this value is 0, or being drowned out by other considerations) 
      * @param {Number} swing a value from 0 to 1, indicating how strongly the solver should attempt to align the bone's y-axis with the target y axis
      * @param {Number} twist a value from 0 to 1, indicating how strongly the solver should attempt to align the bone's xz axes with the target's xz axes. 
      */
     setPSTPriorities(position, swing, twist) {
-        this.position_Weight = position; 
-        let norm = (swing+twist/2);
-        this.x_Weight = (norm*twist)/2;
-        this.y_Weight = norm*swing;
-        this.z_Weight = (norm*twist)/2;
-        this.normed_weights[this.position_Weight, this.x_Weight, this.y_Weight, this.z_Weight];
+        let norm = (swing+twist+position);
+        if(norm>0) norm = 1/norm;
+        this.position_normed_priority = position*norm; 
+        this.swing_normed_priority = swing*norm; 
+        this.twist_normed_priority = twist*norm;
+        this.x_normed_priority = (twist/2)*norm;
+        this.y_normed_priority = swing*norm;
+        this.z_normed_priority = (twist/2)*norm;
+
+        this.normed_weights = [
+            this.position_normed_priority*this.pinWeight, 
+            this.x_normed_priority*this.pinWeight, 
+            this.y_normed_priority*this.pinWeight, 
+            this.z_normed_priority*this.pinWeight
+        ];
         this.forBone?.parentArmature?.updateShadowSkelRateInfo();
     }
 
@@ -536,13 +561,17 @@ export class IKPin extends Saveable{
         let pinName = `${boneName}_pin`;
         string += `\nlet ${pinName} = new IKPin(armature.bonetags["${boneName}"]);\n`;
         string += `${pinName}.setPinWeight(${p.getPinWeight().toFixed(4)});\n`;
-        string += `${pinName}.setPSTPriorities(${p.positionPriority.toFixed(4)}, ${p.swingPriority[1].toFixed(4)}, ${p.twistPriority[2].toFixed(4)});\n`;
+        string += `${pinName}.setPSTPriorities(${p.positionPriority.toFixed(4)}, ${p.swingPriority.toFixed(4)}, ${p.twistPriority.toFixed(4)});\n`;
         string += `${pinName}.setInfluenceOpacity(${p.getInfluenceOpacity().toFixed(4)});\n`;
         if(!p.enabled) string+=`\n${pinName}.disable();`; 
         let pt = p.target_threejs;
         string += `${pinName}.target_threejs.position.set(${pt.position.x}, ${pt.position.y}, ${pt.position.z});\n`
         string += `${pinName}.target_threejs.quaternion.set(${pt.quaternion.x}, ${pt.quaternion.y}, ${pt.quaternion.z}, ${pt.quaternion.w});\n`
         string += `${pinName}.target_threejs.scale.set(${pt.scale.x}, ${pt.scale.y}, ${pt.scale.z});\n`
+		if(this.target_threejs?.parent instanceof THREE.Bone
+		  && this.target_threejs.parent.parentArmature == this.forBone.parentArmature){
+			string += `armature.bonetags['${this.target_threejs.parent.name}'].add(${pinName}.target_threejs);\n ${pinName}.ensure()`;
+		}
         if(doPrint) console.log(string);
         else return string;
     }

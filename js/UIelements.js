@@ -18,6 +18,7 @@ import { ChainRots, BoneRots, RayDrawer } from "./EWBIK/util/debugViz/debugViz.j
 import { Constraint, ConstraintStack, Returnful, Rest, Twist, Kusudama } from "./EWBIK/betterbones/Constraints/ConstraintStack.js";
 import { IKNode } from "./EWBIK/util/nodes/IKNodes.js";
 import { Saveable, Loader } from "./EWBIK/util/loader/saveable.js";
+import { hemiLight } from "./environment.js";
 
 window.Vec3 = Vec3;
 window.Rot = Rot;
@@ -120,7 +121,13 @@ window.render = function (incrFrame = false) {
     }
     scene.background = currentBackground;
     scene.fog = currentFog;
+    if(window.updateFogColors !== undefined) 
+        window.updateFogColors();
+    
 }
+
+
+
 
 
 
@@ -352,24 +359,24 @@ window.makeUI = function () {
                         <output class="un-exp-output">0.5</output>
                     </form>
                     <form class="pin-falloff-form slider-container">
-                        <label for="falloff">Fall-off:</label>
+                        <label for="falloff">Influence Opacity:</label>
                         <input type="range" id="falloff" name="falloff" min="0" max="1" step="0.001" value="0">
                         <output id="falloff-output">0</output>
                     </form>
                 </div>
                 <div>
-                    <label for="x-priority">X alignment priority:</label>
-                    <input type="range" id="x-priority" name="x-priority" min="0" max="0.69" step="0.001" value=0.69>
+                    <label for="pos-priority">Position priority:</label>
+                    <input type="range" id="pos-priority" name="pos-priority" min="0" max="0.69" step="0.001" value=0.69>
                     <output class="un-exp-output">1</output>
                 </div>
                 <div>
-                    <label for="y-priority">Y alignment priority:</label>
-                    <input type="range" id="y-priority" name="y-priority" min="0" max="0.69" step="0.001" value = 0.69>
+                    <label for="swing-priority">Swing alignment priority:</label>
+                    <input type="range" id="swing-priority" name="swing-priority" min="0" max="0.69" step="0.001" value = 0.69>
                     <output class="un-exp-output">1</output>
                 </div>
                 <div>
-                    <label for="z-priority">Z alignment priority:</label>
-                    <input type="range" id="z-priority" name="z-priority" min="0" max="0.69" step="0.001" value = 0.69>
+                    <label for="twist-priority">Twist alignment priority:</label>
+                    <input type="range" id="twist-priority" name="twist-priority" min="0" max="0.69" step="0.001" value = 0.69>
                     <output class="un-exp-output">1</output>
                 </div>
                 <div id="pin-parent-select">
@@ -735,7 +742,7 @@ ${wb.forBone.toString()}
             } else if (window.contextBone != null) {
                 newPin = new IKPin(window.contextBone);
                 newPin.forBone.parentArmature.regenerateShadowSkeleton(true);
-                makePinMeshHint(newPin, 1, window.contextBone.parentArmature);
+                makePinMeshHint(newPin, 1, window.contextBone.parentArmature.armatureObj3d, true);
             }
             makePinsList(1, window.contextBone.parentArmature.armatureObj3d, window.contextBone.parentArmature);
             updateGlobalPinLists();
@@ -780,18 +787,21 @@ ${wb.forBone.toString()}
         window.doSolve(contextPin.forBone, true);
     });
 
-    D.byid("x-priority").addEventListener("input", (event) => {
-        window.contextPin?.setXPriority(Math.pow(Math.E, event.target.value) - 1);;
+    D.byid("pos-priority").addEventListener("input", (event) => {
+        if(window.contextPin == null) return;
+        window.contextPin.positionPriority = Math.pow(Math.E, event.target.value) - 1;
         updateNormedPriorities(event.target.parentNode.parentNode, window.contextPin);
         window.doSolve(contextPin.forBone, true);
     });
-    D.byid("y-priority").addEventListener("input", (event) => {
-        window.contextPin?.setYPriority(Math.pow(Math.E, event.target.value) - 1);;
+    D.byid("swing-priority").addEventListener("input", (event) => {
+        if(window.contextPin == null) return;
+        window.contextPin.swingPriority = Math.pow(Math.E, event.target.value) - 1;
         updateNormedPriorities(event.target.parentNode.parentNode, window.contextPin);
         window.doSolve(contextPin.forBone, true);
     });
-    D.byid("z-priority").addEventListener("input", (event) => {
-        window.contextPin?.setZPriority(Math.pow(Math.E, event.target.value) - 1);
+    D.byid("twist-priority").addEventListener("input", (event) => {
+        if(window.contextPin == null) return;
+        window.contextPin.twistPriority = Math.pow(Math.E, event.target.value) - 1;
         updateNormedPriorities(event.target.parentNode.parentNode, window.contextPin);
         window.doSolve(contextPin.forBone, true);
     });
@@ -1298,12 +1308,12 @@ ${wb.forBone.toString()}
 }
 
 function updateNormedPriorities(pinDom, forPin) {
-    pinDom.qs("#x-priority").parentNode.qs(".un-exp-output").value = `${forPin.getXPriority().toFixed(4)} \
-    (${forPin.getNormedPriority(IKPin.XDir).toFixed(4)})`;        
-    pinDom.qs("#y-priority").parentNode.qs(".un-exp-output").value = `${forPin.getYPriority().toFixed(4)} \
-    (${forPin.getNormedPriority(IKPin.YDir).toFixed(4)})`;        
-    pinDom.qs("#z-priority").parentNode.qs(".un-exp-output").value = `${forPin.getZPriority().toFixed(4)} \
-    (${forPin.getNormedPriority(IKPin.ZDir).toFixed(4)})`;
+    pinDom.qs("#pos-priority").parentNode.qs(".un-exp-output").value = `${forPin.positionPriority.toFixed(4)} \
+    (${forPin.position_normed_priority.toFixed(4)})`;        
+    pinDom.qs("#swing-priority").parentNode.qs(".un-exp-output").value = `${forPin.swingPriority.toFixed(4)} \
+    (${forPin.swing_normed_priority.toFixed(4)})`;        
+    pinDom.qs("#twist-priority").parentNode.qs(".un-exp-output").value = `${forPin.twistPriority.toFixed(4)} \
+    (${forPin.twist_normed_priority.toFixed(4)})`;
 }
 
 window.updateInfoPanel = async function (item) {
@@ -1420,9 +1430,9 @@ window.updateInfoPanel = async function (item) {
         pinDom.qs("#weight").parentNode.qs(".un-exp-output").value = window.contextPin.getPinWeight().toFixed(4);
         pinDom.qs("#falloff").value = window.contextPin.getInfluenceOpacity();
         pinDom.qs("#falloff").parentNode.qs("#falloff-output").value = window.contextPin.getInfluenceOpacity();
-        pinDom.qs("#x-priority").value = Math.log(window.contextPin.getXPriority() + 1);
-        pinDom.qs("#y-priority").value = Math.log(window.contextPin.getYPriority() + 1);
-        pinDom.qs("#z-priority").value = Math.log(window.contextPin.getZPriority() + 1);
+        pinDom.qs("#pos-priority").value = Math.log(window.contextPin.positionPriority + 1);
+        pinDom.qs("#swing-priority").value = Math.log(window.contextPin.swingPriority + 1);
+        pinDom.qs("#twist-priority").value = Math.log(window.contextPin.twistPriority + 1);
         updateNormedPriorities(pinDom, window.contextPin);
         
         
@@ -1481,7 +1491,6 @@ window.getMakeConstraint_DOMElem = function (c) {
 /**updates the solver mode to a viable value in the dom if it's in a weird state */
 window.setInternalStatetoDOM = function () {
     // Initialize solve mode based on existing variables
-
     if (D.byid('auto-solve')?.checked) {
         window.autoSolve = true;
         window.interactionSolve = false;
@@ -1511,6 +1520,11 @@ window.setDOMtoInternalState = function () {
         D.byid('interaction-solve').checked = false;
         D.byid('no-solve').checked = true;
     }
+    
+    D.byid('show-ik-bones').checked = window.renderableLayers[1];
+    D.byid('show-nonik-bones').checked = window.renderableLayers[2];
+    D.byid('show-constraints').checked = window.renderableLayers[3];
+    
     window.setInternalStatetoDOM();
 }
 
@@ -1599,7 +1613,7 @@ window.enforceConstraint = function (bone, cstr) {
             resultRot,
             this);
         boneFrameAx.rotateByLocal(resultRot);
-        TrackingNode.transferLocalToObj3d(boneFrameAx.localMBasis, bone);
+        boneFrameAx.localMBasis.writeToTHREE(bone);
     }
 }
 makeUI();

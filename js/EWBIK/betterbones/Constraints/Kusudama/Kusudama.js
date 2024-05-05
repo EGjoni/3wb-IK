@@ -55,6 +55,7 @@ export class Kusudama extends Limiting {
     constructor(forBone = null, visibilityCondition = undefined, ikd = 'Kusudama-' + (Kusudama.totalInstances++), pool = globalVecPool) {
         let basis = new IKNode(undefined, undefined, undefined, pool)
         super(forBone, basis, ikd, pool);
+        basis.forceOrthoNormality(true);
         this.ikd = ikd;
         this.minAxialAngle = Math.PI;
         this.range = Math.PI * 3;
@@ -83,7 +84,9 @@ export class Kusudama extends Limiting {
         this.desiredTracer.visible = false;
         
         this.__frame_calc_internal = new IKNode(undefined, undefined, undefined, this.pool);
+        this.__frame_calc_internal.forceOrthoNormality(true);
         this.__bone_calc_internal = new IKNode(undefined, undefined, undefined, this.pool);
+        this.__bone_calc_internal.forceOrthoNormality(true);
         if (this.forBone?.height) {
             this.boneCanonical.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
             this.geometry = new THREE.SphereGeometry(this.forBone.height * .75, 32, 32);
@@ -386,7 +389,7 @@ export class Kusudama extends Limiting {
             inBounds[0] =-1; 
             return inPoint;
         }
-        let point = inPoint.clone();
+        let point = this.pool.any_Vec3fv(inPoint);
         point.normalize();
 
         inBounds[0] = -1;
@@ -446,7 +449,7 @@ export class Kusudama extends Limiting {
                 result += `.parentKusudama`
         }
         if(!this.enabled) result+='.disable()';
-        result += ';';
+        result += ';\n';
         if(doPrint) 
             console.log(result);
         else return result;

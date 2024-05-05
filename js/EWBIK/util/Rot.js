@@ -264,6 +264,38 @@ export class Rot {
     }
 
 
+    /**writes the raw contents of this rot object out to THREE.js quaternion */
+    raw_writeToTHREE(quat) {
+        quat.set(this.x, this.y, this.z, this.w)
+    }
+
+
+    /**writes the THREE.js quivalent quaternion value of this rot object out to THREE.js quaternion */
+    writeToTHREE(quat) {
+        quat.set(-this.x, -this.y, -this.z, this.w);
+    }
+
+
+    /**reads in a raw THREE quaternion and adopts the conjugate of its values
+    */
+    readFromTHREE(quat) {
+        this.w = quat.w;
+        this.x = -quat.x;
+        this.y = -quat.y;
+        this.z = -quat.z;
+    }
+
+
+    /**reads in a raw THREE quaternion and adopts the its raw values without converting to Hamilton representation
+    */
+    raw_readFromTHREE(quat) {
+        this.w = quat.w;
+        this.x = quat.x;
+        this.y = quat.y;
+        this.z = quat.z;
+    }
+
+
 
     /**
      * rotates the 3x3 matrix of the input column-major matrix by this rotation.
@@ -1020,14 +1052,16 @@ export class Rot {
         console.log(this.toString(true, true));
     }
 
-    static distance(r1, r2, tempRot = new Rot(1, 0, 0, 0)) {
-        return r1.applyInverseToRot(r2, tempRot).shorten().getAngle();
+    static distance(r1, r2) {
+        return r1.applyInverseToRot(r2, Rot.GLOBAL_TEMP).shorten().getAngle();
     }
 
     equalTo(m) {
         return this.applyConjugateToRot(m).getAngle() < 1e-7;
     }
 }
+
+
 
 
 class RotIdentity extends Rot {
@@ -1081,6 +1115,7 @@ class RotIdentity extends Rot {
 }
 Rot.IDENTITY = new RotIdentity(1, 0, 0, 0);
 Rot.IDENTITY.final = true;
+Rot.GLOBAL_TEMP = new Rot(1,0,0,0);
 
 
 

@@ -37,7 +37,7 @@
         import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
         import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
         import { Rest, Twist, Kusudama } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
-        import { getMeshDescendants, initEnvironment } from "enviro";
+        import { getMeshDescendants, initEnvironment, setShadowD, setLuminosity} from "enviro";
         import {ArmatureSegment} from "./js/EWBIK/solver/ArmatureSegment.js";
         import {initWolfGirl, addElbowSuggestions} from "./js/toys/rigs/wolfgirl_vrm.js";
         addDebugFuncs(THREE);
@@ -48,7 +48,7 @@
         window.IKNode = IKNode;
         window.TrackingNode = TrackingNode;
         window.IKPin = IKPin;
-        window.autoSolve = false;
+        window.autoSolve = true;
 
         window.meshLayer = 0;
         window.boneLayer = 1;
@@ -127,7 +127,9 @@
                 ...getMeshDescendants(nek1.armatureObj3d.children[2])],
                 [0, 1]
             );
-
+            
+            setShadowD(1.5);
+            setLuminosity(1.5);
 
             //instances = await Promise.all([inst1, inst2]);
             //armature.solve();
@@ -179,7 +181,7 @@
             render();
         }
 
-        window.render = function () {
+        /*window.render = function () {
             camera.layers.set(0);
             window.renderer.render(scene, camera);
             window.renderer.clearDepth();
@@ -191,12 +193,11 @@
             window.renderer.render(scene, camera);
             scene.background = currentBackground;
             scene.fog = currentFog;
-
-        }
+        }*/
 
         function initHumanoidRestConstraints(armature) {
             initWolfGirl(armature, true, false, true);
-            addElbowSuggestions(armature);
+            //addElbowSuggestions(armature);
         }
 
         init();

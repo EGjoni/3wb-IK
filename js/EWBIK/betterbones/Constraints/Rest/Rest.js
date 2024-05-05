@@ -41,7 +41,7 @@ export class Rest extends Returnful {
         super(forBone, undefined, ikd, pool);
         if(!Constraint.loadMode) {
             /**@type {IKNode}*/
-            this.boneFrameRest = new IKNode(undefined, undefined, undefined); //inferred orientation of the boneframe which would be required for IKBoneOrientation to be align with the transform the user specified.
+            this.boneFrameRest = new IKNode(undefined, undefined, undefined, this.pool); //inferred orientation of the boneframe which would be required for IKBoneOrientation to be align with the transform the user specified.
             this.restPose_three = null;
             if (this.forBone != null) {            
                 //if(restPose != null)
@@ -103,6 +103,26 @@ export class Rest extends Returnful {
         doing acos() instead of 2*acos() because division by PI instead of TAU means the multiplication by 2 cancels out */
         return previousResult.raw_preCallDiscomfort - ((Math.acos(Math.abs(previousResult.clampedRotation.w))) * Constraint.HALF_PI_RECIP);
      }
+
+     printInitializationString(doPrint=true, parname) {
+        let tag = "";
+        for(let [t, b] of Object.entries(this.forBone.parentArmature.bonetags)) {
+            if(b == this.forBone) {
+                tag = t; break;
+            }
+        }
+        parname = parname == null ? `armature.bonetags["${tag}"]` : parname;
+        let postPar = parname==null ? '' : `.forBone`;
+        let r = boneFrameRest.localMBasis.rotation.toArray();
+        let result = `new Rest(${parname}, undefined,
+                "${this.ikd}_on_bone_${parname}", armature.stablePool).boneFrameRest.localMBasis.rotateTo(new Rot(${r.w}, ${r.x}, ${r.y}, ${r.z}))`;
+        if(this.enabled == false) 
+            result += '.disable()';
+        result+=';\n';
+        if(doPrint) 
+            console.log(result);
+        else return result;
+    }
     
     
     /**

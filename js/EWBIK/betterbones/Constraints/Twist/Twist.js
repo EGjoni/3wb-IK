@@ -65,8 +65,10 @@ export class Twist extends LimitingReturnful {
      */
     constructor(forBone, range=2*Math.PI-0.0001, referenceBasis = undefined, twistAxis = undefined, baseZ = undefined, visibilityCondition=undefined, ikd = 'Twist-'+(Twist.totalInstances++), pool=globalVecPool) {
         let basis = referenceBasis;
-        if(referenceBasis == null && !Constraint.loadMode)
+        if(referenceBasis == null && !Constraint.loadMode) {
+            pool = Constraint.findPool(forBone, pool);
             basis = new IKNode(undefined, undefined, undefined, pool);
+        }
         super(forBone, basis, ikd, pool);
         
         
@@ -121,6 +123,11 @@ export class Twist extends LimitingReturnful {
         this.__bone_internal.setParent(this.__frame_internal); 
         this.__frame_calc_internal = new IKNode(undefined, undefined, null, this.pool);
         this.__bone_calc_internal = new IKNode(undefined, undefined, null, this.pool);
+        this.__frame_calc_internal.forceOrthoUniformity(true);
+        this.__bone_calc_internal.forceOrthoUniformity(true);
+        this.__frame_internal.forceOrthoUniformity(true);
+        this.__bone_internal.forceOrthoUniformity(true);
+        
         this.__bone_calc_internal.setRelativeToParent(this.__frame_calc_internal);
         /**@type {IKNode} */
         this.frameCanonical = this.basisAxes;
@@ -134,11 +141,15 @@ export class Twist extends LimitingReturnful {
             set(val) {this._visible = val}
         });
 
+        this.tempDrawRot1 = new Rot(1,0,0,0);
+        this.tempDrawRot2 = new Rot(1,0,0,0);
+
         this.setCurrentAsReference()
     }
 
     updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy) {
         this.constraintResult.reset(iteration);
+        
         /**
          * get the desired orientation in parentbone space from the composition of currentstate*currentboneorienteation
          * get the rotation that brings framecanonical to the desired orientation.
@@ -147,6 +158,7 @@ export class Twist extends LimitingReturnful {
          * finally, return the difference between the currentstate and the resulting frame orientation
          */
         if(iteration >= this.giveup) return this.constraintResult;
+        this.lastCalled = iteration;
 
         let currentOrientation = currentState.localMBasis.rotation.applyAfter(currentBoneOrientation.localMBasis.rotation, this.tempRot1);
         let canonToCurrent = this.frameCanonical.getGlobalMBasis().rotation.getRotationTo(currentOrientation, this.tempRot2);
@@ -171,12 +183,16 @@ export class Twist extends LimitingReturnful {
         this.__frame_internal.localMBasis.lazyRefresh();
         this.__bone_internal.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
         this.__frame_internal.adoptLocalValuesFromObject3D(this.forBone);
+        this.__bone_internal.setRelativeToParent(this.__frame_internal);
         //this.__frame_internal.setRelativeToParent(this.frameCanonical);
         
         this.frameCanonical.localMBasis.adoptValues(this.__bone_internal.getGlobalMBasis());
+        this.frameCanonical.localMBasis.lazyRefresh();
+
         this.__frame_internal.emancipate();
         this.__frame_internal.localMBasis.lazyRefresh();
-        this.frameCanonical.localMBasis.lazyRefresh();
+        
+        this.boneCanonical.setRelativeToParent(this.frameCanonical);
         this.boneCanonical.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
         this.__frame_calc_internal.adoptLocalValuesFromIKNode(this.frameCanonical);
         this.__bone_calc_internal.adoptLocalValuesFromIKNode(this.boneCanonical);
@@ -185,6 +201,8 @@ export class Twist extends LimitingReturnful {
         this.__frame_calc_internal.localMBasis.rotation.getSwingTwist(this.pool.any_Vec3(0,1,0), this.swing, this.twist);
         this.baseZ = this.twist.getAngle();
         this.frameCanonical.markDirty();
+        this.frameCanonical.updateGlobal();
+        this.frameCanonical.localMBasis.writeToTHREE(this.displayGroup);
         this.display.updateGeo(this.range, this.forBone.height);
         this.updateDisplay();
         return this;
@@ -209,21 +227,6 @@ export class Twist extends LimitingReturnful {
         this.__frame_internal.adoptLocalValuesFromIKNode(this.frameCanonical).markDirty();
         this.__frame_calc_internal.adoptLocalValuesFromIKNode(this.frameCanonical).markDirty();        
         this.frameCanonical.getGlobalMBasis().writeToTHREE(this.displayGroup);
-        /*this.__frame_internal.emancipate();
-        this.__frame_internal.reset();
-        this.__frame_internal.localMBasis.rotation.setFromAxisAngle(this.pool.any_Vec3(0,1,0), this.baseZ);
-        this.__frame_internal.markDirty();
-        this.__frame_internal.localMBasis.lazyRefresh();
-        let yAlignRot = Rot.fromVecs(this.__frame_internal.localMBasis.getYHeading(), this.twistAxis);
-        yAlignRot.applyAfter(this.__frame_internal.localMBasis.rotation, this.frameCanonical.localMBasis.rotation);
-        this.frameCanonical.localMBasis.lazyRefresh();
-        this.frameCanonical.markDirty();
-        this.frameCanonical.updateGlobal();
-        this.frameCanonical.getGlobalMBasis().writeToTHREE(this.displayGroup);
-        this.__frame_internal.emancipate();
-        this.__frame_internal.reset();
-        this.__frame_internal.markDirty();
-        this.__frame_internal.updateGlobal();*/
                
         this.updateDisplay();
         return this;
@@ -248,6 +251,8 @@ export class Twist extends LimitingReturnful {
         if(ensureBaseZ) {
             this.setBaseZ(startZ, false);
         }
+        this.frameCanonical.updateGlobal();
+        this.frameCanonical.localMBasis.writeToTHREE(this.displayGroup);
         this.display.updateGeo(this.range, this.forBone.height);
         return this;
     }
@@ -268,7 +273,7 @@ export class Twist extends LimitingReturnful {
                 "${this.ikd}", armature.stablePool)`;
         if(this.enabled == false) 
             result += '.disable()';
-        result+=';';
+        result+=';\n';
         if(doPrint) 
             console.log(result);
         else return result;
@@ -285,6 +290,7 @@ export class Twist extends LimitingReturnful {
     setRange(range) {
         this.range = range;
         this.coshalfhalfRange = Math.cos(0.25*range); // set to a fourth, because the range is defined as being on either side of the reference orientation.
+        this.frameCanonical.localMBasis.writeToTHREE(this.displayGroup);
         this.display.updateGeo(this.range, this.forBone.height);
         this.updateDisplay();
         return this;
@@ -397,7 +403,7 @@ export class Twist extends LimitingReturnful {
         //now that we're sure the lineage is properly set up, let's destroy it entirely.
         //set the internal bone relative to the canonical frame / basis axes in global space so we can y-axis align in local space
         this.__bone_internal.setParent(this.frameCanonical);
-        let yAlignRot = Rot.fromVecs(this.__bone_internal.localMBasis.getYHeading(), this.pool.any_Vec3(0,1,0));
+        let yAlignRot = this.tempDrawRot1.setFromVecs(this.__bone_internal.localMBasis.getYHeading(), this.pool.any_Vec3(0,1,0));
         this.__bone_internal.rotateByLocal(yAlignRot);        
         let newZ = this.__bone_internal.localMBasis.getZHeading();
         newZ.normalize();
@@ -456,8 +462,7 @@ class TwistConstraintDisplay extends THREE.Mesh {
         this.forTwist = forTwist;
     }
 
-    updateGeo(range = this?.forTwist?.range ?? null, radius = this.displayRadius) {
-        this.forTwist.frameCanonical.localMBasis.writeToTHREE(this);
+    updateGeo(range = this?.forTwist?.range ?? null, radius = this.displayRadius) {        
         if(range == null) 
             throw new Error("needs a range");
         this.displayRadius = radius;

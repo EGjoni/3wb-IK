@@ -1,6 +1,7 @@
 import { IKNode } from "../util/nodes/IKNodes.js";
 import { Vec3Pool } from "../util/vecs.js";
 import { ArmatureSegment } from "./ArmatureSegment.js";
+import { ArmatureEffectors } from "./effector.js";
 
 export class ShadowSkeleton {
     /**@type {[ShadowNode]}*/
@@ -115,6 +116,13 @@ export class ShadowSkeleton {
             this.accumulatingPain += bonepain;
         }
         this.lastPainTotal = this.accumulatingPain;
+        
+        /**TODO: remove after profiling */
+        /*let all_effectors = this.effectorBuffers.all_effectors;
+        for(let i =0; i < all_effectors.length; i++) {
+            all_effectors[i].tipAxes.updateGlobal();
+            all_effectors[i].targetAxes.updateGlobal();
+        }*/
     }
 
     /**
@@ -128,7 +136,6 @@ export class ShadowSkeleton {
        */
     solveToTargets(stabilizationPasses, endOnIndex, onComplete, callbacks, currentIteration) {
         if (this.traversalArray?.length == 0) return;
-        ;
         let translate = endOnIndex === this.traversalArray.length - 1;
         let skipConstraints = stabilizationPasses < 0;
         //if(window.perfing) performance.mark("solveToTargetsp1 start");
@@ -187,7 +194,7 @@ export class ShadowSkeleton {
                         this.lastLiteral = true;
                     } else {
                         const wb = this.traversalArray[idx];
-                        const root = wb.getRootSegment().wb_segmentRoot;
+                        const root = wb.getRootSegment();
                         this.lastRequestedEndIndex = this.boneWorkingBoneIndexMap.get(root.forBone);
                         this.lastLiteral = false;
                     }
@@ -202,6 +209,7 @@ export class ShadowSkeleton {
          * @param iterations
          */
     updateReturnfulnessDamps(iterations) {
+        
         if (this.previousIterationRequest !== iterations) {
             for (let j = 0; j < this.constrainedBoneArray.length; j++) {
                 this.constrainedBoneArray[j].updateReturnfullnessDamp(iterations);
@@ -228,6 +236,7 @@ export class ShadowSkeleton {
     }
 
     updateBoneStates(onComplete, callbacks) {
+        this.commonAncestor.quickMimic();
         for (let i = 0; i < this.traversalArray.length; i++) {
             const wb = this.traversalArray[i];
             callbacks?.afterSolve(wb);
@@ -240,45 +249,36 @@ export class ShadowSkeleton {
         const rootBone = this.parentArmature.rootBone;
         if (!rootBone) return;
 
-        this.rootSegment = new ArmatureSegment(this, rootBone, null, false);
-        this.rootSegment.init();
+        this.effectorBuffers = this.parentArmature.effectorBuffers
+        this.rootSegment = this.effectorBuffers.initEffectors(this);
         this.buildTraversalArray();
     }
 
     buildTraversalArray() {
         if (!this.rootSegment) return;
 
-        const segmentTraversalArray = this.rootSegment.getAllDescendantSegments();
-        const reversedTraversalArray = [];
         this.boneWorkingBoneIndexMap.clear();
-        let pinsSet = new Set();
+        this.constrainedBoneArray = [];
 
-        for (const segment of segmentTraversalArray) {
-            if(segment.pinnedBones.length > 0) {
-                reversedTraversalArray.push(...segment.solvableStrandBones);
-                for(let wb of segment.pinnedBones) {
-                    this.commonRootDepth = Math.min(wb.ikPin.targetNode.nodeDepth, this.commonRootDepth);
-                    pinsSet.add(wb.ikPin.targetNode);
-                }
+        this.traversalArray = this.effectorBuffers.traversalArray;
+
+        for(let i=0; i<this.traversalArray.length; i++) { 
+            let wb = this.traversalArray[i];
+            this.boneWorkingBoneIndexMap.set(wb.forBone, i);
+            if(wb.constraint != null) {
+                this.constrainedBoneArray.push(wb);
             }
         }
-        this.targetList = [...pinsSet];
+
+        this.targetList = []
+
+        for(let e of this.effectorBuffers.all_effectors) {
+            this.targetList.push(e.targetAxes);
+        }
         let forCommon = [this.armatureRootNode, ...this.targetList];
         this.commonAncestor = IKNode.getCommonAncestor(forCommon);
-
-        this.traversalArray = new Array(reversedTraversalArray.length);
-        let j = 0;
-        this.constrainedBoneArray = [];
-        for (let i = reversedTraversalArray.length - 1; i >= 0; i--) {
-            this.traversalArray[j] = reversedTraversalArray[i];
-            this.boneWorkingBoneIndexMap.set(this.traversalArray[j].forBone, j);
-            if (reversedTraversalArray[i].constraint != null) {
-                this.constrainedBoneArray.push(reversedTraversalArray[i]);
-            }
-            j++;
-        }
+        //this.traversalArray = new Array(reversedTraversalArray.length);
         
-
         this.lastRequested = null;
         this.lastRequestedEndIndex = this.traversalArray.length - 1;
     }
@@ -289,12 +289,15 @@ export class ShadowSkeleton {
     }
 
     updateRates(iterations) {
-        if (this.rootSegment == null) {
+        /*if (this.rootSegment == null) {
             console.error("No root segment");
             return;
             //throw Error("No rootsegment");
+        }*/
+        for(let e of this.effectorBuffers.all_effectors) {
+            let mismatch = e.updateInfluenceOpacityList();
+            if(mismatch) throw new Error("Unexpected structure when updating pin weights. Call to regenerateShadowSkeleton required");
         }
-        this.rootSegment.recursivelyCreateHeadingArrays();
         for (let j = 0; j < this.traversalArray.length; j++) {
             this.traversalArray[j].updateCosDampening();
             this.traversalArray[j].updateReturnfullnessDamp(iterations);
@@ -304,6 +307,7 @@ export class ShadowSkeleton {
 
     /**doesn't solve for anything, just updates the pain info of each bone for debugging*/
     debug_noOp(fromBone, iterations, onComplete, callbacks = null, ds) {
+        ds.incrIteration_start(iterations);
         this.alignSimAxesToBoneStates();
         //this.pullBack(iterations, solveUntil, false, null);
         const endOnIndex = this.getEndOnIndex();
@@ -312,6 +316,8 @@ export class ShadowSkeleton {
         this.accumulatingPain = 0;
         this.maxPain = 0;
         for (let j = 0; j <= endOnIndex; j++) {
+            ds.currentTraversalIndex = j;
+            ds.incrBone_start(iterations);
             this.traversalArray[j].updatePain(0);
             let bonepain = this.traversalArray[j].getOwnPain();
             if (bonepain > this.maxPain) {
@@ -319,8 +325,10 @@ export class ShadowSkeleton {
                 this.maxpainbone = this.traversalArray[j].forBone;
             }
             this.accumulatingPain += bonepain;
+            ds.incrBone_start(iterations);
         }
         this.lastPainTotal = this.accumulatingPain;
+        ds.incrIteration_end(iterations);
         this.updateBoneStates(onComplete, callbacks)
     }
     debugState = new DebugState(this);
@@ -342,7 +350,7 @@ export class ShadowSkeleton {
 
     debug_solve(iterations, stabilizationPasses, solveUntil, onComplete, callbacks = null, ds = this.debugState) {
         ds.completedSolve = false; ds.completedIteration=false;
-        if (ds.currentStep == 0) {
+        if (ds._currentStep == 0) {
             this.alignSimAxesToBoneStates();
         }
         const endOnIndex = ds.endOnIndex == null ? this.getEndOnIndex(solveUntil) : ds.endOnIndex;
@@ -384,32 +392,31 @@ export class ShadowSkeleton {
         } else {
             this.lastPainTotal = this.accumulatingPain;
         }
-
         this.updateBoneStates(onComplete, callbacks);
         this.stablePool.releaseTemp();
         this.volatilePool.releaseTemp();
     }
 
     debug_bone_solveToTargets(stabilizationPasses, translate, endOnIndex, onComplete, callbacks, ds = this.debugState) {
+        ds.incrStep_start();
         const wb = this.traversalArray[ds.currentTraversalIndex];
         if (ds.steps[ds.currentStep] == 'pullback') {
             wb.pullBackTowardAllowableRegion(ds.currentIteration, callbacks);
-            ds.currentStep++;
+            ds.incrStep_end();
             return;
         } else if (ds.steps[ds.currentStep] == 'preTarget') {
             wb.updateDescendantsPain();
             wb.updateTargetHeadings(wb.chain.boneCenteredTargetHeadings, wb.chain.weights, wb.myWeights);
             wb.updateTipHeadings(wb.chain.boneCenteredTipHeadings, !translate);
             callbacks?.beforeIteration(wb);
-            ds.currentStep++;
+            ds.incrStep_end();
             return;
         } else if (ds.steps[ds.currentStep] == 'postTarget') {
             wb.fastUpdateOptimalRotationToPinnedDescendants(translate && ds.currentTraversalIndex == endOnIndex, false, ds.currentIteration);
             wb.updateTargetHeadings(wb.chain.boneCenteredTargetHeadings, wb.chain.weights, wb.myWeights);
             wb.updateTipHeadings(wb.chain.boneCenteredTipHeadings, !translate);
             callbacks?.afterIteration(wb);
-            ds.currentStep++;
-            ds.willCompleteBone = true;
+            ds.incrStep_end();
             return;
         } else if (ds.steps[ds.currentStep] == 'pain') {
             let bonepain = wb.getOwnPain();
@@ -419,33 +426,14 @@ export class ShadowSkeleton {
             }
             ds.accumulatingPain += bonepain;
             ds.currentStep = 0;
-            ds.currentTraversalIndex++;
-            ds.willCompleteBone = false;
-            if (ds.currentTraversalIndex == endOnIndex) {
-                ds.willCompleteIteration = true;
-                ds.currentIteration++;
-            } else if (ds.willCompleteIteration) {
-                ds.willCompleteIteration = false;
-                ds.completedIteration = true;
-                ds.currentIteration++;
-                ds.currentTraversalIndex = 0
-            }
+            ds.incrStep_end();
             return;
         }
     }
 
     incrStep(iterations) {
         let ds = this.debugState;
-        if (ds.completedIteration) {
-            if (ds.completedSolve) {
-                ds.currentIteration = 0;
-                ds.currentStep = 0;
-                ds.currentTraversalIndex = 0;
-            }
-            ds.accumulatingPain = 0;
-            ds.maxPain = 0;
-            ds.maxpainbone = null;
-        }
+        
 
     }
 
@@ -468,27 +456,30 @@ export class ShadowSkeleton {
     toConsole(markActive = null) {
         markActive = markActive instanceof Bone ? markActive.wb : markActive;
         let prevB = null;
-        let prevGroupName = null;
-        for(let i =  this.lastRequestedEndIndex; i>= 0; i--) {
+        let prevGroupName = "effectorGroups";
+        let lastGroup = null;
+
+        for(let i = 0; i<this.traversalArray.length; i++) {
             let b = this.traversalArray[i];
             let groupName = b.forBone.name;
-            if(markActive != null && b.forBone.trackedBy.hasDescendant(markActive.forBone.trackedBy)) {
-                console.group(groupName)
-            } else {
-                console.groupCollapsed(groupName); 
+            if(b.effectorList != lastGroup) {
+                console.group(groupName); 
             }
-            b.toConsole();
-            if((prevB?.parent ?? false) && prevB?.parent != b) {
+            else {
+                console.log(b.forBone.name);
+            }
+            if(prevGroupName != groupName) {
                 console.groupEnd(prevGroupName);
             }
             prevB = b;
             prevGroupName = groupName;
+            lastGroup = b.effectorList;
         }
     }
 }
 
 
-class DebugState {
+export class DebugState {
         shadowSkel = null;
         currentTraversalIndex = 0;
         currentIteration= 0;
@@ -497,6 +488,12 @@ class DebugState {
         accumulatingPain = 0;
         maxPain = 0;
         _solveCalls = 0;
+        steps = [
+            'pullback',
+            'preTarget',
+            'postTarget',
+            'pain',
+        ]
 
         constructor(shadowSkel) {this.shadowSkel = shadowSkel;}
         get solveCalls(){return this._solveCalls;}
@@ -506,11 +503,93 @@ class DebugState {
                 this.shadowSkel.parentArmature.recorderPool.finalize();
             }
         };
-        steps = [
-            'pullback',
-            'preTarget',
-            'postTarget',
-            'pain',
-        ]
+
+    reset() {
+        this.currentIteration = -1;
+        this.currentStep = -1; 
+        this.currentTraversalIndex = -1;
+        this.currentSolveCall = -1;
+        this.solveCalls = -1;
+    }
+        
+    get step() {
+        return this.steps[this._currentStep];
+    }
+
+    incrBone_start(totalIterationsPerSolve=this.shadowSkel.parentArmature.defaultIterations) {
+        this.completedBone = false;
+        this.currentTraversalIndex++;
+        
+    }
+
+    incrBone_end(totalIterationsPerSolve=this.shadowSkel.parentArmature.defaultIterations) {
+        this.willCompleteBone = false;
+        this.completedBone = true;
+        if(this.willCompleteIteration) {
+            this.incrIteration_end(totalIterationsPerSolve);           
+        } 
+    }
+
+    incrStep_start(totalIterationsPerSolve=this.shadowSkel.parentArmature.defaultIterations){
+        this._currentStep++;
+        if(this.completedBone || this._currentStep == 0) {
+            this.incrBone_start(totalIterationsPerSolve);
+        }
+        if(this._currentStep == this.steps.length-1) {
+            this.willCompleteBone = true;
+            this.currentTraversalIndex++;
+            if (this.currentTraversalIndex == this.endOnIndex) {
+                this.incrIteration_start(totalIterationsPerSolve);
+            }
+        }
+    }
+
+    incrStep_end(totalIterationsPerSolve=this.shadowSkel.parentArmature.defaultIterations) {
+        if(this.willCompleteBone) {
+            this._currentStep = -1;
+            if(this.willCompleteBone) {
+                this.incrBone_end(totalIterationsPerSolve);
+            }                  
+        }        
+    }
+
     
+    
+    incrIteration_start(totalIterationsPerSolve=this.shadowSkel.parentArmature.defaultIterations){
+        this.willCompleteIteration = true;
+        this.currentTraversalIndex = 0;
+        this.currentIteration++;
+        if (this.currentIteration == totalIterationsPerSolve) {
+            this.incrSolve_start(totalIterationsPerSolve);
+        }
+    }
+
+
+    incrIteration_end(totalIterationsPerSolve=this.shadowSkel.parentArmature.defaultIterations){               
+        this.completedIteration = true;
+        this.currentTraversalIndex = -1;
+        this.accumulatingPain = 0;
+        this.maxPain = 0;
+        this.maxpainbone = null;
+        
+        this.willCompleteIteration = false;
+        console.log('solve#: ' + this.completedSolveCalls + '\t:: itr :: ' + this.currentIteration);
+        if(this.willCompleteSolve) {
+            this.incrSolve_end(totalIterationsPerSolve);
+        }
+        
+    }
+
+    currentSolveCall = 0;
+    completedSolveCalls = 0;
+    incrSolve_start(totalIterationsPerSolve=this.shadowSkel.parentArmature.defaultIterations) {
+        this.currentSolveCall++;
+        this.willCompleteSolve = true;        
+    }
+    incrSolve_end(totalIterationsPerSolve=this.shadowSkel.parentArmature.defaultIterations) {
+        this.currentIteration = -1;
+        this.completedSolveCalls++;
+        this.completedSolve = true;
+        this.willCompleteSolve = false;
+    }
 }

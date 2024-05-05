@@ -85,13 +85,15 @@ export class QCP {
 	 * @param fixed
 	 * @param moved 
 	 * @param weight array of weigths for each equivalent point position
+	 * @param length the index to stop on in the arrays
      * @param {Boolean} translate whether or not to compute the translation component of the rmsd minimizing transform
 	 * @return
 	 */
-	set(moved, target, weight, translate) {
+	set(moved, target, weight, length, translate) {
 		this.target = target;
 		this.moved = moved;
 		this.weight = weight;
+		this.length = length;
 		this.rmsdCalculated = false;
 		this.transformationCalculated = false;
 		this.innerProductCalculated = false;
@@ -108,10 +110,10 @@ export class QCP {
 			this.movedCenter.mult(-1);
 			this.targetCenter.mult(-1);
 		} else {
-			if (weight != null) {
-				for (let w of weight) this.wsum += w;
+			if (weight !== undefined) {
+				for(let i=0; i<this.length; i++) this.wsum += weight[i];
 			} else {
-				this.wsum = moved.length;
+				this.wsum = this.length;
 			}
 		}
 		//this.calcRmsd(moved, target);
@@ -142,9 +144,9 @@ export class QCP {
      * @param {Boolean} translate whether or not to compute the translation component of the rmsd minimizing transform
 	 * @return
 	 */
-	weightedSuperpose(moved, target, weight, translate) {
+	weightedSuperpose(moved, target, weight, length, translate) {
 
-		this.set(moved, target, weight, translate);
+		this.set(moved, target, weight, length, translate);
 		let result = this.getRotation();
 		// transformation.set(rotmat);
 		return result;// transformation;
@@ -153,10 +155,14 @@ export class QCP {
 	
 	getRotation() {
 		let result = null;
-		if (!this.transformationCalculated) {
+		if (this.length == 1) {
+			// QCP doesn't handle single pairs somehow, so if we only have two vectors to solve from we just
+			// we just rotate by the angular distance between them about the normal of the plane they define
+			this.transformationCalculated = true;
+			return this.resultRot.setFromVecs(this.moved[0], this.target[0]);
+		} else if (!this.transformationCalculated) {
 			if (!this.innerProductCalculated)
-				this.innerProduct(this.target, this.moved);	
-			
+				this.weightedInnerProduct(this.target, this.moved);	
 			result = this.calcRotation();
 			this.transformationCalculated = true;
 		}
@@ -173,7 +179,7 @@ export class QCP {
 	calcRmsd(x, y) {
 		// QCP doesn't handle alignment of single values, so if we only have one point
 		// we just compute regular distance.
-		if (this?.weight?.length == 1 || x.length == 1) {
+		if (this.length == 1) {
 			this.rmsd = x[0].dist(y[0]);
 			this.rmsdCalculated = true;
 		} else {
@@ -184,14 +190,91 @@ export class QCP {
 	}
 
 	/**
-	 * Calculates the inner product between two coordinate sets x and y (optionally
-	 * weighted, if weights set through
-	 * {@link #set(SGVec_3d[], SGVec_3d[], double[])}). It also calculates an upper
+	 * Calculates the weighted inner product between two coordinate sets x and y, with weights set through set()
+	 * It also calculates an upper
 	 * bound of the most positive root of the key matrix.
 	 * http://theobald.brandeis.edu/qcp/qcprot.c
 	 *
-	 * @param coords1
-	 * @param coords2
+	 * @param {[Vec3]} coords1
+	 * @param {[Vec3]} coords2
+	 * @return
+	 */
+	weightedInnerProduct(coords1, coords2) {
+		
+		let g1 = 0, g2 = 0;
+		let Sxx=0,Sxy=0, Sxz=0, Syx=0, Syy=0, Syz=0, Szx=0, Szy=0, Szz=0;
+		let ci1x, ci1y, ci1z, ci2x, ci2y, ci2z;  
+		let c1xidx, c2xidx;
+		const weights = this.weight;
+		const length = this.length;
+		let w, x1, y1, z1;
+		const c1db = coords1[0].dataBuffer;
+		const c2db = coords2[0].dataBuffer;
+		
+		for (let i = 0; i < length; i++) {
+			c1xidx = coords1[i].baseIdx;
+			c2xidx = coords2[i].baseIdx;
+			ci1x = c1db[c1xidx], ci1y = c1db[c1xidx+1], ci1z = c1db[c1xidx+2];
+			ci2x = c2db[c2xidx], ci2y = c2db[c2xidx+1], ci2z = c2db[c2xidx+2];
+
+			//we have to compute the S__ values that get used later, so we can't simplify g1 like we do g2 unfortunately :(
+			w = weights[i];
+			x1 = w*ci1x;
+			y1 = w*ci1y;
+			z1 = w*ci1z;
+
+			// wsum += weight[i];
+			g1 += (x1*ci1x + y1*ci1y + z1*ci1z);
+			g2 += w * (ci2x*ci2x + ci2y*ci2y + ci2z*ci2z);
+
+			Sxx += (x1 * ci2x);
+			Sxy += (x1 * ci2y);
+			Sxz += (x1 * ci2z);
+
+			Syx += (y1 * ci2x);
+			Syy += (y1 * ci2y);
+			Syz += (y1 * ci2z);
+
+			Szx += (z1 * ci2x);
+			Szy += (z1 * ci2y);
+			Szz += (z1 * ci2z);
+		}
+		
+		
+		this.e0 = (g1 + g2) * 0.5;
+		
+		this.SxzpSzx = Sxz + Szx;
+		this.SyzpSzy = Syz + Szy;
+		this.SxypSyx = Sxy + Syx;
+		this.SyzmSzy = Syz - Szy;
+		this.SxzmSzx = Sxz - Szx;
+		this.SxymSyx = Sxy - Syx;
+		this.SxxpSyy = Sxx + Syy;
+		this.SxxmSyy = Sxx - Syy;
+		this.mxEigenV = this.e0;
+
+		this.Sxx = Sxx
+		this.Sxy = Sxy
+		this.Sxz = Sxz
+		this.Syx = Syx
+		this.Syy = Syy
+		this.Syz = Syz
+		this.Szx = Szx
+		this.Szy = Szy
+		this.Szz = Szz
+
+		this.innerProductCalculated = true;
+	}
+
+
+	/**
+	 * Calculates the inner product between two coordinate sets x and y
+	 * It also calculates an upper
+	 * bound of the most positive root of the key matrix.
+	 * http://theobald.brandeis.edu/qcp/qcprot.c
+	 *
+	 * @param {[Vec3]} coords1
+	 * @param {[Vec3]} coords2
 	 * @return
 	 */
 	innerProduct(coords1, coords2) {
@@ -201,63 +284,29 @@ export class QCP {
 		let Sxx=0,Sxy=0, Sxz=0, Syx=0, Syy=0, Syz=0, Szx=0, Szy=0, Szz=0;
 		let ci1x, ci1y, ci1z, ci2x, ci2y, ci2z;  
 		let c1xidx, c2xidx;
-		let w = this.weight[i];
-
-		if (this.weight != null) {
-			// wsum = 0;
-			let x1, y1, z1;
+		const c1db = coords1[0].dataBuffer;
+		const c2db = coords2[0].dataBuffer;
 			
-			for (let i = 0; i < this.weight.length; i++) {
-				c1xidx = coords1[i].baseIdx;
-				c2xidx = coords2[i].baseIdx;
-				ci1x = coords1[c1xidx], ci1y = coords1[c1xidx+1], ci1z = coords1[c1xidx+2];
-				ci2x = coords2[c2xidx], ci2y = coords2[c2xidx+1], ci2z = coords2[c2xidx+2];
+		for (let i = 0; i < coords1.length; i++) {
+			c1xidx = coords1[i].baseIdx;
+			c2xidx = coords2[i].baseIdx;
+			ci1x = c1db[c1xidx], ci1y = c1db[c1xidx+1], ci1z = c1db[c1xidx+2];
+			ci2x = c2db[c2xidx], ci2y = c2db[c2xidx+1], ci2z = c2db[c2xidx+2];
+			
+			g1 += ci1x * ci1x + ci1y * ci1y + ci1z * ci1z;
+			g2 += ci2x * ci2x + ci2y * ci2y + ci2z * ci2z;
 
-				//we have to compute the S__ values that get used later, so we can't simplify g1 like we do g2 unfortunately :(
-				w = this.weight[i];
-				x1 = w*ci1x;
-				y1 = w*ci1y;
-				z1 = w*ci1z;
+			Sxx += ci1x * ci2x;
+			Sxy += ci1x * ci2y;
+			Sxz += ci1x * ci2z;
 
-				// wsum += weight[i];
-				g1 += (x1*ci1x + y1*ci1y + z1*ci1z);
-				g2 += w * (ci2x*ci2x + ci2y*ci2y + ci2z*ci2z);
+			Syx += ci1y * ci2x;
+			Syy += ci1y * ci2y;
+			Syz += ci1y * ci2z;
 
-				Sxx += (x1 * ci2x);
-				Sxy += (x1 * ci2y);
-				Sxz += (x1 * ci2z);
-
-				Syx += (y1 * ci2x);
-				Syy += (y1 * ci2y);
-				Syz += (y1 * ci2z);
-
-				Szx += (z1 * ci2x);
-				Szy += (z1 * ci2y);
-				Szz += (z1 * ci2z);
-			}
-		} else {
-			for (let i = 0; i < coords1.length; i++) {
-				c1xidx = coords1[i].baseIdx;
-				c2xidx = coords2[i].baseIdx;
-				ci1x = coords1[c1xidx], ci1y = coords1[c1xidx+1], ci1z = coords1[c1xidx+2];
-				ci2x = coords2[c2xidx], ci2y = coords2[c2xidx+1], ci2z = coords2[c2xidx+2];
-				
-				g1 += ci1x * ci1x + ci1y * ci1y + ci1z * ci1z;
-				g2 += ci2x * ci2x + ci2y * ci2y + ci2z * ci2z;
-
-				Sxx += ci1x * ci2x;
-				Sxy += ci1x * ci2y;
-				Sxz += ci1x * ci2z;
-
-				Syx += ci1y * ci2x;
-				Syy += ci1y * ci2y;
-				Syz += ci1y * ci2z;
-
-				Szx += ci1z * ci2x;
-				Szy += ci1z * ci2y;
-				Szz += ci1z * ci2z;
-			}
-			// wsum = coords1.length;
+			Szx += ci1z * ci2x;
+			Szy += ci1z * ci2y;
+			Szz += ci1z * ci2z;
 		}
 		
 		this.e0 = (g1 + g2) * 0.5;
@@ -338,12 +387,6 @@ export class QCP {
 	}
 
 	calcRotation() {
-        
-		// QCP doesn't handle single targets, so if we only have one point and one
-		// target, we just rotate by the angular distance between them
-		if (this?.weight?.length == 1 || this.moved.length == 1) {
-			return this.resultRot.setFromVecs(this.moved[0], this.target[0]);
-		} else {
 			const {
 				mxEigenV,
 				Syy, 
@@ -427,7 +470,6 @@ export class QCP {
 			}
 			/**the normalization is important because QCP does not calculate a unit magnitude quaternion. */
 			return this.resultRot.setComponents(q1, q2, q3, q4, true); //new Rot(q1, q2, q3, q4, true);
-		}
 	}
     /**
      * translate entries in x by trans
@@ -454,13 +496,13 @@ export class QCP {
 		}*/
 		if(weight != null) {
 			this.wsum = 0;
-			for (let i = 0; i < weight.length; i++) {
+			for (let i = 0; i < this.length; i++) {
 				center.mulAdd(toCenter[i], weight[i]);
 				this.wsum += weight[i];
 			}
 			center.div(this.wsum);
 		} else {
-			for (let i = 0; i < toCenter.length; i++) {
+			for (let i = 0; i < this.length; i++) {
 				center.add(toCenter[i]);
 				this.wsum++;
 			}

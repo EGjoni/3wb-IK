@@ -1,5 +1,5 @@
 const THREE = await import('three');
-import { ShadowSkeleton } from "./solver/ShadowSkeleton.js"
+import { ShadowSkeleton, DebugState} from "./solver/ShadowSkeleton.js"
 import { IKTransform } from "./util/nodes/IKTransform.js";
 import { Vec3, any_Vec3, any_Vec3fv, Vec3Pool } from "./util/vecs.js";
 import { CallbacksSequence } from "./CallbacksSequence.js";
@@ -139,6 +139,10 @@ export class EWBIK extends Saveable {
     /**@type {ArmatureEffectors} stores data shared by all effectors on an armature in pursuit of efficiency, but not shared across armatures due to cowardice*/
     effectorBuffers = null;
 
+
+    bonePinMap = new Map();
+    pinBoneMap = new Map();
+
     static async fromJSON(json, loader, pool, scene) {
         let foundBone = Loader.findSceneObject(json.requires.rootBone, scene);
         let result = new EWBIK(
@@ -204,8 +208,10 @@ export class EWBIK extends Saveable {
      * @param {*} ikd 
      */
     constructor(root, defaultIterations = EWBIK.__dfitr, ikd = `EWBIK-${EWBIK.totalInstances++}`, pool) {
+        if(pool == null || pool == globalVecPool) pool = new Vec3Pool(10000, null, 50, 'stabelPool');
         super(ikd, 'EWBIK', EWBIK.totalInstances, pool);
-        if(pool == null) this.pool = new Vec3Pool(10000, this, 10, 'stabelPool');
+        pool.sieze(this);
+        
         this.rootBone = EWBIK.findRootBoneIn(root);
         this.stablePool = this.pool;
         this.volatilePool = new Vec3Pool(this.pool.tempSize, this, 10, 'volatilePool');
@@ -219,7 +225,7 @@ export class EWBIK extends Saveable {
         this.rootBone.registerToArmature(this);
         this.defaultIterations = defaultIterations;
         /**this reserves a buffer with enough space for 100 simultaneous target effector pairs along all basis directions. Which is way more simultaneous pairs then you should ever use on a single armature**/
-        this.effectorBuffers = new ArmatureEffectors(350, tip.forBone.parentArmature);
+        this.effectorBuffers = new ArmatureEffectors(350, this);
         this.recreateBoneList();
     }
 
@@ -409,8 +415,10 @@ export class EWBIK extends Saveable {
     }
 
     noOp(fromBone = null, iterations = this.getDefaultIterations(), callbacks) {
-        if (this.dirtyShadowSkel)
+        if (this.dirtyShadowSkel) {
             this._regenerateShadowSkeleton();
+            this.shadowSkel.debugState.reset();
+        }
         if (this.dirtyRate)
             this._updateShadowSkelRateInfo(iterations);
         //this.updateShadowNodes();
@@ -484,18 +492,22 @@ export class EWBIK extends Saveable {
      * @param {CallbacksSequence} callbacks to snoop on solver state
      */
     async _doSinglePullbackStep(bone = null, literal, iterations = this.getDefaultIterations(), stabilizationPasses = this.getDefaultStabilizingPassCount(), onComplete =(wb) => this.alignBoneToSolverResult(wb), callbacks) {
-        
+        let ds = this.shadowSkel.debugState;
         if (this.dirtyShadowSkel)
             this._regenerateShadowSkeleton();
         if (this.dirtyRate) {
             this._updateShadowSkelRateInfo();
             this.shadowSkel.updateRates(this.getDefaultIterations());
             this.dirtyRate = false;
+            ds.reset();
         }
         callbacks?.__initStep((callme, wb) => { this.stepWiseUpdateResult(callme, wb); this.alignBoneToSolverResult(wb)});
         this.shadowSkel.alignSimAxesToBoneStates();
-        let endOnIndex = this.shadowSkel.getEndOnIndex(bone, literal)
-        this.shadowSkel.pullBackAll(this.getDefaultIterations(), endOnIndex, callbacks, 0);
+        let endOnIndex = this.shadowSkel.getEndOnIndex(bone, literal);
+        
+        ds.incrIteration_start();
+        this.shadowSkel.pullBackAll(this.getDefaultIterations(), endOnIndex, callbacks, ds.currentIteration);
+        ds.incrIteration_end();
         this.shadowSkel.updateBoneStates(onComplete, callbacks);
     }
 
@@ -546,6 +558,7 @@ export class EWBIK extends Saveable {
 
     regenerateShadowSkeleton(force) {
         this.dirtyShadowSkel = true;
+        console.log('dirty');
         this.pendingSolve = null; //invalidate any pending solve
         if (force)
             this._regenerateShadowSkeleton();
@@ -678,6 +691,7 @@ export class EWBIK extends Saveable {
 
         this.lastRequestedSolveFromBone = null;
         this.dirtyShadowSkel = false;
+        console.log('clean');
         this._updateShadowSkelRateInfo();
         this.ikReady = true;
         this.volatilePool.finalize();
@@ -713,6 +727,18 @@ export class EWBIK extends Saveable {
             this.bones.push(bone);
         this.uniqueInsert(EWBIK.known_ids, bone);
         this.uniqueInsert(this.bonetags, bone, 'name');
+        if(bone.getIKPin() != null) {
+            this.registerPin(bone.getIKPin(), bone);
+        }
+    }
+
+    registerPin(pin, forBone, prevpin) {
+        if(pin == null) {
+            this.pinBoneMap.delete(prevpin);
+            this.bonePinMap.delete(forBone);
+        }
+        this.pinBoneMap.set(forBone.getIKPin(), forBone);
+        this.bonePinMap.set(forBone, forBone.getIKPin());
     }
 
     /**
@@ -851,14 +877,13 @@ export class EWBIK extends Saveable {
         if (this.dirtyRate)
             this._updateShadowSkelRateInfo(iterations);
 
-
         let ds = this.shadowSkel.debugState;
         this.shadowSkel.alignSimAxesToBoneStates();
         //if (ds.currentIteration == 0) {
         this.shadowSkel.updateReturnfulnessDamps(iterations);
         
         //}
-        let i = 0;
+        //let i = 0;
         //let doNothing = ()=>{};
 
         let endOnIndex = this.shadowSkel.getEndOnIndex(solveFrom);
@@ -867,11 +892,7 @@ export class EWBIK extends Saveable {
         let doalign = (wb) => this.alignBoneToSolverResult(wb);
 
         this.shadowSkel.solveToTargets(this.getDefaultStabilizingPassCount(), endOnIndex, doalign, callbacks, ds.currentIteration);
-        ds.currentIteration = ds.currentIteration + 1;
-        if (ds.currentIteration >= iterations) {
-            ds.solveCalls++;
-            ds.currentIteration = 0;
-        }
+        
         console.log('solve#: ' + ds.solveCalls + '\t:: itr :: ' + ds.currentIteration);
     }
 
@@ -889,19 +910,10 @@ export class EWBIK extends Saveable {
         let ds = this.shadowSkel.debugState;
         this.shadowSkel.alignSimAxesToBoneStates();
         if (ds.currentIteration == 0) {
-            this.shadowSkel.updateReturnfulnessDamps(iterations);
-            
+            this.shadowSkel.updateReturnfulnessDamps(iterations);   
         }
-        this.shadowSkel.incrStep();
         callbacks?.__initStep((callme, wb) => this.stepWiseUpdateResult(callme, wb));
         this.shadowSkel.debug_solve(iterations, this.getDefaultStabilizingPassCount(), solveFrom, (wb) => this.alignBoneToSolverResult(wb), callbacks);
-        if (ds.completedIteration) {
-            if (ds.currentIteration >= iterations) {
-                ds.solveCalls++;
-                ds.currentIteration = 0;
-                console.log('solve#: ' + ds.solveCalls + '\t:: itr :: ' + ds.currentIteration);
-            }
-        }
     }
 
 
@@ -1110,7 +1122,11 @@ let betterbones = {
         let prevPinState = this.isPinned();
         /** @type {setIKPin} */
         this.pin = pin;
-        let newPinState = this.isPinned();
+        this.parentArmature.registerPin(pin, this);
+        let newPinState = false;
+        if(pin != null) {
+            newPinState = this.isPinned();
+        }
         if (prevPinState != newPinState && this.parentArmature != null)
             this.parentArmature.regenerateShadowSkeleton();
     },
@@ -1231,6 +1247,17 @@ let betterbones = {
     },
     add(elem) {
         this.original_add(elem);
+        if (elem instanceof THREE.Bone) {
+            if (this.parentArmature != null) {
+                elem.registerToArmature(this.parentArmature);
+                this.parentArmature.recreateBoneList();
+                this.parentArmature.regenerateShadowSkeleton(true);
+            }
+        }
+    },
+    original_attach: THREE.Bone.prototype.attach,
+    attach(elem) {
+        this.original_attach(elem);
         if (elem instanceof THREE.Bone) {
             if (this.parentArmature != null) {
                 elem.registerToArmature(this.parentArmature);

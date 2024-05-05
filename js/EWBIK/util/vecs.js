@@ -380,7 +380,7 @@ export class Vec3 {
     multInto(scalar, result) {
         const resBuf = result.dataBuffer;
         const baseX = this.baseIdx;
-        const resBaseX = result;
+        const resBaseX = result.baseIdx;
         resBuf[resBaseX] = this.dataBuffer[baseX]*scalar;
         resBuf[resBaseX+1] = this.dataBuffer[baseX+1]*scalar;
         resBuf[resBaseX+2] = this.dataBuffer[baseX+2]*scalar;
@@ -600,6 +600,7 @@ export class Vec3Pool {
     lastUnfinalizedBy = null;
     owner = null;
     limitScale = 10;
+    isLocked = false;
 
     /**
      * 
@@ -615,7 +616,15 @@ export class Vec3Pool {
         this.setTempPoolSize(tempSize);
     }
 
+
+    /**takes control of the pool */
+    sieze(newOwner) {
+        this.owner = newOwner;
+    }
+
     unfinalize(calledBy) {
+        if(this.isLocked && calledBy != this.owner) return;
+        else this.isLocked = false;
         
         if(calledBy == this.owner) {
             //console.group(this.poolName+' '+calledBy.ikd);     
@@ -748,36 +757,12 @@ export class Vec3Pool {
         }
     }
 
-
-
     temp_acquire(x=0, y=0, z=0) {
         if(this.tempPool == null) 
             this.setTempPoolSize(this.tempSize);
-            //let isFree = false;
-            //let vec = null;
-            //let attempts = 0;
-            /*while(!isFree && attempts < 10) {//this.tempPool.length) {
-                if(this.lru >= this.tempPool.length) { 
-                    if(assumeFree) {
-                        assumeFree = false;
-                    } else {
-                        console.warn(`
-                        ran out of vectors! Make sure you release any you're not using! You should either
-                        1. call releaseAll when you're at a point in your logic where you're sure any vectors you didn't call .finalize() for are free, or o
-                        2. increase the tempPool size or
-                        3. manually call .release() on more vectors after you finish using them
-                        `)
-                    }
-                }*/
+            
         this.lru = (this.lru + 1) % this.tempPool.length;
         const vec = this.tempPool[this.lru];
-                //isFree = vec.amFree;
-                //attempts++
-            //}
-            /*if(attempts > 10) {
-                console.log("attempted : "+attempts+"TEMP before finding " +this.lru);
-            }
-            vec.amFree = true; // since the user indicated that they will be discarding this anyway*/
         const odb = this.tempBuffer; 
         const obase = vec.baseIdx;
         odb[obase] = x; 
@@ -812,6 +797,11 @@ export class Vec3Pool {
             vec.baseIdx = i*3;
             this.tempPool.push(vec.release());
         }
+    }
+
+    /**makes it so only the owner can unfinalize the pool */
+    lock() {
+        this.isLocked = true;
     }
 
     finalize() {
@@ -1025,7 +1015,7 @@ export class NoPool {
 }
 
 //I feel like anyone can spare 60kb for this convenience. 
-const __tempVecPool = new Vec3Pool(2500);
-__tempVecPool.finalize(); 
+const __tempVecPool = new Vec3Pool(2500, window, 10);
+__tempVecPool.finalize().lock();
 window.noPool = new NoPool();
-window.globalVecPool = window.noPool;
+window.globalVecPool = __tempVecPool;

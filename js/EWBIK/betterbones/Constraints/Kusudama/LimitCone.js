@@ -62,6 +62,8 @@ export class LimitCone extends Saveable {
         super(ikd,'LimitCone', LimitCone.totalInstances, pool);
         this.tempVec1 = this.pool.new_Vec3(); 
         this.tempVec2 = this.pool.new_Vec3();
+        this.tempVec3 = this.pool.new_Vec3();
+        this.tempOutVec = this.pool.new_Vec3();
         this.controlPoint = new Vec3(0,1,0);
         this.workingRay = new Ray(this.pool.any_Vec3(), this.pool.any_Vec3(), this.pool);
         this.tempOutVec = this.pool.new_Vec3(0,0,0);
@@ -186,16 +188,16 @@ export class LimitCone extends Saveable {
             if (inTan2Rad)
                 return false;
 
-            let c1xc2 = this.controlPoint.cross(next.controlPoint);
+            let c1xc2 = this.controlPoint.cross(next.controlPoint, this.tempVec1);
             let c1c2dir = input.dot(c1xc2);
 
             if (c1c2dir < 0.0) {
-                let c1xt1 = this.controlPoint.cross(this.tangentCircleCenterNext1);
-                let t1xc2 = this.tangentCircleCenterNext1.cross(next.controlPoint);
+                let c1xt1 = this.controlPoint.cross(this.tangentCircleCenterNext1, this.tempVec2);
+                let t1xc2 = this.tangentCircleCenterNext1.cross(next.controlPoint, this.tempVec3);
                 return input.dot(c1xt1) > 0 && input.dot(t1xc2) > 0;
             } else {
-                let t2xc1 = this.tangentCircleCenterNext2.cross(this.controlPoint);
-                let c2xt2 = next.controlPoint.cross(this.tangentCircleCenterNext2);
+                let t2xc1 = this.tangentCircleCenterNext2.cross(this.controlPoint, this.tempVec2);
+                let c2xt2 = next.controlPoint.cross(this.tangentCircleCenterNext2, this.tempVec3);
                 return input.dot(t2xc1) > 0 && input.dot(c2xt2) > 0;
             }
         }
@@ -254,9 +256,9 @@ export class LimitCone extends Saveable {
             if (input.dot(c1xt1) > 0 && input.dot(t1xc2) > 0) {
                 let toNextCos = input.dot(this.tangentCircleCenterNext1);
                 if (toNextCos > this.tangentCircleRadiusNextCos) {
-                    let planeNormal = this.tangentCircleCenterNext1.cross(input);
+                    let planeNormal = this.tangentCircleCenterNext1.cross(input, this.tempVec3);
                     let rotateAboutBy = this.tempRot.setFromAxisTrigHalfAngles(planeNormal, this.tangentCircleRadiusNextNegHalfCos, this.tangentCircleRadiusNextNegHalfSin);
-                    return rotateAboutBy.applyToVecClone(this.tangentCircleCenterNext1);
+                    return rotateAboutBy.applyToVecClone(this.tangentCircleCenterNext1, this.tempOutVec);
                 } else {
                     return input;
                 }
@@ -264,13 +266,13 @@ export class LimitCone extends Saveable {
                 return null;
             }
         } else {
-            let t2xc1 = this.tangentCircleCenterNext2.cross(this.controlPoint);
-            let c2xt2 = next.controlPoint.cross(this.tangentCircleCenterNext2);
+            let t2xc1 = this.tangentCircleCenterNext2.cross(this.controlPoint, this.tempVec1);
+            let c2xt2 = next.controlPoint.cross(this.tangentCircleCenterNext2, this.tempVec2);
             if (input.dot(t2xc1) > 0 && input.dot(c2xt2) > 0) {
                 if (input.dot(this.tangentCircleCenterNext2) > this.tangentCircleRadiusNextCos) {
-                    let planeNormal = this.tangentCircleCenterNext2.cross(input);
+                    let planeNormal = this.tangentCircleCenterNext2.cross(input, this.tempVec3);
                     let rotateAboutBy = this.tempRot.setFromAxisTrigHalfAngles(planeNormal, this.tangentCircleRadiusNextNegHalfCos, this.tangentCircleRadiusNextNegHalfSin);
-                    return rotateAboutBy.applyToVecClone(this.tangentCircleCenterNext2);
+                    return rotateAboutBy.applyToVecClone(this.tangentCircleCenterNext2, this.tempOutVec);
                 } else {
                     return input;
                 }
@@ -332,7 +334,7 @@ closestToCone(input, inBounds) {
         inBounds[0] = true;
         return null; // input.clone();
     } else {
-        let axis = this.getControlPoint().cross(input);
+        let axis = this.getControlPoint().cross(input, this.tempVec1);
         let rotTo = this.tempRot.setFromAxisTrigHalfAngles(axis, this.radiusNegHalfCos, this.radiusNegHalfSin);
         let result = rotTo.applyToVec(this.getControlPoint(), this.tempOutVec);
         inBounds[0] = false;
@@ -405,8 +407,8 @@ updateTangentHandles(next) {
         let planeDir1B = this.tempRot.setFromAxisAngle(arcNormal, boundaryPlusTangentRadiusB).applyToVecClone(B);
         let planeDir2B = this.tempRot.setFromAxisAngle(B, Math.PI / 2).applyToVecClone(planeDir1B); //twirly bit
 
-        let r1B = new Ray(planeDir1B, scaledAxisB);
-        let r2B = new Ray(planeDir1B, planeDir2B);
+        let r1B = new Ray(planeDir1B, scaledAxisB, this.pool);
+        let r2B = new Ray(planeDir1B, planeDir2B, this.pool);
 
         r1B.elongate(99);
         r2B.elongate(99);

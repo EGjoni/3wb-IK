@@ -70,7 +70,7 @@ export class ShadowNode extends IKNode{
 
     /**
      * mimics the local values of this ShadowNode to match those of the object3D this is tracking. Optionally does so recursively up until a provided ancestor 
-     * If everything is set up correctly, the global/worldspace values should inherently match
+     * If the worldspace values of obj3d don't match the globalspace values of the shadow nodes, something has gone wrong, but for speed we avoid checking
      * 
      * @param {Boolean} markDescendantsDirty whether to notify descendants shadowNodes that they are dirty
      * @param {IKNode} mimicUntil an ancestor node to stop on 
@@ -90,6 +90,17 @@ export class ShadowNode extends IKNode{
         if(markDescendantsDirty) {
             prevCurr.markDirty();
         }
+        return this;
+    }
+
+
+    
+
+    
+    /**mimics the local values of this ShadowNode's tracked object 3d and exclusively marks this node dirty, with no further checks */
+    quickMimic() {
+        this.localMBasis.setFromObj3d(this.toTrack);
+        this._exclusiveMarkDirty();
         return this;
     }
 
@@ -117,6 +128,7 @@ export class ShadowNode extends IKNode{
         } else {
             this.setParent(this.toTrack.parent.trackedBy);
         }
+        this.mimic(true);
         return this;
     }
 
@@ -128,12 +140,6 @@ export class ShadowNode extends IKNode{
         this.setTracked(obj3d);
     }
 
-    /**mimics the local values of this ShadowNode's tracked object 3d and exclusively marks this node dirty, with no further checks */
-    quickMimic() {
-        this.localMBasis.setFromObj3d(this.toTrack);
-        this._exclusiveMarkDirty();
-        return this;
-    }
 
     fireTrackChangeListeners(willTrack) {
         if(this.__trackChangeListeners == null || willTrack == this.toTrack) return;
@@ -180,21 +186,17 @@ export class ShadowNode extends IKNode{
     project(linear = false) {
         //yeah I know "project" isn't the best name but, the next best option was kageShibariNoJutsu() so...
         if(isNaN(this.localMBasis.translate.x) || isNaN(this.localMBasis.rotation.x) || isNaN(this.localMBasis.scale.x)) {
-            alert("NaN detected, check the debugger")
+            //alert("NaN detected, check the debugger")
             throw new Error("Projecting NaNs is bad.");
         }
-        this.toTrack.position.x = this.localMBasis.translate.x;
-        this.toTrack.position.y = this.localMBasis.translate.y;
-        this.toTrack.position.z = this.localMBasis.translate.z;
-
-        this.toTrack.scale.x = this.localMBasis.scale.x;
-        this.toTrack.scale.y = this.localMBasis.scale.y;
-        this.toTrack.scale.z = this.localMBasis.scale.z;
-
-        this.toTrack.quaternion.x = -this.localMBasis.rotation.x;
-        this.toTrack.quaternion.y = -this.localMBasis.rotation.y;
-        this.toTrack.quaternion.z = -this.localMBasis.rotation.z;
-        this.toTrack.quaternion.w = this.localMBasis.rotation.w;
+        this.localMBasis.translate.writeToTHREE(this.toTrack.position);
+        this.localMBasis.scale.writeToTHREE(this.toTrack.scale);
+        this.toTrack.quaternion.set(
+            -this.localMBasis.rotation.x,
+            -this.localMBasis.rotation.y,
+            -this.localMBasis.rotation.z,
+            this.localMBasis.rotation.w
+        );
         if(linear) {
             this.localMBasis.recompose();
             this.toTrack.matrix.copy(this.localMBasis.composedMatrix);

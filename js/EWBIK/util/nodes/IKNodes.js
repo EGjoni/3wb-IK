@@ -29,7 +29,9 @@ export class IKNode extends Saveable {
     /** @type {IKNode} */
     parent = null;
     areGlobal = true;
-    forceOrthoNormality = true;
+    _forceOrthoNormality = false;
+    _forceOrthogonality = false;
+    _forceUniformity = false;
     static originthreevec = new Vector3(0, 0, 0);
     static identitythreequat = new Quaternion(0, 0, 0, 1);
     static unitthreescale = new Vector3(1, 1, 1);
@@ -41,32 +43,34 @@ export class IKNode extends Saveable {
 
     toJSON() {
         let result = super.toJSON();
-        result.forceOrthoNormality = this.forceOrthoNormality;
+        result._forceOrthoNormality = this._forceOrthoNormality;
+        result._forceOrthogonality = false;
+        result._forceUniformity = false;
         return result;
     }
 
-    getRequiredRefs(){
+    getRequiredRefs() {
         return {
             localMBasis: this.localMBasis,
             globalMBasis: this.globalMBasis,
-            childNodes : [...this.childNodes],
+            childNodes: [...this.childNodes],
             parent: this.parent,
         };
     }
 
-    static fromJSON(json, loader, pool, scene) {     
-        this.isLoading = true;   
+    static fromJSON(json, loader, pool, scene) {
+        this.isLoading = true;
         let result = new IKNode(undefined, undefined, json.ikd);
-        return result; 
+        return result;
     }
-    async postPop(json, loader, pool, scene)  {
-        if(json.requires.localMBasis == null) 
+    async postPop(json, loader, pool, scene) {
+        if (json.requires.localMBasis == null)
             return this;
         let p = await Saveable.prepop(json.requires, loader, pool, scene);
         this.localMBasis = p.localMBasis;
         this.globalMBasis = p.globalMBasis;
-        if(this.globalMBasis == null) this.areGlobal = true;
-        for(let c of p.childNodes) {
+        if (this.globalMBasis == null) this.areGlobal = true;
+        for (let c of p.childNodes) {
             this.childNodes.add(c);
             c.areGlobal = false;
         }
@@ -77,7 +81,7 @@ export class IKNode extends Saveable {
 
     constructor(globalMBasis, parent, ikd = 'IKNode-' + (IKNode.totalNodes++), pool = globalVecPool) {
         super(ikd, new.target.name, new.target.totalNodes, pool);
-        if(!Saveable.loadMode) {
+        if (!Saveable.loadMode) {
             if (globalMBasis == null) {
                 this.localMBasis = IKTransform.newPooled(this.pool);
                 this.globalMBasis = IKTransform.newPooled(this.pool);
@@ -85,11 +89,11 @@ export class IKNode extends Saveable {
                 this.localMBasis = globalMBasis.clone();
                 this.globalMBasis = globalMBasis.clone();
             }
-        
+
             this.dirty = true;
             this.workingVector = this.pool.new_Vec3();
             this.areGlobal = true;
-            
+
             this.tag = ikd;
             if (parent != null && !Saveable.loadMode) {
                 this.setParent(parent);
@@ -97,9 +101,86 @@ export class IKNode extends Saveable {
                 this.areGlobal = true;
             }
             this.markDirty();
-            
+
             this.updateGlobal();
         }
+    }
+
+    /**
+   * @param {boolean} bool orthogonality force state
+   * @param {boolean} recursiveMarkDirty by default marks just this node dirty, but you can set this to true to mark all descendants as well
+   * @returns 
+   */
+    forceOrthogonality(bool, recursiveMarkDirty = false) {
+        this._forceOrthogonality = bool;
+        this.localMBasis.forceOrthogonality = bool;
+        this.globalMBasis.forceOrthogonality = bool;
+        this.localMBasis._updateAllStructureHInts();
+        this.globalMBasis._updateAllStructureHInts();
+        if (recursiveMarkDirty) this.markDirty();
+        else this._exclusiveMarkDirty();
+        return this;
+    }
+
+    /**
+     * @param {boolean} bool uniformity force state
+     * @param {boolean} recursiveMarkDirty by default marks just this node dirty, but you can set this to true to mark all descendants as well
+     * @returns 
+     */
+    forceUniformity(bool, recursiveMarkDirty = false) {
+        this._forceUniformity = bool;
+        this.localMBasis.forceUniformity = bool;
+        this.globalMBasis.forceUniformity = bool;
+        this.localMBasis._updateAllStructureHInts();
+        this.globalMBasis._updateAllStructureHInts();
+        if (recursiveMarkDirty) this.markDirty();
+        else this._exclusiveMarkDirty();
+        return this;
+    }
+
+    /**
+     * @param {boolean} bool orthouniformity force state
+     * @param {boolean} recursiveMarkDirty by default marks just this node dirty, but you can set this to true to mark all descendants as well
+     * @returns 
+     */
+    forceOrthoUniformity(bool, recursiveMarkDirty = false) {
+        this._forceOrthoUniformity = bool;
+        this.localMBasis.forceOrthogonality = bool;
+        this.localMBasis.forceUniformity = bool;
+        this.localMBasis.forceOrthoUniformity = bool;
+
+        this.globalMBasis.forceOrthogonality = bool;
+        this.globalMBasis.forceUniformity = bool;
+        this.globalMBasis.forceOrthoUniformity = bool;
+        this.localMBasis._updateAllStructureHInts();
+        this.globalMBasis._updateAllStructureHInts();
+        if (recursiveMarkDirty) this.markDirty();
+        else this._exclusiveMarkDirty();
+        return this;
+    }
+
+
+    /**
+     * @param {boolean} bool orthonormality force state
+     * @param {boolean} recursiveMarkDirty by default marks just this node dirty, but you can set this to true to mark all descendants as well
+     * @returns 
+     */
+    forceOrthoNormality(bool, recursiveMarkDirty = false) {
+        this.localMBasis.forceOrthogonality = bool;
+        this.localMBasis.forceUniformity = bool;
+        this.localMBasis.forceOrthoUniformity = bool;
+        this.localMBasis.forceOrthoNormality = bool;
+
+        this.globalMBasis.forceOrthogonality = bool;
+        this.globalMBasis.forceUniformity = bool;
+        this.globalMBasis.forceOrthoUniformity = bool;
+        this.globalMBasis.forceOrthoNormality = bool;
+
+        this.localMBasis._updateAllStructureHInts();
+        this.globalMBasis._updateAllStructureHInts();
+        if (recursiveMarkDirty) this.markDirty();
+        else this._exclusiveMarkDirty();
+        return this;
     }
 
     /**
@@ -133,7 +214,6 @@ export class IKNode extends Saveable {
     }
 
     alignGlobalsTo(inputGlobalMBasis) {
-        this.updateGlobal();
         if (this.getParentAxes() != null) {
             this.getGlobalMBasis().adoptValues(inputGlobalMBasis);
             this.getParentAxes().getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
@@ -145,7 +225,6 @@ export class IKNode extends Saveable {
     }
 
     setGlobalOrientationTo(rotation) {
-        this.updateGlobal();
         if (this.getParentAxes() != null) {
             this.getGlobalMBasis().rotateTo(rotation);
             this.getParentAxes().getGlobalMBasis().setTransformToLocalOf(this.globalMBasis, this.localMBasis);
@@ -160,7 +239,7 @@ export class IKNode extends Saveable {
      * the worldspace values of the provided object 3d
      */
     adoptGlobalValuesFromObject3D(object3d, updateLocal = true) {
-        
+
         this.localMBasis.setFromObj3d(object3d);
         this.globalMBasis.setFromGlobalizedObj3d(object3d, this.temp_originthreevec, this.temp_identitythreequat, this.temp_unitthreescale);
         if (this.parent != null && updateLocal) {
@@ -210,7 +289,7 @@ export class IKNode extends Saveable {
         return this;
     }
 
-    
+
     getParentAxes() {
         const p = this.parent;
         return p ? p : null;
@@ -221,7 +300,7 @@ export class IKNode extends Saveable {
             if (this.areGlobal) {
                 this.globalMBasis.adoptValues(this.localMBasis);
             } else {
-                this.getParentAxes().updateGlobal(false);
+                this.getParentAxes().updateGlobal(force);
                 this.getParentAxes().getGlobalMBasis().setTransformToGlobalOf(this.localMBasis, this.globalMBasis);
             }
         }
@@ -231,7 +310,6 @@ export class IKNode extends Saveable {
 
 
     origin(storeIn) {
-        this.updateGlobal();
         return this.getGlobalMBasis().origin(storeIn);
     }
 
@@ -258,7 +336,7 @@ export class IKNode extends Saveable {
             if (oldParent != null) oldParent._disown(this);
         }
         //this.markDirty(); handled by addChild
-        
+
         return this;
     }
 
@@ -269,22 +347,22 @@ export class IKNode extends Saveable {
      */
     addChild(node, safetyCheck = 4) {
         let current = this;
-        while(safetyCheck > 0) {
-            if(current == node) {
+        while (safetyCheck > 0) {
+            if (current == node) {
                 throw new Error("A node cannot be its own ancestor");
             }
-            if(current.parent == null) 
+            if (current.parent == null)
                 break;
             safetyCheck--;
         }
         this.childNodes.add(node);
-        node.nodeDepth = this.nodeDepth+1;
+        node.nodeDepth = this.nodeDepth + 1;
         node.parent = this;
         node.areGlobal = false;
         node.markDirty();
     }
 
-    
+
 
     setLocalOrientationTo(rotation) {
         this.getLocalMBasis().rotateTo(rotation);
@@ -308,14 +386,14 @@ export class IKNode extends Saveable {
      * @param {Rot} apply the rotation to apply
      * @returns the local space version of the rotation that was applied. (such that the inverse of the returned rotation would set the transform back to its original global space orientation)
      */
-    rotateByGlobal(apply, storeIn=new Rot(1,0,0,0)) {
+    rotateByGlobal(apply, storeIn = new Rot(1, 0, 0, 0)) {
         this.updateGlobal();
         let result = apply;
         if (this.getParentAxes() != null) {
-            result = this.getParentAxes().getGlobalMBasis().getLocalOfRotation(apply, storeIn); 
+            result = this.getParentAxes().getGlobalMBasis().getLocalOfRotation(apply, storeIn);
             this.getLocalMBasis().rotateBy(result);
         } else {
-            this.getLocalMBasis().rotateBy(apply);   
+            this.getLocalMBasis().rotateBy(apply);
         }
 
         this.markDirty();
@@ -347,11 +425,11 @@ export class IKNode extends Saveable {
      * @param {IKNode} par 
      * @returns 
      */
-    setRelativeToParent(par) {        
+    setRelativeToParent(par) {
         if (par != null && par != this.parent && this.getParentAxes() != null) {
             this.getParentAxes()._disown(this);
             par.addChild(this);
-        } else if(par != null) par.addChild(this);
+        } else if (par != null) par.addChild(this);
         return this;
     }
 
@@ -412,7 +490,7 @@ export class IKNode extends Saveable {
 
     translateByGlobal(translate) {
         if (this.getParentAxes() !== null) {
-            this.updateGlobal();
+            //updateGlobal implicit in origin()
             this.translateTo(this.origin().add(translate));
         } else {
             this.getLocalMBasis().translateBy(translate);
@@ -518,35 +596,50 @@ export class IKNode extends Saveable {
         return this;
     }
 
+    updateLocalOrthoHints(recursive = false) {
+        this.localMBasis._updateNorms();
+        let avgMag = this.localMBasis.mag() / 3;
+        this.localMBasis._updateOrthoNormalHint(avgMag);
+        this.localMBasis._updateOrthoDefaults(avgMag);
+        this.globalMBasis.isOrthoNormal &= this.localMBasis.isOrthoNormal;
+        this.globalMBasis.isOrthoUniform &= this.localMBasis.isOrthoUniform;
+        this.globalMBasis.isOrthogonal &= this.localMBasis.isOrthogonal;
+        this._exclusiveMarkDirty();
+        if (recursive) {
+            i
+            for (let c of this.childNodes) c.updateLocalOrthoHints(recursive);
+        }
+    }
+
     _exclusiveMarkDirty() {
         this.dirty = true;
         this.globalMBasis.lazyRefresh();
     }
 
-    
+
     setToOrthon_XHeading(vec) {
-        if(this.dirty) this.updateGlobal();
+        if (this.dirty) this.updateGlobal();
         return this.globalMBasis.setToOrthon_XHeading(vec);
     }
     setToOrthon_YHeading(vec) {
-        if(this.dirty) this.updateGlobal();
+        if (this.dirty) this.updateGlobal();
         return this.globalMBasis.setToOrthon_YHeading(vec);
     }
     setToOrthon_ZHeading(vec) {
-        if(this.dirty) this.updateGlobal();
+        if (this.dirty) this.updateGlobal();
         return this.globalMBasis.setToOrthon_ZHeading(vec);
     }
 
     setToXHeading(vec) {
-        if(this.dirty) this.updateGlobal();
+        if (this.dirty) this.updateGlobal();
         return this.globalMBasis.setToXHeading(vec);
     }
     setToYHeading(vec) {
-        if(this.dirty) this.updateGlobal();
+        if (this.dirty) this.updateGlobal();
         return this.globalMBasis.setToYHeading(vec);
     }
     setToZHeading(vec) {
-        if(this.dirty) this.updateGlobal();
+        if (this.dirty) this.updateGlobal();
         return this.globalMBasis.setToZHeading(vec);
     }
 
@@ -563,12 +656,11 @@ export class IKNode extends Saveable {
     }
 
     equals(ax) {
-        this.updateGlobal();
         ax.updateGlobal();
 
         return (
             this.getGlobalMBasis().rotation.equals(ax.globalMBasis.rotation) &&
-            this.getGlobalMBasis().origin().equals(ax.origin_)
+            this.globalMBasis.origin().equals(ax.origin_)
         );
     }
 
@@ -587,8 +679,8 @@ export class IKNode extends Saveable {
      * @returns true if the given node is a descendant of this one, false otherwise
      */
     hasAncestor(node) {
-        if(node == this) return true;
-        else if(this.parent == null) return false;
+        if (node == this) return true;
+        else if (this.parent == null) return false;
         return this.parent.hasAncestor(node);
     }
 
@@ -625,20 +717,20 @@ export class IKNode extends Saveable {
 
     toString(withlocal = true, withglobal = true, withLabel = true) {
         this.updateGlobal();
-        const global = `${withLabel?'Global: ': ''} ${this.getGlobalMBasis().toString()}\n`;
-        const local = `${withLabel?'Lcal: ': ''} ${this.getLocalMBasis().toString()}`;
-        return withglobal? global :'' + withlocal?local:'';
+        const global = `${withLabel ? 'Global: ' : ''} ${this.getGlobalMBasis().toString()}\n`;
+        const local = `${withLabel ? 'Lcal: ' : ''} ${this.getLocalMBasis().toString()}`;
+        return withglobal ? global : '' + withlocal ? local : '';
     }
 
     toConsole(withString = true) {
-        console.group(this.ikd +' Node: ');
-            console.group('global: ');
-                console.log(this.toString(false, true, false)),
+        console.group(this.ikd + ' Node: ');
+        console.group('global: ');
+        console.log(this.toString(false, true, false)),
             console.groupEnd('global: ');
-            console.group('local: ');
-                console.log(this.toString(true, false, false))
-            console.groupEnd('local: ');
-        console.groupEnd(this.ikd +' Node: ');
+        console.group('local: ');
+        console.log(this.toString(true, false, false))
+        console.groupEnd('local: ');
+        console.groupEnd(this.ikd + ' Node: ');
         //return this.toCons(withString);
     }
 
@@ -646,8 +738,8 @@ export class IKNode extends Saveable {
         console.log("local\t global");
         let colStyles = IKTransform._getCompareStyles(this.getLocalMBasis(), this.getLocalMBasis());
         console.log(`${colStyles.string}`, ...colStyles.styles)
-        if(withString)
-        console.log(this.toString());
+        if (withString)
+            console.log(this.toString());
     }
 
     toHTMLDebug() {
@@ -669,76 +761,76 @@ export class IKNode extends Saveable {
      * @return returns the node which is the most recent common ancestor of the provided input nodes
      */
     static getCommonAncestor(nodelist, shallowest = 99999) {
-        for(let n of nodelist) {
+        for (let n of nodelist) {
             shallowest = Math.min(shallowest, n.nodeDepth);
         }
-        for(let i =0; i<nodelist.length; i++) {
-            while(nodelist[i].nodeDepth > shallowest) 
+        for (let i = 0; i < nodelist.length; i++) {
+            while (nodelist[i].nodeDepth > shallowest)
                 nodelist[i] = nodelist[i].parent
         }
         let common = nodelist[0];
         let isCommon = true;
-        for(let n of nodelist) {
-            if(n != common) {
+        for (let n of nodelist) {
+            if (n != common) {
                 isCommon = false;
                 break;
             }
         }
-        if(!isCommon) {
-            for(let i =0; i<nodelist.length; i++) {
-                if(nodelist[i].parent != null) {
+        if (!isCommon) {
+            for (let i = 0; i < nodelist.length; i++) {
+                if (nodelist[i].parent != null) {
                     nodelist[i] = nodelist[i].parent;
                 }
             }
-            return IKNode.getCommonAncestor(nodelist, shallowest-1);
+            return IKNode.getCommonAncestor(nodelist, shallowest - 1);
         }
         else return common;
     }
-    
+
 
     /**visual comparison of two IKNode's local and global values*/
     static compareWith(node1, node2) {
         let builtLocal = IKTransform._getCompareStyles(node1.getLocalMBasis(), node2.getLocalMBasis());
         let builtGlobal = IKTransform._getCompareStyles(node1.getGlobalMBasis(), node2.getGlobalMBasis());
-        console.log(`%c      Global: \n${builtGlobal.string}\n%c      Local: \n${builtLocal.string}`, '', ...builtGlobal.styles , '',...builtLocal.styles);
+        console.log(`%c      Global: \n${builtGlobal.string}\n%c      Local: \n${builtLocal.string}`, '', ...builtGlobal.styles, '', ...builtLocal.styles);
     }
 
-    static obj3dToConsole(object3d) {        
-        console.group(object3d.name +' transform');
-            console.group('global: ');
-                console.log(IKNode.obj3dToString(object3d, false, true)),
+    static obj3dToConsole(object3d) {
+        console.group(object3d.name + ' transform');
+        console.group('global: ');
+        console.log(IKNode.obj3dToString(object3d, false, true)),
             console.groupEnd('global: ');
-            console.group('local: ');
-                console.log(IKNode.obj3dToString(object3d, true, false))
-            console.groupEnd('local: ');
-        console.groupEnd(object3d.name +' transform');
+        console.group('local: ');
+        console.log(IKNode.obj3dToString(object3d, true, false))
+        console.groupEnd('local: ');
+        console.groupEnd(object3d.name + ' transform');
     }
 
-    static obj3dToString(object3d, withlocal=true, withglobal=true) {
+    static obj3dToString(object3d, withlocal = true, withglobal = true) {
         let loc = IKTransform.newPooled(this.pool);
-        if(withlocal) loc.setFromObj3d(object3d);
+        if (withlocal) loc.setFromObj3d(object3d);
         const local = `${loc.toString()}`;
 
         let glob = IKTransform.newPooled(this.pool);
-        if(withglobal) glob.setFromGlobalizedObj3d(object3d);
+        if (withglobal) glob.setFromGlobalizedObj3d(object3d);
         const global = `${glob.toString()}`;
-        
+
         let out = withglobal ? global : '' + withlocal ? local : '';
         return out;
     }
 
-    getDebug = function() {
+    getDebug = function () {
         const localPosition = this.getLocalMBasis().translate;
         const worldPosition = this.getGlobalMBasis().translate;
         const result = {
-            localPos : localPosition,
-            worldPos : worldPosition,
-            name :  this.ikd
+            localPos: localPosition,
+            worldPos: worldPosition,
+            name: this.ikd
         }
-        return result; 
+        return result;
     }
 
-    toVis = function (doubleElem, range = 1, vert=null, horiz=null) {
+    toVis = function (doubleElem, range = 1, vert = null, horiz = null) {
         let debugObj = this.getDebug();
         window.toDebugColor(debugObj, doubleElem, range, vert, horiz);
         return groupedelem;
@@ -762,14 +854,14 @@ export class TrackingNode extends IKNode {
 
     toJSON() {
         let result = super.toJSON();
-        return result; 
-    }
-    getRequiredRefs() {
-        let result = super.getRequiredRefs(); 
-        result._toTrack = this._toTrack; 
         return result;
     }
-    async postPop(json, loader, pool, scene)  {
+    getRequiredRefs() {
+        let result = super.getRequiredRefs();
+        result._toTrack = this._toTrack;
+        return result;
+    }
+    async postPop(json, loader, pool, scene) {
         let p = await Saveable.prepop(json.requires, loader, pool, scene);
         await super.postPop(json, loader, pool, scene);
         if (this.toTrack != null)
@@ -781,20 +873,21 @@ export class TrackingNode extends IKNode {
      * 
      * @param {Object3D} toTrack 
      */
-    constructor(toTrack, ikd = 'TrackingNode-' + (TrackingNode.totalNodes++), forceOrthoNormality = true, pool = globalVecPool) {
+    constructor(toTrack, ikd = 'TrackingNode-' + (TrackingNode.totalNodes++), pool = globalVecPool) {
         super(undefined, undefined, ikd, pool);
         this.toTrack = toTrack;
-        
-        if (this.toTrack?.scale.x != 1 || this.toTrack?.scale.y != 1 || this.toTrack?.scale.z != 1)
-            this.forceOrthoNormality = false
-            //this.toTrack.matrixWorldAutoUpdate = false;
-        if(!Saveable.loadMode) {
+
+        if (!Saveable.loadMode) {
             if (this.toTrack != null)
                 this.adoptLocalValuesFromObject3D(this.toTrack);
             this.markDirty();
         }
         //this.updateGlobal();
     }
+
+
+
+
 
     /**
      * 
@@ -880,7 +973,7 @@ export class TrackingNode extends IKNode {
             }
             worldMatrixA = new THREE.Matrix4();
             const gmbrot = globalMBasis.rotation;
-            
+
             worldMatrixA.compose(globalMBasis.translate,
                 //new Quaternion(gmbrot.x, gmbrot.y, gmbrot.z, gmbrot.w); //jpl
                 new Quaternion(

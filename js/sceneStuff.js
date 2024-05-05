@@ -121,38 +121,44 @@ async function select(item) {
         window.contextPin.targetNode.toTrack.add(pinAxesHelper);
         pinAxesHelper.layers.enableAll();
         window.activeSelection = contextPin;
-        item.forBone.parent.previouslySelectedDescendant = item.forBone.parent.getChildBoneList().indexOf(item.forBone);
-        if(item.nonInteractive)
+        if(item?.parent instanceof THREE.Bone && window.pinsOnly != true) 
+            item.forBone.parent.previouslySelectedDescendant = item.forBone.parent.getChildBoneList().indexOf(item.forBone);
+        if(item.nonInteractive && window.pinsOnly != true)
             item = item.forBone;
         
     }
-
-    if (item instanceof THREE.Bone) {
-        selectedPin = null;
-        selectedPinIdx = -1;
-        window.selectedBone = item;
-        window.selectedBoneIdx = boneList.indexOf(item);
-        pinOrientCtrls.detach();
-        pinOrientCtrls.enabled = false;
-        //pinTranslateCtrls.enabled = false;
-        boneCtrls.enabled = true;
-        boneCtrls.attach(selectedBone);
-        window.contextBone = selectedBone;
-        window.contextPin = selectedBone.getIKPin() ?? null;
-        window.contextArmature = selectedBone.parentArmature;
-        window.contextConstraint = selectedBone.getConstraint() ?? null;
-        window.contextBone.getIKBoneOrientation().add(boneAxesHelper);
-        boneAxesHelper.layers.enableAll();
-        window?.contextPin?.targetNode?.toTrack.add(pinAxesHelper);
-        pinAxesHelper.layers.enableAll();
-        window.activeSelection = contextBone;
-        item.parent.previouslySelectedDescendant = item.parent?.getChildBoneList().indexOf(item) ?? 0;
-    }
-    
-    if (contextBone != window.prevContextBone) {
-        window.prevContextBone?.setTempIKOrientationLock(false);
-        if (contextBone != null)
-            window.prevContextBone = contextBone;
+    if(window.pinsOnly === undefined) {
+        if (item instanceof THREE.Bone) {
+            selectedPin = null;
+            selectedPinIdx = -1;
+            window.selectedBone = item;
+            window.selectedBoneIdx = boneList.indexOf(item);
+            pinOrientCtrls.detach();
+            pinOrientCtrls.enabled = false;
+            //pinTranslateCtrls.enabled = false;
+            boneCtrls.enabled = true;
+            boneCtrls.attach(selectedBone);
+            window.contextBone = selectedBone;
+            window.contextPin = selectedBone.getIKPin() ?? null;
+            window.contextArmature = selectedBone.parentArmature;
+            window.contextConstraint = selectedBone.getConstraint() ?? null;
+            window.contextBone.getIKBoneOrientation().add(boneAxesHelper);
+            boneAxesHelper.layers.enableAll();
+            window?.contextPin?.targetNode?.toTrack.add(pinAxesHelper);
+            pinAxesHelper.layers.enableAll();
+            window.activeSelection = contextBone;
+            if(item?.parent instanceof THREE.Bone)
+                item.parent.previouslySelectedDescendant = item.parent.getChildBoneList()?.indexOf(item) ?? 0;
+        }
+        
+        if (contextBone != window.prevContextBone) {
+            window.prevContextBone?.setTempIKOrientationLock(false);
+            if (contextBone != null)
+                window.prevContextBone = contextBone;
+        }
+    } else if(window.pinsOnly) {
+        boneCtrls.enabled = false;
+        boneCtrls.visible = false;
     }
     let camVec = new window.Vec3();
     camVec.readFromTHREE(camera.position);
@@ -251,9 +257,9 @@ function makePinMeshHint(ikpin, pinSize, into, alignMesh = false) {
     const targMesh = new THREE.Mesh(geometry, material);
     //targMesh.position.set(0, b.height/2, 0);
     
-    let addTo = into;
-    if(ikpin.targetNode != null) {
-        addTo = ikpin.targetNode.toTrack;
+    let addTo = null;
+    if(ikpin.target_threejs != null) {
+        addTo = ikpin.target_threejs; //ikpin.targetNode.toTrack;
     }
     targMesh.matrix.copy(globalTrans);
         targMesh.matrix.decompose(targMesh.position, targMesh.quaternion, targMesh.scale);
@@ -264,7 +270,6 @@ function makePinMeshHint(ikpin, pinSize, into, alignMesh = false) {
         targMesh.updateMatrix();
     } else {
         addTo.add(targMesh);
-        
     }
     targMesh.name = ikpin.ikd;
     targMesh.ikd = ikpin.ikd;
@@ -288,16 +293,14 @@ function makePinsList(pinSize, into = scene, armature, align = false, domakemesh
     for (let b of boneList) {
         if (b.getIKPin() != null) {
             let ikpin = b.getIKPin();
-            
-            if (ikpin.targetNode.toTrack == null || (domakemesh && ikpin.hintMesh == null)) {
-                ikpin.hintMesh = makePinMeshHint(ikpin, pinSize, ikpin.target_threejs.parent, align);
-                if(ikpin.targetNode.toTrack == null) ikpin.targetNode.setTracked(ikpin.hintMesh);                
-            } 
             if(align) {
                 ikpin.alignToBone();
-            } //else {
-                ikpin.ensure();
-            //}
+            }
+            if (ikpin.targetNode.toTrack == null || (domakemesh && ikpin.hintMesh == null)) {
+                ikpin.hintMesh = makePinMeshHint(ikpin, pinSize, undefined, true);
+                if(ikpin.targetNode.toTrack == null) ikpin.targetNode.setTracked(ikpin.hintMesh);                
+            } 
+            ikpin.ensure();
             
             armature.pinsList.push(ikpin);
             armature.targetsMeshList.push(ikpin.targetNode.toTrack);
@@ -919,6 +922,7 @@ ${localScalestr}`;
 
 window.addEventListener('resize', onWindowResize, false);
 function onWindowResize() {
+    if(window.camera == null) return;
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
