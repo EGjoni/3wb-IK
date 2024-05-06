@@ -127,7 +127,7 @@ async function select(item) {
             item = item.forBone;
         
     }
-    if(window.pinsOnly === undefined) {
+    if(!window.pinsOnly) {
         if (item instanceof THREE.Bone) {
             selectedPin = null;
             selectedPinIdx = -1;

@@ -1502,6 +1502,7 @@ window.setInternalStatetoDOM = function () {
         window.interactionSolve = false;
         window.autoSolve = false;
     }
+    window.pinsOnly = window.renderableLayers[2] == false;
 }
 
 /**updates the dom to match the internal interaction mode */
