@@ -113,9 +113,12 @@ export class Rest extends Returnful {
         }
         parname = parname == null ? `armature.bonetags["${tag}"]` : parname;
         let postPar = parname==null ? '' : `.forBone`;
-        let r = boneFrameRest.localMBasis.rotation.toArray();
+        let r = this.boneFrameRest.localMBasis.rotation.toArray();
         let result = `new Rest(${parname}, undefined,
-                "${this.ikd}_on_bone_${parname}", armature.stablePool).boneFrameRest.localMBasis.rotateTo(new Rot(${r.w}, ${r.x}, ${r.y}, ${r.z}))`;
+                "${this.ikd}_on_bone_${tag}", armature.stablePool).setPainfulness(${this.getPainfulness()})
+                .setStockholmRate(${this.getStockholmRate()})
+                .boneFrameRest.localMBasis.rotateTo(
+                    new Rot(${r[0]}, ${r[1]}, ${r[2]}, ${r[3]}))`;
         if(this.enabled == false) 
             result += '.disable()';
         result+=';\n';

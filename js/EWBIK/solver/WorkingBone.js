@@ -251,9 +251,9 @@ export class WorkingBone {
         let desiredRotation = this.chain.qcpConverger.weightedSuperpose(this.chain.tipHeadings, this.chain.targetHeadings, this.chain.weightArray, length, translate);
         const translateBy = this.chain.qcpConverger.getTranslation();
         const boneDamp = this.cosHalfDampen;
-        if (!translate) {
+        //if (!translate) {
             desiredRotation.clampToCosHalfAngle(boneDamp);
-        }
+        //}
         let localDesiredRotby = this.simLocalAxes.getParentAxes().getGlobalMBasis().getLocalOfRotation(desiredRotation, this.chain.tempRot);
         //let reglobalizedRot = desiredRotation;
         if(!skipConstraints) {

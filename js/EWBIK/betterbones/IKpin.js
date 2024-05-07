@@ -24,9 +24,17 @@ export class IKPin extends Saveable{
     xPriority = 0.5;
     yPriority = 0.5;
     zPriority = 0;
-    xScale = 1;
-    yScale = 1; 
-    zScale = 1;
+    base_xScale = 1;
+    base_yScale = 1; 
+    base_zScale = 1;
+    _xScale = 1;
+    _yScale = 1; 
+    _zScale = 1;
+
+    posOnlyMesh = null;
+    orientTargMesh = null;
+    hintMesh = null;
+    normed_weights = [0.5,.25,.5,.25];
     
     static XDir = 0b001;
     static YDir = 0b010;
@@ -132,6 +140,7 @@ export class IKPin extends Saveable{
         this.enabled = !disabled;
         this.forBone.setIKPin(this);
         this.setPSTPriorities(1, 1, 1);
+        this.setTargetScales(1,1,1);
     }
 
     /**
@@ -320,6 +329,7 @@ export class IKPin extends Saveable{
             this.forBone?.parentArmature?.regenerateShadowSkeleton();
         }
         this.forBone?.parentArmature?.updateShadowSkelRateInfo();
+        this.updateHintMesh();
         return this;
     }
 
@@ -359,7 +369,9 @@ export class IKPin extends Saveable{
             this.y_normed_priority*this.pinWeight, 
             this.z_normed_priority*this.pinWeight
         ];
+        this.updateHintMesh();
         this.forBone?.parentArmature?.updateShadowSkelRateInfo();
+        return this;
     }
 
     get positionPriority() {return this._positionPriority;}
@@ -381,16 +393,46 @@ export class IKPin extends Saveable{
     }
 
 
-    /**Sets the magnitude of the basis vectors of this target. This has a different effect it than changing the priorites of those same directions. 
+    /**Sets the magnitude of the basis vectors of this target. These get multiplied by the effectored bone height internally. This has a different effect than changing the priorites of the basis directions. 
      * It's a bit difficult to convey the difference in words but, to a reasonable approximation, you can think of this as controlling how much ancestor of the effect care about the orientation of the effector. 
      * With low scales, ancestor bones won't care very much about descendant orientation, attempting to mostly match on position. whereas with large scales ancestor bones will care a lot. 
      * the pinned bone itself shouldn't be too affected by these values.
      * 
     */
-    setTargetScales(xScale, yScale, zScale) {
-        this.xScale = xScale;
-        this.yScale = yScale;
-        this.zScale = zScale;
+    setTargetScales(xScale = this.base_xScale, yScale  = this.base_yScale, zScale = this.base_zScale) {
+        this.base_xScale = xScale;
+        this.base_yScale = yScale;
+        this.base_zScale = zScale;
+        this._xScale = this.base_xScale*this.forBone.height;
+        this._yScale = this.base_yScale*this.forBone.height;
+        this._zScale = this.base_zScale*this.forBone.height;
+        this.updateHintMesh();
+        this.forBone?.parentArmature?.updateShadowSkelRateInfo();
+    }
+
+    get xScale() {
+        return this.base_xScale;
+    }
+
+    get yScale() {
+        return this.base_yScale;
+    }
+
+    get zScale() {
+        return this.base_zScale;
+    }
+
+    set xScale(val) {
+        this.base_xScale = val;
+        this.setTargetScales(this.base_xScale, this.base_yScale, this.base_zScale);
+    }
+    set yScale(val) {
+        this.base_yScale = val; 
+        this.setTargetScales(this.base_xScale, this.base_yScale, this.base_zScale);
+    }
+    set zScale(val) {
+        this.base_zScale = val;
+        this.setTargetScales(this.base_xScale, this.base_yScale, this.base_zScale);
     }
 
 
@@ -605,6 +647,38 @@ export class IKPin extends Saveable{
         this.solveFromHere();
     }
 
+
+
+    /**changes the displayed hintmesh based on whether the target has an orientation */
+    updateHintMesh() {
+        if(this.hintMesh != null && this.posOnlyMesh != null && this.orientTargMesh != null) {
+            this.posOnlyMesh.forPin = this;
+            this.orientTargMesh.forPin = this;
+            this.hintMesh.visible = false;
+            this.posOnlyMesh.visible = false;
+            this.orientTargMesh.visible = false;
+            if(!this.hasOrientation()) {
+                this.hintMesh = this.posOnlyMesh;
+            } else {
+                this.hintMesh = this.orientTargMesh;
+            }
+            this.hintMesh.visible = true;
+        }
+    }
+
+    /**
+     * @returns {boolean} true if this ikpin has a non-zero translation component, false otherwise
+     */
+    hasTranslation() {
+        return this.position_normed_priority > 0;
+    }
+
+    /**
+     * @returns {boolean} true if this ikpin has a non-zero orientation component, false otherwise
+     */
+    hasOrientation() {
+        return (this._xScale * this?.x_normed_priority > 0) || (this._yScale * this?.y_normed_priority > 0) || (this._zScale * this?.z_normed_priority > 0)
+    }
 
     onTargetNodeTrackChange(node, previousTracked, newTracked) {
         if(node == this.targetNode) {

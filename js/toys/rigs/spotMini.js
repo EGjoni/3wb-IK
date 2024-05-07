@@ -198,7 +198,7 @@ spot_upperLeg_RR_019*/
         6.272831666974913, (cnstrt, bone) => bone == contextBone,
         "Twist for spot_lowerLeg_RR_020", armature.stablePool);
 
-        armature.bonetags["spot_body_02"].setStiffness(1);
+
     let spot_body_02_pin = new IKPin(armature.bonetags["spot_body_02"]);
     spot_body_02_pin.setPinWeight(0.5);
     spot_body_02_pin.setInfluenceOpacity(1 - 0.800);

@@ -8,9 +8,9 @@ export class Vec3 {
     baseIdx = 0;
     dataBuffer = null;
     dims = 3;
-    constructor(x=0, y=0, z=0, dataBuffer = [0, 0, 0]) {
+    constructor(x = 0, y = 0, z = 0, dataBuffer = [0, 0, 0]) {
         this.dataBuffer = dataBuffer
-        this.x = x, this.y=y, this.z=z;
+        this.x = x, this.y = y, this.z = z;
     }
 
     get x() { return this.dataBuffer[this.baseIdx]; }
@@ -38,7 +38,7 @@ export class Vec3 {
     }
 
     /**returns the cross product of this vector and the input vector.**/
-    cross(input, storeIn = new Vec3()) {        
+    cross(input, storeIn = new Vec3()) {
         storeIn.setComponents(
             this.y * input.z - this.z * input.y,
             this.z * input.x - this.x * input.z,
@@ -56,7 +56,7 @@ export class Vec3 {
     hasNaN() {
         return isNaN(this.x) || isNaN(this.y) || isNaN(this.z);
     }
-   
+
     getOrthogonal() {
         const { x, y, z } = this;
         let result = this.clone();
@@ -84,8 +84,8 @@ export class Vec3 {
     set(vec) {
         const baseIdx = this.baseIdx, vidx = vec.baseIdx;
         this.dataBuffer[baseIdx] = vec.dataBuffer[vidx];
-        this.dataBuffer[baseIdx+1] = vec.dataBuffer[vidx+1];
-        this.dataBuffer[baseIdx+2] = vec.dataBuffer[vidx+2];
+        this.dataBuffer[baseIdx + 1] = vec.dataBuffer[vidx + 1];
+        this.dataBuffer[baseIdx + 2] = vec.dataBuffer[vidx + 2];
         return this;
     }
 
@@ -96,8 +96,8 @@ export class Vec3 {
     readFromTHREE(vec) {
         const baseIdx = this.baseIdx;
         this.dataBuffer[baseIdx] = vec.x;
-        this.dataBuffer[baseIdx+1] = vec.y;
-        this.dataBuffer[baseIdx+2] = vec.z;
+        this.dataBuffer[baseIdx + 1] = vec.y;
+        this.dataBuffer[baseIdx + 2] = vec.z;
         return this;
     }
 
@@ -108,22 +108,22 @@ export class Vec3 {
      */
     writeToTHREE(vec) {
         const baseIdx = this.baseIdx;
-        vec.set(this.dataBuffer[baseIdx], this.dataBuffer[baseIdx+1], this.dataBuffer[baseIdx+2]);
+        vec.set(this.dataBuffer[baseIdx], this.dataBuffer[baseIdx + 1], this.dataBuffer[baseIdx + 2]);
         return vec;
     }
 
     setComponents(x, y, z) {
         const baseX = this.baseIdx;
         this.dataBuffer[baseX] = x;
-        this.dataBuffer[baseX+1] = y;
-        this.dataBuffer[baseX+2] = z;
+        this.dataBuffer[baseX + 1] = y;
+        this.dataBuffer[baseX + 2] = z;
         return this;
     }
 
     /** writes thes components of this vector into the given array. If no aray is given, one will be created and returned**/
     toArray(into = new Array(this.dims)) {
         for (let i = 0; i < this.dims; i++) {
-            into[i] = this.dataBuffer[this.baseIdx+i];
+            into[i] = this.dataBuffer[this.baseIdx + i];
         }
         return into;
     }
@@ -137,8 +137,8 @@ export class Vec3 {
     /**swap the values of these vectors */
     static swap(v1, v2) {
         const v1x = v1.baseIdx, v2x = v2.baseIdx;
-        const v1y = v1.baseIdx+1, v2y = v2.baseIdx+1; 
-        const v1z = v1.baseIdx+2, v2z = v2.baseIdx+2; 
+        const v1y = v1.baseIdx + 1, v2y = v2.baseIdx + 1;
+        const v1z = v1.baseIdx + 2, v2z = v2.baseIdx + 2;
         v1.dataBuffer[v1x] = v1.dataBuffer[v1x] ^ v2.dataBuffer[v2x];
         v2.dataBuffer[v2x] = v1.dataBuffer[v1x] ^ v2.dataBuffer[v2x];
         v1.dataBuffer[v1x] = v1.dataBuffer[v1x] ^ v2.dataBuffer[v2x];
@@ -161,8 +161,8 @@ export class Vec3 {
     writeInto(arr, baseX) {
         const thisX = this.baseIdx;
         arr[baseX] = this.dataBuffer[thisX];
-        arr[baseX+1] = this.dataBuffer[thisX+1];
-        arr[baseX+2] = this.dataBuffer[thisX+2];
+        arr[baseX + 1] = this.dataBuffer[thisX + 1];
+        arr[baseX + 2] = this.dataBuffer[thisX + 2];
         return this;
     }
 
@@ -175,37 +175,37 @@ export class Vec3 {
     readFrom(arr, baseX) {
         const thisX = this.baseIdx;
         this.dataBuffer[thisX] = arr[baseX];
-        this.dataBuffer[thisX+1] = arr[baseX+1];
-        this.dataBuffer[thisX+2] = arr[baseX+2];
+        this.dataBuffer[thisX + 1] = arr[baseX + 1];
+        this.dataBuffer[thisX + 2] = arr[baseX + 2];
         return this;
     }
 
     mag() {
         const thisX = this.baseIdx;
-        const x = this.dataBuffer[thisX], y=this.dataBuffer[thisX+1], z = this.dataBuffer[thisX+2];
-        return Math.sqrt(x*x + y*y + z*z);
+        const x = this.dataBuffer[thisX], y = this.dataBuffer[thisX + 1], z = this.dataBuffer[thisX + 2];
+        return Math.sqrt(x * x + y * y + z * z);
     }
 
     magSq() {
         const thisX = this.baseIdx;
-        const x = this.dataBuffer[thisX], y=this.dataBuffer[thisX+1], z = this.dataBuffer[thisX+2];
-        return x*x + y*y + z*z;
+        const x = this.dataBuffer[thisX], y = this.dataBuffer[thisX + 1], z = this.dataBuffer[thisX + 2];
+        return x * x + y * y + z * z;
     }
 
     /**manhattan distance of this vec from the origin */
     magnhattan() {
         const baseX = this.baseIdx;
         const db = this.dataBuffer;
-        return Math.abs(db[baseX])+
-            Math.abs(db[baseX+1])+
-            Math.abs(db[baseX+2]);
+        return Math.abs(db[baseX]) +
+            Math.abs(db[baseX + 1]) +
+            Math.abs(db[baseX + 2]);
     }
 
     /**sum of components of this vector */
     sum() {
         const baseX = this.baseIdx;
         const db = this.dataBuffer;
-        return db[baseX]+db[baseX+1]+db[baseX+2];
+        return db[baseX] + db[baseX + 1] + db[baseX + 2];
     }
 
 
@@ -213,10 +213,10 @@ export class Vec3 {
     mulAdd(v, scalar) {
         const vbaseX = v.baseIdx;
         const baseX = this.baseIdx;
-        
+
         this.dataBuffer[baseX] += v.dataBuffer[vbaseX] * scalar;
-        this.dataBuffer[baseX+1] += v.dataBuffer[vbaseX+1] * scalar;
-        this.dataBuffer[baseX+2] += v.dataBuffer[vbaseX+2] * scalar;
+        this.dataBuffer[baseX + 1] += v.dataBuffer[vbaseX + 1] * scalar;
+        this.dataBuffer[baseX + 2] += v.dataBuffer[vbaseX + 2] * scalar;
         return this;
     }
 
@@ -285,9 +285,9 @@ export class Vec3 {
     bound(v1, v2, invertBound = false) {
         var maxval = Math.max(v1.x, v2.x);
         var minval = Math.min(v1.x, v2.x);
-        function maybeInvert () {
-            if(!invertBound) return;
-            let t = maxval; 
+        function maybeInvert() {
+            if (!invertBound) return;
+            let t = maxval;
             maxval = minval;
             minval = t;
         }
@@ -303,27 +303,27 @@ export class Vec3 {
     isInBounds(v1, v2) {
         let maxval = Math.max(v1.x, v2.x);
         let minval = Math.min(v1.x, v2.x);
-        if(this.x < minval || this.x > maxval) return false;
+        if (this.x < minval || this.x > maxval) return false;
         maxval = Math.max(v1.y, v2.y); minval = Math.min(v2.y, v1.y);
-        if(this.y < minval || this.y > maxval) return false;
+        if (this.y < minval || this.y > maxval) return false;
         maxval = Math.max(v1.z, v2.z); minval = Math.min(v2.z, v1.z);
-        if(this.z < minval || this.z > maxval) return false;
+        if (this.z < minval || this.z > maxval) return false;
         return true;
     }
 
     dot(v) {
         const vbaseX = v.baseIdx;
-        const baseX = this.baseIdx;        
-        return this.dataBuffer[baseX] * v.dataBuffer[vbaseX] + 
-        this.dataBuffer[baseX+1] * v.dataBuffer[vbaseX+1] +
-        this.dataBuffer[baseX+2] * v.dataBuffer[vbaseX+2];
+        const baseX = this.baseIdx;
+        return this.dataBuffer[baseX] * v.dataBuffer[vbaseX] +
+            this.dataBuffer[baseX + 1] * v.dataBuffer[vbaseX + 1] +
+            this.dataBuffer[baseX + 2] * v.dataBuffer[vbaseX + 2];
     }
 
     /**returns the projection of this vector onto the input vector*/
     projectedOn(v, storeIn) {
         let vmag = v.mag();
         let dot = this.dot(v);
-        return storeIn.set(v).div(vmag).mult(dot/vmag);
+        return storeIn.set(v).div(vmag).mult(dot / vmag);
     }
 
     /**component wise divide this vec3 by the given vec3 
@@ -334,8 +334,8 @@ export class Vec3 {
         const vbaseX = v.baseIdx;
         const baseX = this.baseIdx;
         this.dataBuffer[baseX] /= v.dataBuffer[vbaseX];
-        this.dataBuffer[baseX+1] /= v.dataBuffer[vbaseX+1];
-        this.dataBuffer[baseX+2] /= v.dataBuffer[vbaseX+2];
+        this.dataBuffer[baseX + 1] /= v.dataBuffer[vbaseX + 1];
+        this.dataBuffer[baseX + 2] /= v.dataBuffer[vbaseX + 2];
         return this;
     }
 
@@ -348,16 +348,16 @@ export class Vec3 {
         const vbaseX = v.baseIdx;
         const baseX = this.baseIdx;
         this.dataBuffer[baseX] *= v.dataBuffer[vbaseX];
-        this.dataBuffer[baseX+1] *= v.dataBuffer[vbaseX+1];
-        this.dataBuffer[baseX+2] *= v.dataBuffer[vbaseX+2];
+        this.dataBuffer[baseX + 1] *= v.dataBuffer[vbaseX + 1];
+        this.dataBuffer[baseX + 2] *= v.dataBuffer[vbaseX + 2];
         return this;
     }
 
     div(n) {
         const baseX = this.baseIdx;
         this.dataBuffer[baseX] /= n;
-        this.dataBuffer[baseX+1] /= n;
-        this.dataBuffer[baseX+2] /= n;
+        this.dataBuffer[baseX + 1] /= n;
+        this.dataBuffer[baseX + 2] /= n;
         return this;
     }
 
@@ -371,19 +371,19 @@ export class Vec3 {
     mult(scalar) {
         const baseX = this.baseIdx;
         this.dataBuffer[baseX] *= scalar;
-        this.dataBuffer[baseX+1] *= scalar;
-        this.dataBuffer[baseX+2] *= scalar;
+        this.dataBuffer[baseX + 1] *= scalar;
+        this.dataBuffer[baseX + 2] *= scalar;
         return this;
     }
 
-    
+
     multInto(scalar, result) {
         const resBuf = result.dataBuffer;
         const baseX = this.baseIdx;
         const resBaseX = result.baseIdx;
-        resBuf[resBaseX] = this.dataBuffer[baseX]*scalar;
-        resBuf[resBaseX+1] = this.dataBuffer[baseX+1]*scalar;
-        resBuf[resBaseX+2] = this.dataBuffer[baseX+2]*scalar;
+        resBuf[resBaseX] = this.dataBuffer[baseX] * scalar;
+        resBuf[resBaseX + 1] = this.dataBuffer[baseX + 1] * scalar;
+        resBuf[resBaseX + 2] = this.dataBuffer[baseX + 2] * scalar;
         return result;
     }
 
@@ -396,37 +396,37 @@ export class Vec3 {
     dist(v) {
         const vbaseX = v.baseIdx;
         const baseX = this.baseIdx;
-        const   deltX = this.dataBuffer[baseX] - v.dataBuffer[vbaseX],
-                deltY = this.dataBuffer[baseX+1] - v.dataBuffer[vbaseX+1],
-                deltZ = this.dataBuffer[baseX+2] - v.dataBuffer[vbaseX+2];
-        
-        return Math.sqrt(deltX*deltX + deltY*deltY + deltZ*deltZ);
+        const deltX = this.dataBuffer[baseX] - v.dataBuffer[vbaseX],
+            deltY = this.dataBuffer[baseX + 1] - v.dataBuffer[vbaseX + 1],
+            deltZ = this.dataBuffer[baseX + 2] - v.dataBuffer[vbaseX + 2];
+
+        return Math.sqrt(deltX * deltX + deltY * deltY + deltZ * deltZ);
     }
 
     distSq(v) {
         const vbaseX = v.baseIdx;
         const baseX = this.baseIdx;
-        const   deltX = this.dataBuffer[baseX] - v.dataBuffer[vbaseX],
-                deltY = this.dataBuffer[baseX+1] - v.dataBuffer[vbaseX+1],
-                deltZ = this.dataBuffer[baseX+2] - v.dataBuffer[vbaseX+2];
-        
-        return deltX*deltX + deltY*deltY + deltZ*deltZ;
+        const deltX = this.dataBuffer[baseX] - v.dataBuffer[vbaseX],
+            deltY = this.dataBuffer[baseX + 1] - v.dataBuffer[vbaseX + 1],
+            deltZ = this.dataBuffer[baseX + 2] - v.dataBuffer[vbaseX + 2];
+
+        return deltX * deltX + deltY * deltY + deltZ * deltZ;
     }
 
     lerp(target, alpha) {
         const vbaseX = target.baseIdx;
         const baseX = this.baseIdx;
         this.dataBuffer[baseX] += (target.dataBuffer[vbaseX] - this.dataBuffer[baseX]) * alpha;
-        this.dataBuffer[baseX+1] += (target.dataBuffer[vbaseX+1] - this.dataBuffer[baseX+1]) * alpha;
-        this.dataBuffer[baseX+2] += (target.dataBuffer[vbaseX+2] - this.dataBuffer[baseX+2]) * alpha;
+        this.dataBuffer[baseX + 1] += (target.dataBuffer[vbaseX + 1] - this.dataBuffer[baseX + 1]) * alpha;
+        this.dataBuffer[baseX + 2] += (target.dataBuffer[vbaseX + 2] - this.dataBuffer[baseX + 2]) * alpha;
         return this;
     }
 
     square() {
         const baseX = this.baseIdx;
-        this.dataBuffer[baseX] *= this.dataBuffer[baseX] ;
-        this.dataBuffer[baseX+1] *= this.dataBuffer[baseX+1];
-        this.dataBuffer[baseX+2] *= this.dataBuffer[baseX+2];
+        this.dataBuffer[baseX] *= this.dataBuffer[baseX];
+        this.dataBuffer[baseX + 1] *= this.dataBuffer[baseX + 1];
+        this.dataBuffer[baseX + 2] *= this.dataBuffer[baseX + 2];
         return this;
     }
 
@@ -434,8 +434,8 @@ export class Vec3 {
         const vbaseX = v.baseIdx;
         const baseX = this.baseIdx;
         this.dataBuffer[baseX] += v.dataBuffer[vbaseX];
-        this.dataBuffer[baseX+1] += v.dataBuffer[vbaseX+1];
-        this.dataBuffer[baseX+2] += v.dataBuffer[vbaseX+2];
+        this.dataBuffer[baseX + 1] += v.dataBuffer[vbaseX + 1];
+        this.dataBuffer[baseX + 2] += v.dataBuffer[vbaseX + 2];
         return this;
     }
 
@@ -449,8 +449,8 @@ export class Vec3 {
         const vbaseX = v.baseIdx;
         const baseX = this.baseIdx;
         this.dataBuffer[baseX] -= v.dataBuffer[vbaseX];
-        this.dataBuffer[baseX+1] -= v.dataBuffer[vbaseX+1];
-        this.dataBuffer[baseX+2] -= v.dataBuffer[vbaseX+2];
+        this.dataBuffer[baseX + 1] -= v.dataBuffer[vbaseX + 1];
+        this.dataBuffer[baseX + 2] -= v.dataBuffer[vbaseX + 2];
         return this;
     }
 
@@ -465,8 +465,8 @@ export class Vec3 {
         const db = this.dataBuffer;
         const baseX = this.baseX;
         db[baseX] -= amount;
-        db[baseX+1] -= amount;
-        db[baseX+2] -= amount;
+        db[baseX + 1] -= amount;
+        db[baseX + 2] -= amount;
         return this;
     }
 
@@ -476,20 +476,20 @@ export class Vec3 {
     */
     normalize(errorOnZeroMag = Vec3.failLoudly) {
         const baseX = this.baseIdx;
-        const x = this.dataBuffer[baseX], y = this.dataBuffer[baseX+1], z = this.dataBuffer[baseX+2];
-        const magsq = x*x + y*y + z*z
-        if(magsq == 0) {
+        const x = this.dataBuffer[baseX], y = this.dataBuffer[baseX + 1], z = this.dataBuffer[baseX + 2];
+        const magsq = x * x + y * y + z * z
+        if (magsq == 0) {
             Vec3.failedNormalizeCount++;
-            if(errorOnZeroMag) {
+            if (errorOnZeroMag) {
                 throw new Error("Tried to normalize a vector with zero magnitude");
             }
-            this.dataBuffer[baseX+1] = 1;
+            this.dataBuffer[baseX + 1] = 1;
             return this;
         }
-        const invmag = 1/Math.sqrt(magsq);
+        const invmag = 1 / Math.sqrt(magsq);
         this.dataBuffer[baseX] *= invmag;
-        this.dataBuffer[baseX+1] *= invmag;
-        this.dataBuffer[baseX+2] *= invmag;
+        this.dataBuffer[baseX + 1] *= invmag;
+        this.dataBuffer[baseX + 2] *= invmag;
         return this;
     }
 
@@ -528,21 +528,22 @@ export class Vec3 {
         const rgamma = togamma(r);
         const ggamma = togamma(g);
         const bgamma = togamma(b);
-        return {r: toColorValue(rgamma), g: toColorValue(ggamma), b:toColorValue(bgamma), 
-            gamma_norm:{r: rgamma, g:ggamma, b:bgamma},
-            raw_norm: {r: r, g:g, b:b},
-        }; 
+        return {
+            r: toColorValue(rgamma), g: toColorValue(ggamma), b: toColorValue(bgamma),
+            gamma_norm: { r: rgamma, g: ggamma, b: bgamma },
+            raw_norm: { r: r, g: g, b: b },
+        };
     }
 
     static vecAsConsoleString(x, y, z, range) {
         const baseString = Vec3.vecAsString(x, y, z);
         const colString = Vec3.vecAsColor(x, y, z, range);
-        
-        return {stringContent: baseString, consoleContent: `%c ${baseString}`, style:`color: rgb(${colString.r}, ${colString.g}, ${colString.b})`}
+
+        return { stringContent: baseString, consoleContent: `%c ${baseString}`, style: `color: rgb(${colString.r}, ${colString.g}, ${colString.b})` }
     }
 
     static vecAsString(x, y, z) {
-        return '('+x.toFixed(3)+', '+y.toFixed(3)+', '+z.toFixed(3)+')';
+        return '(' + x.toFixed(3) + ', ' + y.toFixed(3) + ', ' + z.toFixed(3) + ')';
     }
 
     toString() {
@@ -623,75 +624,75 @@ export class Vec3Pool {
     }
 
     unfinalize(calledBy) {
-        if(this.isLocked && calledBy != this.owner) return;
+        if (this.isLocked && calledBy != this.owner) return;
         else this.isLocked = false;
-        
-        if(calledBy == this.owner) {
+
+        if (calledBy == this.owner) {
             //console.group(this.poolName+' '+calledBy.ikd);     
             this.newVecsCreatedSinceOwnerUnfinalized = 0;
             this.lastUnfinalizedBy = calledBy;
         }
-        if(this.lastUnfinalizedBy != this.owner || this.lastUnfinalizedBy == null)
+        if (this.lastUnfinalizedBy != this.owner || this.lastUnfinalizedBy == null)
             this.lastUnfinalizedBy = calledBy ?? this.lastUnfinalizedBy;
-        
-        if(this.isFinalized) {
+
+        if (this.isFinalized) {
             this.pendingFirstReInsert = true;
             this.newVecsCreated = 0;
-            
-        } else if(this.limitScale > 0) {
-            if(this.newVecsCreatedSinceOwnerUnfinalized > this.tempSize * this.limitScale
+
+        } else if (this.limitScale > 0) {
+            if (this.newVecsCreatedSinceOwnerUnfinalized > this.tempSize * this.limitScale
                 && this.lastUnfinalizedBy != this.owner && this.lastUnfinalizedBy != null) {
-                    throw new Error("Buffer uncontrolled buffer insertion limit exceeded. You can not insert more new vectors than the pool was initialized with unless the pool was unlocked by the owner");
-            } 
+                throw new Error("Buffer uncontrolled buffer insertion limit exceeded. You can not insert more new vectors than the pool was initialized with unless the pool was unlocked by the owner");
+            }
         }
         this.isFinalized = false;
         this.isUnfinalized = true;
     }
 
     reclaim() {
-        this.isFinalized = false; 
-        this.lastUnfinalizedBy = null; 
+        this.isFinalized = false;
+        this.lastUnfinalizedBy = null;
         this.pendingFirstReInsert = false;
         this.isUnfinalized = false;
         this.lru = -1;
         this.newVecsCreated = 0;
-        if(this.persistentPool?.length > 0) {
+        if (this.persistentPool?.length > 0) {
             this.reclaimedPool = this.persistentPool;//.push(...this.persistentPool);
             this.inProgressPool = [];
             this.persistentPool = [];
         }
         this.releaseTemp();
-        console.log(this.poolName+ " RECLAIMED: " + this.reclaimedPool.length);
+        console.log(this.poolName + " RECLAIMED: " + this.reclaimedPool.length);
     }
 
-    
-    acquire(x=0, y=0, z=0) {
-        if(this.tempPool == null) 
+
+    acquire(x = 0, y = 0, z = 0) {
+        if (this.tempPool == null)
             this.setTempPoolSize(this.tempSize);
         if (this.isFinalized) {
             //let vec;
             //let attempts =0;
             //while(!isFree && attempts < this.tempPool.length) {
-               
-                this.lru++; 
-                if(this.lru >= this.tempPool.length) {
-                    console.warn(`
-                        ran out of vectors after ${attempts} attempts! Make sure you release any you're not using! You should either
-                        1. call releaseAll when you're at a point in your logic where you're sure any vectors you didn't call .finalize() for are free, or o
+
+            this.lru++;
+            if (this.lru >= this.tempPool.length) {
+                console.warn(`
+                        ran out of temporary vectors and had to begin resuing. Make sure you release any you're not using! You should either
+                        1. call releaseAll() on this pool when you're at a point in your logic where you're sure any vectors you didn't call .finalize() for are free, or
                         2. increase the tempPool size or
                         3. manually call .release() on more vectors after you finish using them
                         `)
-                    this.lru = 0;
-                }
-                const vec = this.tempPool[this.lru];        
-                const odb = this.tempBuffer; 
-                const obase = vec.baseIdx;
-                odb[obase] = x;
-                odb[obase+1] = y; 
-                odb[obase+2] = y;
-                //isFree = vec.amFree || this.assumeFree
-                //vec.amFree = false;
-                //attempts++;
+                this.lru = 0;
+            }
+            const vec = this.tempPool[this.lru];
+            const odb = this.tempBuffer;
+            const obase = vec.baseIdx;
+            odb[obase] = x;
+            odb[obase + 1] = y;
+            odb[obase + 2] = y;
+            //isFree = vec.amFree || this.assumeFree
+            //vec.amFree = false;
+            //attempts++;
             /*}
             if(attempts > 10) {
                 console.log("attempted : "+attempts+" before finding " +this.lru);
@@ -700,19 +701,19 @@ export class Vec3Pool {
             //console.log("temp: "+this.lru);
             return vec;
         } else {
-            if(this.isUnfinalized && this.pendingFirstReInsert) {
+            if (this.isUnfinalized && this.pendingFirstReInsert) {
                 this.pendingFirstReInsert = false;
                 this.inProgressPool = [...this.persistentPool];
             }
             let newV;
-            if(this.reclaimedPool.length > 0) {
+            if (this.reclaimedPool.length > 0) {
                 newV = this.reclaimedPool.pop();
-                newV.x = x; newV.y =y; newV.z = z;
+                newV.x = x; newV.y = y; newV.z = z;
                 this.inProgressPool.push(newV);
             } else {
                 newV = new Vec3(x, y, z);
                 this.newVecsCreated++;
-                if(this.lastUnfinalizedBy != this.owner)
+                if (this.lastUnfinalizedBy != this.owner)
                     this.newVecsCreatedSinceOwnerUnfinalized++;
                 this.inProgressPool.push(newV);
             }
@@ -721,35 +722,35 @@ export class Vec3Pool {
     }
 
     acquirefv(iv) {
-        if(this.tempPool == null) 
+        if (this.tempPool == null)
             this.setTempPoolSize(this.tempSize);
 
         const idb = iv.dataBuffer;
         const ibase = iv.baseIdx;
-        const x = idb[ibase], y= idb[ibase+1], z= idb[ibase+2];
+        const x = idb[ibase], y = idb[ibase + 1], z = idb[ibase + 2];
         if (this.isFinalized) {
             this.lru = (this.lru + 1) % this.tempPool.length;
-            const vec = this.tempPool[this.lru];     
-            const odb = this.tempBuffer; 
+            const vec = this.tempPool[this.lru];
+            const odb = this.tempBuffer;
             const obase = vec.baseIdx;
-            odb[obase] = x; 
-            odb[obase+1] = y; 
-            odb[obase+2] = z; 
+            odb[obase] = x;
+            odb[obase + 1] = y;
+            odb[obase + 2] = z;
             return vec;
         } else {
-            if(this.isUnfinalized && this.pendingFirstReInsert) {
+            if (this.isUnfinalized && this.pendingFirstReInsert) {
                 this.pendingFirstReInsert = false;
                 this.inProgressPool = [...this.persistentPool];
             }
             let newV;
-            if(this.reclaimedPool.length > 0) {
+            if (this.reclaimedPool.length > 0) {
                 newV = this.reclaimedPool.pop();
                 newV.x = x; newV.y = y; newV.z = z;
                 this.inProgressPool.push(newV);
             } else {
                 newV = new Vec3(x, y, z);
                 this.newVecsCreated++;
-                if(this.lastUnfinalizedBy != this.owner)
+                if (this.lastUnfinalizedBy != this.owner)
                     this.newVecsCreatedSinceOwnerUnfinalized++;
                 this.inProgressPool.push(newV);
             }
@@ -757,44 +758,44 @@ export class Vec3Pool {
         }
     }
 
-    temp_acquire(x=0, y=0, z=0) {
-        if(this.tempPool == null) 
+    temp_acquire(x = 0, y = 0, z = 0) {
+        if (this.tempPool == null)
             this.setTempPoolSize(this.tempSize);
-            
+
         this.lru = (this.lru + 1) % this.tempPool.length;
         const vec = this.tempPool[this.lru];
-        const odb = this.tempBuffer; 
+        const odb = this.tempBuffer;
         const obase = vec.baseIdx;
-        odb[obase] = x; 
-        odb[obase+1] = y; 
-        odb[obase+2] = z; 
+        odb[obase] = x;
+        odb[obase + 1] = y;
+        odb[obase + 2] = z;
         return vec;
     }
 
     temp_acquirefv(iv) {
-        if(this.tempPool == null) 
+        if (this.tempPool == null)
             this.setTempPoolSize(this.tempSize);
         this.lru = (this.lru + 1) % this.tempPool.length;
 
         const vec = this.tempPool[this.lru];
         const ibase = iv.baseIdx;
-        const idb = iv.dataBuffer;         
-        const odb = this.tempBuffer; 
+        const idb = iv.dataBuffer;
+        const odb = this.tempBuffer;
         const obase = vec.baseIdx;
-        odb[obase] = idb[ibase]; 
-        odb[obase+1] = idb[ibase+1]; 
-        odb[obase+2] = idb[ibase+2]; 
+        odb[obase] = idb[ibase];
+        odb[obase + 1] = idb[ibase + 1];
+        odb[obase + 2] = idb[ibase + 2];
         return vec;
     }
 
     setTempPoolSize(newSize) {
         this.tempSize = newSize
-        this.tempBuffer = new Float64Array(newSize*3);
+        this.tempBuffer = new Float64Array(newSize * 3);
         this.tempPool = [];
-        for(let i=0; i<this.tempSize; i++) {
-            const vec = new Vec3(0,0,0, this.tempBuffer);
+        for (let i = 0; i < this.tempSize; i++) {
+            const vec = new Vec3(0, 0, 0, this.tempBuffer);
             vec.amFree = true;
-            vec.baseIdx = i*3;
+            vec.baseIdx = i * 3;
             this.tempPool.push(vec.release());
         }
     }
@@ -805,40 +806,40 @@ export class Vec3Pool {
     }
 
     finalize() {
-        if(this.isFinalized) return;
+        if (this.isFinalized) return;
         let endgroup = true;
         this.lastUnfinalizedBy = null;
-        if(this.pendingFirstReInsert) {
+        if (this.pendingFirstReInsert) {
             this.pendingFirstReInsert = false;
         } else {
-            if(this.newVecsCreated > 0) {
+            if (this.newVecsCreated > 0) {
                 //console.log(this.poolName+' size has grown by ' + this.newVecsCreated+'. New pool size is '+ this.inProgressPool.length); 
             }
-            if(this.reclaimedPool.length > 0 || this.newVecsCreated == 0 && this.inProgressPool.length > 0) {
+            if (this.reclaimedPool.length > 0 || this.newVecsCreated == 0 && this.inProgressPool.length > 0) {
                 this.persistentPool = this.inProgressPool;
-                this.inProgressPool = [];   
-                this.isFinalized = true; 
-                this.isUnfinalized = false; 
-                this.pendingFirstReInsert = false; 
-                if(this.reclaimedPool.length > 0) {
-                 //   console.log(this.poolName+" UNCLAIMED Vectors: " +this.reclaimedPool.length +'. New pool size is '+ this.inProgressPool.length+'\nCall trim() if you wish to free them from memory');
+                this.inProgressPool = [];
+                this.isFinalized = true;
+                this.isUnfinalized = false;
+                this.pendingFirstReInsert = false;
+                if (this.reclaimedPool.length > 0) {
+                    //   console.log(this.poolName+" UNCLAIMED Vectors: " +this.reclaimedPool.length +'. New pool size is '+ this.inProgressPool.length+'\nCall trim() if you wish to free them from memory');
                 }
-                this.newVecsCreated = 0; 
+                this.newVecsCreated = 0;
                 this.newVecsCreatedSinceOwnerUnfinalized = 0;
                 //if(endgroup) console.groupEnd(this.poolName+' '+ this.owner);
                 return;
             }
             //if(endgroup) console.groupEnd(this.poolName+' '+ this.owner);
 
-            const newBuffer  = new Float64Array(this.inProgressPool.length * 3);
+            const newBuffer = new Float64Array(this.inProgressPool.length * 3);
             const oldBuffer = this.persistentBuffer;
             for (let i = 0; i < this.inProgressPool.length; i++) {
-                const baseIdx = i*3;
+                const baseIdx = i * 3;
                 const vec = this.inProgressPool[i];
                 const vx = vec.x, vy = vec.y, vz = vec.z;
                 newBuffer[baseIdx] = vx;
-                newBuffer[baseIdx+1] = vy;
-                newBuffer[baseIdx+2] = vz;
+                newBuffer[baseIdx + 1] = vy;
+                newBuffer[baseIdx + 2] = vz;
                 vec.dataBuffer = newBuffer;
                 vec.baseIdx = baseIdx;
             }
@@ -846,14 +847,14 @@ export class Vec3Pool {
 
             this.persistentPool = this.inProgressPool;
         }
-        this.inProgressPool = [];        
+        this.inProgressPool = [];
         this.isFinalized = true;
-        this.isUnfinalized = false; 
-        this.pendingFirstReInsert = false; 
+        this.isUnfinalized = false;
+        this.pendingFirstReInsert = false;
         this.lru = -1;
-        this.newVecsCreated = 0; 
+        this.newVecsCreated = 0;
         this.newVecsCreatedSinceOwnerUnfinalized = 0;
-        return this; 
+        return this;
     }
     /**
      * trims excess from the persistemt buffer
@@ -861,67 +862,67 @@ export class Vec3Pool {
      * @returns this pool for chaining
      */
     trim(shrinkTemp = false) {
-        if(!this.isFinalized) {
+        if (!this.isFinalized) {
             throw new Error("Can only trim finalized pools");
         }
 
-        if(this.reclaimedPool.length > 0 || this.persistentPool.length * 3 < this.persistentBuffer.length) {
+        if (this.reclaimedPool.length > 0 || this.persistentPool.length * 3 < this.persistentBuffer.length) {
             const newBuffer = new Float64Array(this.persistentPool.length * 3);
             const oldBuffer = this.persistentBuffer;
             for (let i = 0; i < this.persistentPool.length; i++) {
-                const baseIdx = i*3;
+                const baseIdx = i * 3;
                 const vec = this.persistentPool[i];
                 const vx = vec.x, vy = vec.y, vz = vec.z;
                 newBuffer[baseIdx] = vx;
-                newBuffer[baseIdx+1] = vy;
-                newBuffer[baseIdx+2] = vz;
+                newBuffer[baseIdx + 1] = vy;
+                newBuffer[baseIdx + 2] = vz;
                 vec.dataBuffer = newBuffer;
                 vec.baseIdx = baseIdx;
             }
             let v = this.reclaimedPool.pop();
-            while(v != null) {
+            while (v != null) {
                 v.dataBuffer = null;
                 v = this.reclaimedPool.pop();
             }
             this.persistentBuffer = newBuffer;
-            console.log('Trimmed '+ ((oldBuffer.length -newBuffer.length)/3) + 'entries');
+            console.log('Trimmed ' + ((oldBuffer.length - newBuffer.length) / 3) + 'entries');
         }
-        
 
-        if(shrinkTemp != false) {
-            
-            if(shrinkTemp * this.persistentPool.length < this.tempSize * shrinkTemp) {
+
+        if (shrinkTemp != false) {
+
+            if (shrinkTemp * this.persistentPool.length < this.tempSize * shrinkTemp) {
                 let newLRU = this.lru % this.tempPool.length;
-                let newTempPool = []; 
-                while(newTempPool.length < this.tempPool.length && newTempPool.length < this.tempSize * shrinkTemp) {
-                    newTempPool.push(this.tempPool[newLRU]); 
+                let newTempPool = [];
+                while (newTempPool.length < this.tempPool.length && newTempPool.length < this.tempSize * shrinkTemp) {
+                    newTempPool.push(this.tempPool[newLRU]);
                     newLRU = (newLRU + (this.tempPool.length - 1)) % this.tempPool.length;
                 }
-                
+
                 let newLength = Math.max(newTempPool.length, this.tempSize * shrinkTemp);
 
                 let newTempBuff = new Float64Array(newLength * 3);
                 for (let i = 0; i < newTempPool.length; i++) {
-                    const baseIdx = i*3;
+                    const baseIdx = i * 3;
                     const vec = newTempPool[i];
                     const vx = vec.x, vy = vec.y, vz = vec.z;
                     newTempBuff[baseIdx] = vx;
-                    newTempBuff[baseIdx+1] = vy;
-                    newTempBuff[baseIdx+2] = vz;
+                    newTempBuff[baseIdx + 1] = vy;
+                    newTempBuff[baseIdx + 2] = vz;
                     vec.dataBuffer = newTempBuff;
                     vec.baseIdx = baseIdx;
                 }
-                while(newTempPool.length < this.tempSize * shrinkTemp) {
-                    let vec = new Vec3(0,0,0,newTempBuff);
+                while (newTempPool.length < this.tempSize * shrinkTemp) {
+                    let vec = new Vec3(0, 0, 0, newTempBuff);
                     newTempPool.push(vec);
                     vec.amFree = true;
-                    vec.baseIdx = (newTempPool.length-1)*3;
+                    vec.baseIdx = (newTempPool.length - 1) * 3;
                 }
                 this.tempBuffer = newTempBuff;
                 this.tempPool = newTempPool;
                 this.lru = newLRU % newTempPool.length;
-            }            
-        } 
+            }
+        }
         return this;
     }
 
@@ -933,11 +934,11 @@ export class Vec3Pool {
         this.assumeFree = true;
     }
 
-    new_Vec3(x=0, y=0, z=0) {
+    new_Vec3(x = 0, y = 0, z = 0) {
         return this.acquire(x, y, z);
     }
 
-    any_Vec3(x=0, y=0, z=0) {
+    any_Vec3(x = 0, y = 0, z = 0) {
         return this.temp_acquire(x, y, z);
     }
 
@@ -958,15 +959,15 @@ export class Vec3Pool {
 
     /**kills this pool and any vecs pointing to it*/
     dispose() {
-        for(let v of this.tempPool) v.dataBuffer = null;
-        for(let v of this.inProgressPool) v.dataBuffer = null;
-        for(let v of this.persistentPool) v.dataBuffer = null; 
-        for(let v of this.reclaimedPool) v.dataBuffer = null;
+        for (let v of this.tempPool) v.dataBuffer = null;
+        for (let v of this.inProgressPool) v.dataBuffer = null;
+        for (let v of this.persistentPool) v.dataBuffer = null;
+        for (let v of this.reclaimedPool) v.dataBuffer = null;
         delete this.persistentBuffer;
         delete this.tempBuffer;
         delete this.tempPool;
         delete this.persistentPool;
-        delete this.reclaimedPool; 
+        delete this.reclaimedPool;
     }
 }
 
@@ -978,7 +979,7 @@ export class Vec3Pool {
  * @param {Number} z,
  * @returns {Vec3} an ephemeral vector from the default pool, or creates a new one if there is no pool
  */
-export function any_Vec3(x=0, y=0, z=0) {
+export function any_Vec3(x = 0, y = 0, z = 0) {
     return __tempVecPool.temp_acquire(x, y, z);
 }
 
@@ -992,26 +993,26 @@ export function any_Vec3fv(v) {
 }
 
 export class NoPool {
-    constructor() {}    
-    new_Vec3(x=0, y=0, z=0) {
+    constructor() { }
+    new_Vec3(x = 0, y = 0, z = 0) {
         return new Vec3(x, y, z);
     }
-    any_Vec3(x=0, y=0, z=0) {
+    any_Vec3(x = 0, y = 0, z = 0) {
         return __tempVecPool.any_Vec3(x, y, z);
     }
 
     new_Vec3fv(v) {
-        return new Vec3(v.x, v.y, v.z); 
+        return new Vec3(v.x, v.y, v.z);
     }
     any_Vec3fv(v) {
-        return __tempVecPool.any_Vec3fv(v); 
+        return __tempVecPool.any_Vec3fv(v);
     }
 
     releaseTemp() {
-        
+
     }
-    unfinalize() {}
-    finalize() {}
+    unfinalize() { }
+    finalize() { }
 }
 
 //I feel like anyone can spare 60kb for this convenience. 

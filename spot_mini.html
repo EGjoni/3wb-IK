@@ -71,7 +71,7 @@
             scene = new THREE.Scene();
             scene.add(cameraLight);
             cameraLight.position.set(0, 0, 1);
-            window.renderableLayers = [true, true, false, false];
+            window.renderableLayers = [true, true, false, true];
             //scene.add(hemisphereLight);
             window.scene = scene;
             document.body.appendChild(renderer.domElement);
@@ -92,6 +92,7 @@
                 [0, 1]
             );
 
+            window.snapToFocus(armature.bonetags["spot_body_02"], 3);
             //instances = await Promise.all([inst1, inst2]);
             //armature.solve();
             //render();

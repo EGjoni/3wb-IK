@@ -43,10 +43,8 @@
         window.IKNode = IKNode;
         window.TrackingNode = TrackingNode;
         window.IKPin = IKPin;
-        window.autoSolve = false;
+        window.autoSolve = true;
 
-        window.meshLayer = 0;
-        window.boneLayer = 1;
 
         let camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(-0.61, 1.2, -1);
@@ -81,7 +79,7 @@
             window.nek1 = inst1;
             armature = inst1;
             armature.setDefaultIterations(15);
-            armature.setDampening(0.08);
+            armature.setDampening(0.35);
             armature.dirtyRate = true;
             initEnvironment(scene, renderer, //scene,
                 [...getMeshDescendants(nek1.armatureObj3d.parent),
@@ -89,6 +87,7 @@
                 [0, 1]
             );
             setShadowD(5);
+            window.snapToFocus(armatures[0].c_head, 5);
 
             //instances = await Promise.all([inst1, inst2]);
             //armature.solve();
@@ -103,13 +102,13 @@
             armature.armatureObj3d.rotateX(Math.PI/2);
             armature.armatureObj3d.rotateY(-Math.PI);
             armature.armatureNode.mimic();
-            window.armatures.push(armature);
 
+            window.armatures.push(armature);
             window.updateParseStream("Inferring Bone directions and appearance...", loadId);
             initPrettyBones(armature);
             window.updateParseStream("Addings constraints...", loadId);
             initSpidey(armature);
-            makePinsList(1, armature.armatureObj3d, armature, true, true);
+            makePinsList(1, armature.armatureObj3d, armature, false, true);
             window.updateParseStream("UI stuff...", loadId);
             updateGlobalBoneLists();
             render();
@@ -159,24 +158,7 @@
             render(true);
         }
 
-        window.render = function (incrFrame = false) {
-            if (incrFrame) window.frameCount++;
-            doSolve();
-            if(window.showMesh) {
-                camera.layers.set(0);            
-                window.renderer.render(scene, camera);
-            }
-            window.renderer.clearDepth();
-            const currentBackground = scene.background;
-            const currentFog = scene.fog;
-            scene.background = null;
-            scene.fog = null;
-            if(window.showBones) {
-                camera.layers.set(1);
-                window.renderer.render(scene, camera);
-            }
-
-        }
+       
 
 
         init();

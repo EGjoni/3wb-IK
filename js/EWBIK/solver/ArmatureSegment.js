@@ -31,7 +31,7 @@ export class ArmatureSegment {
         this.previousDeviation = Infinity;
         this.parentSegment = parentSegment;
         this.hasPinnedAncestor = hasPinnedAncestor;
-        this.qcpConverger = new QCP(1e-6, 1e-11);       
+        this.qcpConverger = new QCP(64);       
         this.rootSegment = this.hasPinnedAncestor || parentSegment == null ? this : this.parentSegment.rootSegment;
         this.hasPinnedAncestor = parentSegment != null && (parentSegment.hasPinnedAncestor || parentSegment.hasPinnedAncestor);
         this.buildSegment(startingFrom, parentSegment?.wb_segment_splitend);

@@ -127,7 +127,7 @@ export class ArmatureEffectors {
             this.targetHeadings.push(this.effectorPool.any_Vec3());
             this.weightArray.push(1);
         }
-        this.qcpConverger = new QCP(1e-11, 1e-11);
+        this.qcpConverger = new QCP(64);
     }
 
     /**(re)initializes instances of effectors for this armature*/
@@ -558,7 +558,7 @@ export class Effector {
         painWeighted = painScalar*this.componentWiseVisibilityWeightedList[complistidx+1];
         if(painWeighted > 0) {
             outWeightArray[currIdx] = outWeightArray[nextIdx] = painWeighted;
-            targetAxes.setToOrthon_XHeading(headingsArray[currIdx]).mult(distScaled * pin.xScale); //.mult(outWeights[currIdx]).mult(scaleBy);
+            targetAxes.setToOrthon_XHeading(headingsArray[currIdx]).mult(distScaled * pin._xScale); //.mult(outWeights[currIdx]).mult(scaleBy);
             headingsArray[currIdx].multInto(-1, headingsArray[nextIdx]).add(localizedOrig);
             headingsArray[currIdx].add(localizedOrig);
             writeCount+=2; currIdx += 2; nextIdx+=2
@@ -566,7 +566,7 @@ export class Effector {
         painWeighted = painScalar*this.componentWiseVisibilityWeightedList[complistidx+2];
         if (painWeighted > 0) {
             outWeightArray[currIdx] = outWeightArray[nextIdx] = painWeighted;
-            targetAxes.setToOrthon_YHeading(headingsArray[currIdx]).mult(distScaled * pin.yScale); //.mult(outWeights[currIdx]).mult(scaleBy);
+            targetAxes.setToOrthon_YHeading(headingsArray[currIdx]).mult(distScaled * pin._yScale); //.mult(outWeights[currIdx]).mult(scaleBy);
             headingsArray[currIdx].multInto(-1, headingsArray[nextIdx]).add(localizedOrig);
             headingsArray[currIdx].add(localizedOrig);
             writeCount+=2; currIdx += 2; nextIdx+=2
@@ -574,7 +574,7 @@ export class Effector {
         painWeighted = painScalar*this.componentWiseVisibilityWeightedList[complistidx+3];
         if (painWeighted > 0) {
             outWeightArray[currIdx] = outWeightArray[nextIdx] = painWeighted;
-            targetAxes.setToOrthon_ZHeading(headingsArray[currIdx]).mult(distScaled * pin.zScale); //.mult(outWeights[currIdx]).mult(scaleBy);
+            targetAxes.setToOrthon_ZHeading(headingsArray[currIdx]).mult(distScaled * pin._zScale); //.mult(outWeights[currIdx]).mult(scaleBy);
             headingsArray[currIdx].multInto(-1, headingsArray[nextIdx]).add(localizedOrig);
             headingsArray[currIdx].add(localizedOrig);
             writeCount+=2; currIdx += 2; nextIdx+=2
@@ -615,21 +615,21 @@ export class Effector {
         }
         visibilityWeighted = this.componentWiseVisibilityWeightedList[complistidx+1];
         if(visibilityWeighted > 0) {
-            tipAxes.setToOrthon_XHeading(headingsArray[currIdx]).mult(distScaled * target.xScale);
+            tipAxes.setToOrthon_XHeading(headingsArray[currIdx]).mult(distScaled * target._xScale);
             headingsArray[currIdx].multInto(-1, headingsArray[nextIdx]).add(localizedOrig);
             headingsArray[currIdx].add(localizedOrig);
             writeCount+=2; currIdx += 2; nextIdx+=2
         }
         visibilityWeighted = this.componentWiseVisibilityWeightedList[complistidx+2];
         if (visibilityWeighted > 0) {
-            tipAxes.setToOrthon_YHeading(headingsArray[currIdx]).mult(distScaled * target.yScale);
+            tipAxes.setToOrthon_YHeading(headingsArray[currIdx]).mult(distScaled * target._yScale);
             headingsArray[currIdx].multInto(-1, headingsArray[nextIdx]).add(localizedOrig);
             headingsArray[currIdx].add(localizedOrig);
             writeCount+=2; currIdx += 2; nextIdx+=2
         }
         visibilityWeighted = this.componentWiseVisibilityWeightedList[complistidx+3];
         if (visibilityWeighted > 0) {
-            tipAxes.setToOrthon_ZHeading(headingsArray[currIdx]).mult(distScaled * target.zScale);
+            tipAxes.setToOrthon_ZHeading(headingsArray[currIdx]).mult(distScaled * target._zScale);
             headingsArray[currIdx].multInto(-1, headingsArray[nextIdx]).add(localizedOrig);
             headingsArray[currIdx].add(localizedOrig);
             writeCount+=2; currIdx += 2; nextIdx+=2

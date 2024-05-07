@@ -41,25 +41,18 @@ export class QCP {
 	Szy = 0;
 	Szz = 0;
 	resultRot = new Rot(1,0,0,0);
+	evec_prec = 1e-17;
+	eval_prec = 1e-17;
+	max_iterations = 5; //only used for RMSD calculation, basically irrelevant to rotation alignment compute
+	wsum = 0;
 	
 	/**
 	 * Constructor with option to set the precision values.
-	 *
-	 *
-	 * @param evec_prec
-	 *            required eigenvector precision
-	 * @param eval_prec
-	 *            required eigenvalue precision
-	 *  @param centered
-	 *            true if the point arrays are centered at the origin (faster),
-	 *            false otherwise
+	 
 	 * @param type
 	 *            WIP: 64 vs 32 bit buffers.
 	 */
-	constructor(evec_prec, eval_prec, centered, type) {
-		this.evec_prec = evec_prec;
-		this.eval_prec = eval_prec;
-        this.max_iterations = 5;
+	constructor(type = 64) {
         this.targetCenter =  new Vec3();
 		this.movedCenter =  new Vec3();
 		this.wsum = 0;
@@ -210,6 +203,7 @@ export class QCP {
 		let w, x1, y1, z1;
 		const c1db = coords1[0].dataBuffer;
 		const c2db = coords2[0].dataBuffer;
+		let sumNorm = 1/this.wsum;
 		
 		for (let i = 0; i < length; i++) {
 			c1xidx = coords1[i].baseIdx;
@@ -218,7 +212,7 @@ export class QCP {
 			ci2x = c2db[c2xidx], ci2y = c2db[c2xidx+1], ci2z = c2db[c2xidx+2];
 
 			//we have to compute the S__ values that get used later, so we can't simplify g1 like we do g2 unfortunately :(
-			w = weights[i];
+			w = weights[i] * sumNorm;
 			x1 = w*ci1x;
 			y1 = w*ci1y;
 			z1 = w*ci1z;
@@ -388,18 +382,17 @@ export class QCP {
 
 	calcRotation() {
 			const {
+				//evec_prec,
 				mxEigenV,
 				Syy, 
 				Sxx, 
 				Szz,
 				SxxpSyy, SxypSyx, SxzpSzx, SyzpSzy,
-				SyzmSzy, SxzmSzx, SxymSyx, SxxmSyy,  
-				evec_prec
+				SyzmSzy, SxzmSzx, SxymSyx, SxxmSyy
 			} = this;
 
 			
-			const a11 = SxxpSyy + Szz-mxEigenV; 
-			const a12 = SyzmSzy; 
+			 
 			const a13 = -SxzmSzx; 
 			const a14 = SxymSyx;
 			const a21 = SyzmSzy; 
@@ -434,7 +427,18 @@ export class QCP {
 			uncommented, but it is most likely unnecessary.
 			*/
 			
+			/**
+			 * ERON NOTE: I have commented this block out for philosophical, moral, and performance reasons.
+			 * Firstly, every norm is precisely the size it means to be, and if our hardware doesn't understand that, then that's society's fault.
+			 * Secondly, a zero norm is both ontologically distinct from too small a norm, and also much faster to check with a simple conditional.
+			 * Thirdly, I every single time this function gets hit, qsqr just seems to get smaller and smaller until falling back to identity, whereas it would have generated a perfectly valid rotation had it not fallen into the function
+			 * And finally, tweaking the weightedInnerprodudct calculation to always normalize the weights such that wsum == 1 doesn't prevent this behavior, but using larger vectors does, and I'm not about to go throwing square roots everywhere for literally no win. 
+			 * 
+			 * Just don't touch this, it's fine.
+			 *
 			if (qsqr < evec_prec) {
+				const a11 = SxxpSyy + Szz-mxEigenV; 
+				const a12 = SyzmSzy;
 				q1 =  a12*a3344_4334 - a13*a3244_4234 + a14*a3243_4233;
 				q2 = -a11*a3344_4334 + a13*a3144_4134 - a14*a3143_4133;
 				q3 =  a11*a3244_4234 - a12*a3144_4134 + a14*a3142_4132;
@@ -460,14 +464,13 @@ export class QCP {
 						qsqr = q1*q1 + q2 *q2 + q3*q3 + q4*q4;
 
 						if (qsqr < evec_prec) {
-							/*
-							 * if qsqr is still too small, return the identity rotation
-							 */
+							//if qsqr is still too small, return the identity rotation
 							return Rot.IDENTITY;
 						}
 					}
 				}
-			}
+			}*/
+			if(qsqr == 0) return Rot.IDENTITY;
 			/**the normalization is important because QCP does not calculate a unit magnitude quaternion. */
 			return this.resultRot.setComponents(q1, q2, q3, q4, true); //new Rot(q1, q2, q3, q4, true);
 	}

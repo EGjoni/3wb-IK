@@ -250,6 +250,15 @@ export class Constraint extends Saveable {
         this.forBone?.parentArmature?.noOp(); //just to give anything watching the armature truer info if its trying to update the pain display
     }
 
+    /**creates a copy of this constraint, specifying the given bone or contraint as the copy's parent
+     * @param {Constraint|Bone}
+     * @return {Constraint} the cloned constraint
+    */
+    clone(forBoneOrConstraint) {
+        let result = new Constraint(forBoneOrConstraint, this.basisAxes, undefined, this.pool);
+        return result;
+    }
+
     _visibilityCondition(cnstrt, bone) {
         return true;
     }
@@ -1155,6 +1164,17 @@ export class ConstraintStack extends LimitingReturnful {
     }
     isReturnful() {
         return this.returnfulActive && this.returnfulled_array.length > 0 && this.isEnabled();
+    }
+
+    /**
+     * populates this constraintStack with a symmetric clone of the constraints in @param referenceStack .
+     * @param {ConstraintStack} referenceStack the stack to mirror
+     * @param {String} mirrorPlane one of `YZ`, `XZ`, or `XY`, all transforms defining the constraint will be mirrored through this plane
+     */
+    addFromMirror(referenceStack, mirrorPlane = `YZ`) {
+        for(let sc of referenceStack.allconstraints) {
+            let cloned = sc.clone(); 
+        }
     }
 }
 

@@ -223,6 +223,19 @@ export class EWBIK extends Saveable {
             this.initNodes(this.armatureObj3d.trackedBy, pool);
         }        
         this.rootBone.registerToArmature(this);
+         //give the root bone a stiffness of 1 by default if it's unpinned, because it can have too much freedom to ruin everything downstream, but do allow the user to override it
+        this.rootBone.getStiffness = function() {
+            return 1.0;
+        }
+        this.rootBone.setStiffness = function (val) {
+            this.stiffness = val;
+            this.getStiffness = function() {return this.stiffness;}
+            this.setStiffness = function (val) {
+                this.stiffness = val;
+                return this;
+            }
+            return this;
+        }
         this.defaultIterations = defaultIterations;
         /**this reserves a buffer with enough space for 100 simultaneous target effector pairs along all basis directions. Which is way more simultaneous pairs then you should ever use on a single armature**/
         this.effectorBuffers = new ArmatureEffectors(350, this);
@@ -834,6 +847,20 @@ export class EWBIK extends Saveable {
         }
     }
 
+    /**convenience function, prints the initialization strings for all subconstriants on this armature which don't have the autoAdded parameter set to true.*/
+    printConstraintInits() {
+        let res = '';
+        let printed = new Set();
+        this.forAllConstraints(
+            (sc)=>{
+            if(!(sc instanceof ConstraintStack) && !sc.autoAdded && !printed.has(sc)){
+                printed.add(sc);
+                res += '\n'+sc.printInitializationString(false);
+            }
+        })
+        console.log(res);
+    }
+
 
     /**convenience for if the user wants to manually update the rate info without trying to determine
      * the appropriate number of iterations to keep all other solver behavior the same
@@ -1012,6 +1039,7 @@ let betterbones = {
      * Be mindful that the effective dampening on the bone will increase by a corresponding amount to compensate for the decrease in iterations.
      * If you don't want this to happen, you will need to manually account for it using the stiffness parameter.
      * @param {Number} kickIn 0-1 defailt 0 (kick in right away).
+     * @return {Bone} this bone for chaining
      */
     setIKKickIn(kickIn) {
         this.IKKickIn = kickIn;
@@ -1031,11 +1059,13 @@ let betterbones = {
      * multiplication over the dampening parameter. by the formula 1-(stiffness)*dampening. 
      * So, -0.1 = 1.1*dampening, -1 = 2*dampening, -2=3*dampening etc
      * @param {Number} stiffness a value between -infinity and 1
+     * @return {Bone} this bone for chaining
      */
 
     setStiffness(stiffness) {
         this.stiffness = stiffness;
         this.parentArmature?.updateShadowSkelRateInfo();
+        return this;
     },
 
     /**
@@ -1201,7 +1231,7 @@ let betterbones = {
         return res;
     },
     /**
-     * Mostly just useful for cosmetic stuff, but this
+     * This is NOT just useful for cosmetic stuff. For ideal results you should either define a boneheight so the solver has some idea as to what scale its working with, or let this function infer a height for you. The IKPin xScale, yScale, and zScale parameters get premultiplied by this height before being provided to the solver. This helps avoid over-prioritizing orientation with armatures of average bone distance < 1, and under-prioritizing with armatures of average bone distance > 1. 
      * infers a height for this bone based on its childrens position. Inference mode can be 'statistical' or 'naive'. 
      * the former will attempt to determine an ideal height based on the weighted average distance of its children,
      * the latter will set it to the distance to its closest child, unless that distance is closer than the provided minHeight value.
@@ -1234,16 +1264,25 @@ let betterbones = {
             childPoints.push(childvec);
         }
         let normeddir = sumVec;
-        this.height = wMinHeight;
+        let newHeight = wMinHeight;
         if (count > 0) {
             normeddir = sumVec.div(count).normalize(false);
             if (mode == 'statistical')
-                this.height = Math.sqrt(sum_sqheight) / Math.sqrt(count);
+                newHeight = Math.sqrt(sum_sqheight) / Math.sqrt(count);
             if (mode == 'naive')
-                this.height = minChild;
+                newHeightt = minChild;
         }
-        this.height = Math.max(wMinHeight, this.height);
+        this.setHeight(newHeight);
         return this.height;
+    },
+    /**sets the bone height and notifies the bone's ikpin if it has one 
+     * @param {Number} newHeight
+     * @returns {Bone} this bone for chaining.
+    */
+    setHeight(newHeight) {
+        this.height = newHeight;
+        if(this.getIKPin() != null) this.getIKPin().setTargetScales();
+        return this;
     },
     add(elem) {
         this.original_add(elem);

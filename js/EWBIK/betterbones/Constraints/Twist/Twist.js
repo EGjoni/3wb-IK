@@ -23,8 +23,8 @@ export class Twist extends LimitingReturnful {
     workingVec = new Vec3(0,0,0);
     baseZ = 0;
     twistAxis = new Vec3(0,1,0);
-    painfulness = 0.2;
-    stockholmRate = 0.2;
+    painfulness = 0;
+    stockholmRate = 0;
     
     static fromJSON(json, loader, pool, scene) {
         let result = new Twist(null, json.range, undefined, undefined, json.ikd, pool);

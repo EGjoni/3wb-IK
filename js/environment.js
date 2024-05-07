@@ -157,7 +157,7 @@ export function initEnvironment(scene, renderer, meshesList, layers) {
 export function setLuminosity(luminosity) {
     dirLight.intensity = luminosity;
     shadAmbient.intensity = window.ambLuminosity_base();
-    bounceLuminosity_base = window.bounceLuminosity_base();
+    bounce.intensity = window.bounceLuminosity_base();
 }
 window.setLumens = setLuminosity;
 

@@ -262,6 +262,15 @@ window.makeUI = function () {
             align-self: center;
         }
 
+        div#control-panel:not(.tempHidden) {
+            transition: 0.3s;
+            opacity: 1;
+        }
+        div#control-panel.tempHidden {
+            transition: 0.6s;
+            opacity: 0;
+        }
+
         .toggle-button {
             display: inline-block;
           }
@@ -878,7 +887,9 @@ ${wb.forBone.toString()}
             window.toInterstitial("Click a bone or target to attach to. Or hit Esc to cancel",
                 (selected) => {
                     if (selected != null) {
-                        let transform = selected?.toTrack ?? selected;
+                        let transform = null;
+                        if(selected instanceof IKPin) transform = selected.target_threejs;
+                        else transform = selected?.toTrack ?? selected;                        
                         transform.attach(pin.targetNode.toTrack);
                         pin.ensure();
                     }
@@ -975,6 +986,14 @@ ${wb.forBone.toString()}
             if (val == "stack") subcst = initStack(c);
             if (subcst != null)
                 newStack.qs(".subconstraints").appendChild(subcst);
+            if (val == "mirror stack") {
+                window.toInterstitial(`Select a bone to mirror the constraint stack from. Or hit esc to cancel.
+                (please note that this feature currently only supports mirroring across the XZ plane)`, 
+                    ()=>{
+
+                    }
+                )
+            }
         });
 
         let allChildren = [...c.allconstraints];
@@ -1004,7 +1023,7 @@ ${wb.forBone.toString()}
                 stack = new ConstraintStack(window.contextBone);
             }
             emptyConstraintNode.remove();
-            let constController = getMakeConstraint_DOMElem(forBone.getConstraint());
+            let constController = getMakeConstraint_DOMElem(contextBone.getConstraint());
             htmlcontrols.byid("default-stack").appendChild(constController);
             let subcst = null;
             if (val == "kusudama") subcst = initKusudama(window.contextBone);
@@ -1484,7 +1503,16 @@ window.getMakeConstraint_DOMElem = function (c) {
 
 
 
+window.tempHideControls = function(){
+    let modpane = D.byid("control-panel"); 
+    modpane.classList.add("tempHidden");
+}
 
+
+window.unHideControls = function() {
+    let modpane = D.byid("control-panel"); 
+    modpane.classList.remove("tempHidden");
+}
 
 
 

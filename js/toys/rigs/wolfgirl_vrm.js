@@ -74,7 +74,7 @@ export function initWolfGirlConstraints(armature, withRootRest = false) {
     new Kusudama(armature.bonetags["J_Bip_L_Hand"], (t, b) => b == window.contextBone, "Kusudama for J_Bip_L_Hand", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.5742044866868236, 0.8186183370537373, -0.012378437223462383), 0.92159).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.9114921689234482, -0.4108478087334832, -0.019649530531882186), 0.92159);
-    new Twist(armature.bonetags["J_Bip_L_Hand"], 0.40374, undefined,
+    new Twist(armature.bonetags["J_Bip_L_Hand"], 0, undefined,
         armature.stablePool.any_Vec3(-0.9967892166712119, 0.07747109648849682, 0.020235778632455986),
         0, (cnstrt, bone) => bone == window.contextBone,
         "Kusudama for J_Bip_L_Hand", armature.stablePool);
@@ -105,7 +105,7 @@ export function initWolfGirlConstraints(armature, withRootRest = false) {
     new Kusudama(armature.bonetags["J_Bip_R_Hand"], (t, b) => b == window.contextBone, "Kusudama for J_Bip_R_Hand", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.5742044866868236, 0.8186183370537373, -0.012378437223462383), 0.92159).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.9114921689234482, -0.4108478087334832, -0.019649530531882186), 0.92159);
-    new Twist(armature.bonetags["J_Bip_R_Hand"], 0.40374, undefined,
+    new Twist(armature.bonetags["J_Bip_R_Hand"], 0, undefined,
         armature.stablePool.any_Vec3(0.9967892166712119, 0.07747109648849682, 0.020235778632455986),
         0, (cnstrt, bone) => bone == window.contextBone,
         "Kusudama for J_Bip_R_Hand", armature.stablePool);
