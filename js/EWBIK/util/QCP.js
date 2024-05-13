@@ -55,6 +55,7 @@ export class QCP {
 	constructor(type = 64) {
         this.targetCenter =  new Vec3();
 		this.movedCenter =  new Vec3();
+		this.tempVec = new Vec3();
 		this.wsum = 0;
 	}
 
@@ -516,7 +517,7 @@ export class QCP {
 	}	
 
 	getTranslation() {
-		let temp = any_Vec3().set(this.targetCenter);
+		let temp = this.tempVec.set(this.targetCenter);
 		return temp.sub(this.movedCenter);
 	}
 }

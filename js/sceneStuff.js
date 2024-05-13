@@ -219,7 +219,7 @@ function snapToFocus(obj, minStartDist =0.1) {
     }
 
     let minheight = 0;
-    let camFlat = newTarg.clone().readFromTHREE(camera.position); 
+    let camFlat = newTarg.tempClone().readFromTHREE(camera.position); 
     camFlat.sub(newTarg); camFlat.y = 0;
     if(camFlat.mag() < minStartDist) {
         camera.position.y = newTarg.y;

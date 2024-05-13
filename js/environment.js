@@ -30,6 +30,7 @@ const ground = new THREE.Mesh( groundGeo, groundMat );
 export {dirLight, hemiLight};
 window.dirLight = dirLight; window.hemiLight = hemiLight;
 window.shadAmbient = shadAmbient;
+window.ground = ground;
 
 const env_fragmentShader = `
 uniform vec3 topColor;

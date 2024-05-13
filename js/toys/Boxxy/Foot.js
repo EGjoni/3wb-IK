@@ -2,7 +2,7 @@ import { IKPin } from "../../EWBIK/betterbones/IKpin.js";
 import { StateMachine, State } from "./StateNode.js";
 import { Vec3, any_Vec3, any_Vec3fv} from "../../EWBIK/util/vecs.js";
 import { Ray } from "../../EWBIK/util/Ray.js";
-import { IKTransform } from "../../EWBIK/util/nodes/IKTransform.js";
+import { IKTransform } from "../../EWBIK/util/nodes/Transforms/IKTransform.js";
 import { IKNode } from "../../EWBIK/util/nodes/IKNodes.js";
 import { ShadowNode } from "../../EWBIK/util/nodes/ShadowNode.js";
 const THREE = await import("three");

@@ -1,4 +1,4 @@
-import { IKTransform } from "../../../util/nodes/IKTransform.js";
+import { IKTransform } from "../../../util/nodes/Transforms/IKTransform.js";
 const THREE = await import('three')
 import { Bone } from 'three';
 import { Rot } from "../../../util/Rot.js";
@@ -217,15 +217,15 @@ export class Kusudama extends Limiting {
         else if (previous != null && next == null) {
             insertAt = this.limitCones.indexOf(previous) + 1;
             if (newPoint == null) {
-                newPoint = previous.getControlPoint().clone();
-                Rot.fromAxisAngle(newPoint.getOrthogonal(), previous.getRadius() * 1.5).applyToVec(newPoint, newPoint);   
+                newPoint = previous.getControlPoint().tempClone();
+                Rot.fromAxisAngle(newPoint.getOrthogonal_temp(), previous.getRadius() * 1.5).applyToVec(newPoint, newPoint);   
             }
             if(radius == null)
                 radius = previous.getRadius();
         } else if (next != null && previous == null) {
             insertAt = this.limitCones.indexOf(next);
             if (newPoint == null) {
-                newPoint = next.getControlPoint().clone();
+                newPoint = next.getControlPoint().tempClone();
                 Rot.fromAxisAngle(newPoint.getOrthogonal(), next.getRadius() * 1.5).applyToVec(newPoint, newPoint);  
             }
             if(radius == null)
@@ -233,7 +233,7 @@ export class Kusudama extends Limiting {
         } else {
             insertAt = Math.max(0, this.limitCones.indexOf(next));
             if (newPoint == null) {
-                newPoint = previous.getControlPoint().clone();
+                newPoint = previous.getControlPoint().tempClone();
                 newPoint.add(previous.getControlPoint());
                 newPoint.div(2);
             }

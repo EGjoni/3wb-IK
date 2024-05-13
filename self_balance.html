@@ -13,6 +13,7 @@
             "gltf" : "./js/three/jsm/GLTFLoader.js",
             "vrm" : "./js/three/jsm/three-vrm.module.js",
             "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
+            "mesh-bvh" : "./js/toys/Boxxy/modules/three-mesh-bvh/index.module.js",
             "enviro" : "./js/environment.js",
             "uiElements" : "./js/UIelements.js"
           }
@@ -31,9 +32,12 @@
         import { LayeredRender } from "./js/LayeredRender.js"
         import { TransformControls } from 'transformControls';
         import { OrbitControls } from 'orbitControls';
+        import { mergeGeometries } from "./js/three/utils/BufferGeometryUtils.js";
+        import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'mesh-bvh';
+        import { Boxxy } from "./js/toys/Boxxy/Boxxy.js";
         import { GLTFLoader } from 'gltf';
         import { VRMLoaderPlugin } from 'vrm';
-        import { EWBIK } from "./js/EWBIK/EWBIK.js";
+        import { EWBIK, Vec3, Vec3Pool} from "./js/EWBIK/EWBIK.js";
         import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
         import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
         import { Rest, Twist, Kusudama } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
@@ -97,27 +101,19 @@
 
         async function init() {
             scene = new THREE.Scene();
-            //scene.add(hemisphereLight);
             window.scene = scene;
             document.body.appendChild(renderer.domElement);
-            //scene.add(ambientLight);
 
             loader.register((parser) => {
                 return new VRMLoaderPlugin(parser);
             });
 
-        
-            //autoSolve = false;
             window.interactionSolve = false;
             initControls(THREE, renderer);
 
             let inst1 = await loadModel({ x: 0, y: 0, z: 0 }, 0, ikify);
             window.nek1 = inst1;
             armature = inst1;
-            //let inst2 = await loadModel({x: 0.5, y:0, z:0}, 1, ikify);
-            //window.nek2= inst2
-
-
 
             armature.dirtyRate = true;
             initEnvironment(scene, renderer, //scene,
@@ -129,17 +125,33 @@
             setShadowD(1.5);
             setLuminosity(1.5);
 
-            //instances = await Promise.all([inst1, inst2]);
-            //armature.solve();
-            render();
+            window.boxxy = new Boxxy(
+                0.95,
+                inst1.c_hips,
+                inst1.bonetags["J_Bip_L_Foot"],
+                inst1.l_leg_upp,
+                inst1.bonetags["J_Bip_R_Foot"],
+                inst1.r_leg_upp,
+                new Vec3Pool(3000)
+            );
+            boxxy.addTo(scene, [window.ground]);
+            boxxy.hips.attach(inst1.head_pin.target_threejs); 
+            inst1.head_pin.ensure();
+            boxxy.left_foot.foot.attach(inst1.l_foot_pin.target_threejs); 
+            inst1.l_foot_pin.ensure();
+            boxxy.right_foot.foot.attach(inst1.r_foot_pin.target_threejs); 
+            inst1.r_foot_pin.ensure();
+            boxxy.preAlign();
+            clock.start();
+            animate();
         }
 
         let lastIK = 0;
         function ikify(inst, loadId) {
             window.updateParseStream("Building IK Armature...", loadId);
             let armature = new EWBIK(inst.scene.children[0]);
-            armature.setDefaultIterations(15);
-            armature.setDampening(0.7);
+            armature.setDefaultIterations(10);
+            armature.setDampening(1.2);
             armature.armatureNode.forceOrthonormality = false;
             window.armatures.push(armature);
 
@@ -149,10 +161,11 @@
             initHumanoidRestConstraints(armature);
             makePinsList(1, armature.armatureObj3d, armature, false, true);
            
-            //makePinsList(1, armature.armatureObj3d, armature, false, true); //to handle the new pins we added, making meshes for them but not aligning them to the bone
             window.updateParseStream("UI stuff...", loadId);
             updateGlobalBoneLists();
             initIK(armature);
+
+
             window.updateParseStream(null, loadId);
             return armature;
         }
@@ -170,28 +183,24 @@
             window.updateParseStream("Scene instaniated...", loadId);
             return onloaded(vrm, loadId);
         }
-
+        window.physicsUpdateCount = 0;
+        window.frrate = 1 / 60;
+        window.frtime = window.frrate * 1000;
+        const clock = new THREE.Clock();
 
         async function animate() {
             window.frameCount++;
             requestAnimationFrame(animate);
+            let updateCount = clock.getDelta() / window.frrate;
+            for (let i = 0; i < updateCount; i++) {
+                boxxy.inferredUpdate(armatures[0].c_hips.trackedBy.origin());
+                //boxxy.controlledUpdate(forwardVec, leftVec, i == 0);
+                window.physicsUpdateCount++;
+            }
             doSolve();
             render();
         }
 
-        /*window.render = function () {
-            camera.layers.set(0);
-            window.renderer.render(scene, camera);
-            window.renderer.clearDepth();
-            const currentBackground = scene.background;
-            const currentFog = scene.fog;
-            scene.background = null;
-            scene.fog = null;
-            camera.layers.set(1);
-            window.renderer.render(scene, camera);
-            scene.background = currentBackground;
-            scene.fog = currentFog;
-        }*/
 
         function initHumanoidRestConstraints(armature) {
             initWolfGirl(armature, true, false, true);
@@ -199,7 +208,6 @@
         }
 
         init();
-        animate();
     </script>
 </body>
 

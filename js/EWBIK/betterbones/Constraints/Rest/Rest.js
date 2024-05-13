@@ -4,7 +4,7 @@ import { Rot } from "../../../util/Rot.js";
 import {  Vec3, any_Vec3} from "../../../util/vecs.js";
 import { Ray } from "../../../util/Ray.js";
 import { IKNode, TrackingNode } from "../../../util/nodes/IKNodes.js";
-import { IKTransform } from '../../../util/nodes/IKTransform.js';
+import { IKTransform } from '../../../util/nodes/Transforms/IKTransform.js';
 import { Constraint, Returnful } from '../Constraint.js';
 import { Saveable } from '../../../util/loader/saveable.js';
 /** 

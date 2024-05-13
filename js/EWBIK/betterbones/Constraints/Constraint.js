@@ -2,7 +2,7 @@ const THREE = await import('three')
 import { Bone, Object3D } from 'three';
 import { IKNode } from '../../util/nodes/IKNodes.js';
 import { Rot } from '../../util/Rot.js';
-import { IKTransform } from '../../util/nodes/IKTransform.js';
+import { IKTransform } from '../../util/nodes/Transforms/IKTransform.js';
 import { Vec3 } from '../../util/vecs.js';
 import { Saveable } from '../../util/loader/saveable.js';
 Math.TAU = Math.PI*2;
@@ -454,7 +454,10 @@ export class Returnful extends Constraint {
             this.updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy)
         }
         this.constraintResult.clampedRotation = this.constraintResult.fullRotation;
-        this.constraintResult._clampedRotation.clampToCosHalfAngle(this.leewayCache[iteration]);   
+        /**
+         * the subtractions are to clamp in proportion to our discomfort. So the more comfortable we are, the less we rotate. This sounds senseless given that we're always rotating to a target orientation, but is used downstream when averaging the rotations over a stack of constraints of differing pain values. 
+         * In other words, we want the rotation returned to be very small if this constraint has a very low painfulness (and therefore low discomfort), so that more painful constraints get priority when averaged*/ 
+        this.constraintResult._clampedRotation.clampToCosHalfAngle(1-((1-this.leewayCache[iteration]) * this.constraintResult.preCallDiscomfort));   
         
         return this.constraintResult;
     }
@@ -563,8 +566,11 @@ export class Returnful extends Constraint {
         this.giveup = Math.ceil(iterations*this.stockholmRate);
         this.leewayCache = new Array(Math.ceil(this.giveup));
         let max = this.preferenceLeeway;
+        let enpow = Math.pow(Math.E, -Math.E);
+        let enpow_z = enpow *1.35; //hits 0 around 95% of the way in
         for(let i = 0; i<this.giveup; i++) {
-            let t = 1-(i/this.giveup); 
+            let ratio = (i/this.giveup);
+            let t = (Math.pow(Math.E, ratio*-Math.E) - enpow_z) / (1-enpow_z);
             let angle = max * t;
             this.leewayCache[i] = Math.cos(angle*0.5);
         }
@@ -1013,11 +1019,14 @@ export class ConstraintStack extends LimitingReturnful {
         this.giveup = Math.min(this.giveup, maxChildGiveup);        
         if(cacheDirty && maxChildGiveup > 0) {
             this.leewayCache = new Array(Math.min(iterations, Math.ceil(this.giveup)));
+            let enpow = Math.pow(Math.E, -Math.E);
+            let enpow_z = enpow *1.35; //hits 0 around 95% of the way in
             for(let i = 0;  i<this.returnfulled_array.length; i++) {
                 c = this.returnfulled_array[i];
                 if(c.isEnabled()) {
                     for(let i = 0; i<this.leewayCache.length; i++) {
-                        let t = 1-(i/this.giveup); 
+                        let ratio = (i/this.giveup);
+                        let t = (Math.pow(Math.E, ratio*-Math.E) - enpow_z) / (1-enpow_z); //decay function that stops around 95%
                         if(this.stockholmRate == null || this.stockholmRate == 1) t = 1;
                         let angle = max * t;
                         this.leewayCache[i] = Math.min(Math.cos(angle*0.5), c.leewayCache.length > i ? c.leewayCache[i] : 1);
@@ -1049,7 +1058,7 @@ export class ConstraintStack extends LimitingReturnful {
         }
     }
 
-    
+    /**I need to rethink this function for consistency, as it currently mixes together the clamped and full rotation concepts by generating the constraintstacks full rotation as a function of its children's clamped rotations*/
     updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy, cosHalfReturnfullness, angleReturnfullness) {
         this.constraintResult.reset(iteration);
         
@@ -1066,19 +1075,31 @@ export class ConstraintStack extends LimitingReturnful {
             if(c.lastCalled >= c.giveup) continue;            
             c.updateFullPreferenceRotation(this.lastPrefState, currentBoneOrientation, iteration, calledBy, cosHalfReturnfullness, angleReturnfullness);
         }
-        let maxDiscomfort = this.constraintResult.raw_preCallDiscomfort;
-        let discomfortNorm = 1/(maxDiscomfort == 0? 1 : maxDiscomfort);
 
         if(this.returnfulled_array.length > 1) {
+            let weightCount = 0;
             for(let i = 0;  i<this.returnfulled_array.length; i++) {
                 c = this.returnfulled_array[i];
-                if(iteration >= c.giveup) continue;
-                let constraintResult = c.getWeightClampedPreferenceRotation(this.lastPrefState, currentBoneOrientation, iteration, 
-                                        c.constraintResult.preCallDiscomfort*discomfortNorm, calledBy);
-                let rotBy = constraintResult.clampedRotation;
-                this.lastPrefState.rotateByLocal(rotBy);
-                rotBy.applyAfter(accumulatedRot, accumulatedRot);
+                weightCount++;
+                if(iteration >= c.giveup) {
+                    accumulatedRot.w += 1; //equivalent to doing nothing
+                } else {
+                
+                    let constraintResult = c.getClampedPreferenceRotation(this.lastPrefState, currentBoneOrientation, iteration, calledBy);
+                    
+                    let rotBy = constraintResult.clampedRotation;
+                    /**this relies on nlerping the resulting clamped rotations, which isn't super precise for large rotations, but most clamped rotations aren't large, and it does at least approximate averaging*/
+
+                    /*let constraintResult = c.getWeightClampedPreferenceRotation(this.lastPrefState, currentBoneOrientation, iteration, 
+                                            c.constraintResult.preCallDiscomfort*discomfortNorm, calledBy);*/
+                    //let rotBy = constraintResult.clampedRotation;
+                    //this.lastPrefState.rotateByLocal(rotBy);
+                    //rotBy.applyAfter(accumulatedRot, accumulatedRot);
+                    accumulatedRot.w += rotBy.w; accumulatedRot.x += rotBy.x; accumulatedRot.y += rotBy.y; accumulatedRot.z+= rotBy.z;
+                }
             }
+            accumulatedRot.w /= weightCount; accumulatedRot.x /= weightCount; accumulatedRot.y /= weightCount; accumulatedRot.z /= weightCount; 
+            accumulatedRot.normalize(); //averaging rotations by adding quaternions is actually kind of insane so let's normalize just in case.
         } else if(this.returnfulled_array.length == 1) {            
             c = this.returnfulled_array[0];
             if(iteration < c.giveup) {
@@ -1088,11 +1109,31 @@ export class ConstraintStack extends LimitingReturnful {
                 rotBy.applyAfter(accumulatedRot, accumulatedRot);
             }
         }
+        
         this.constraintResult.fullRotation = accumulatedRot.shorten();
         this.constraintResult.markSet(true);        
         return this.constraintResult;
     }
     
+
+
+    /**
+     * @param {IKNode} currentState the state the node is currently in. should be a sibling of @param previousState.
+     * @param {IKNode} currentBoneOrientation the node corresponding to the physical bone orientation, should be a child of @param currentState.
+     * @param {Number} iteration the current iteration of this solver pass
+    * @return {ConstraintResult} an object providing information about how much to rotate the object in which direction to make it maximally comfortable. How much to rotate to do so while obeying clamp rules. how much pain the joint was in prior to fixing, how much after the proposed fix, etc.
+      */   
+    getClampedPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy) {
+        if(!this.constraintResult.isSet()) {
+            this.updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy)
+        }
+        this.constraintResult.clampedRotation = this.constraintResult.fullRotation;
+        /**
+         * unlike single constraints, constraintstacks are meant more of as a grouping mechanism and don't hace their own meaningful discomfort measure. However, we do want them to be recursively groupable, where some stacks have less influence than others, so we just scale everything by their painfulness (which is 1 by default)*/
+        this.constraintResult._clampedRotation.clampToCosHalfAngle(1-((1-this.leewayCache[iteration]) * this.painfulness));   
+        
+        return this.constraintResult;
+    }
 
 
      /**

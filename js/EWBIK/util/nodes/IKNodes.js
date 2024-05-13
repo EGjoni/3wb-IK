@@ -1,6 +1,6 @@
 import { Vec3 } from "./../vecs.js";
 import { Rot } from "./../Rot.js";
-import { IKTransform } from "./IKTransform.js";
+import { IKTransform } from "./Transforms/IKTransform.js";
 const THREE = await import('three');
 import { Quaternion, Vector3, Object3D, Matrix4 } from "three";
 import { Saveable, Loader } from "../loader/saveable.js";
@@ -262,7 +262,6 @@ export class IKNode extends Saveable {
         return this;
     }
 
-
     adoptAllValuesFromIKNode(node) {
         this.getLocalMBasis().adoptValues(node.getLocalMBasis());
         this.getGlobalMBasis().adoptValues(node.getGlobalMBasis());
@@ -289,7 +288,6 @@ export class IKNode extends Saveable {
         return this;
     }
 
-
     getParentAxes() {
         const p = this.parent;
         return p ? p : null;
@@ -308,8 +306,12 @@ export class IKNode extends Saveable {
         return this;
     }
 
-
-    origin(storeIn) {
+    /**
+     * sets the values of storeIn to the glocal origin of this node. if storeIn is not provided, an ephemeral vector instance will be returned
+     * @param {Vec3} storeIn 
+     * @returns the vector that was created or provided
+     */
+    origin(storeIn = this.pool.any_Vec3()) {
         return this.getGlobalMBasis().origin(storeIn);
     }
 
@@ -361,8 +363,6 @@ export class IKNode extends Saveable {
         node.areGlobal = false;
         node.markDirty();
     }
-
-
 
     setLocalOrientationTo(rotation) {
         this.getLocalMBasis().rotateTo(rotation);
@@ -451,19 +451,19 @@ export class IKNode extends Saveable {
     }
 
 
-    setVecToLocalOf(input, out) {
-        if (out == null) {
-            out = input.clone();
-        }
+    setVecToLocalOf(input, out = this.pool.any_Vec3()) {
         this.updateGlobal();
         this.getGlobalMBasis().setVecToLocalOf(input, out);
         return out;
     }
 
-    setTransformToLocalOf(input, out) {
-        if (out == null) {
-            out = input.clone();
-        }
+    /**
+     * sets the values of @param out to this node's localspace equivalent of the worldspace @param input
+     * @param {IKTransform} input 
+     * @param {IKTransform} out 
+     * @returns 
+     */
+    setTransformToLocalOf(input, out = this.pool.any_Vec3()) {
         this.updateGlobal();
         this.getGlobalMBasis().setTransformToLocalOf(input, out);
         return out;
@@ -587,6 +587,11 @@ export class IKNode extends Saveable {
         this.parent = parentRef;
     }
 
+    /**like markDirty but only for the immediate children. Only really useful for forcibly preventing dirty state propogation when you're going to be assuming dirtiness anyway */
+    exclusivelyMarkChildrenDirty() {
+        for (let c of this.childNodes) c._exclusiveMarkDirty();
+    }
+ 
     markDirty() {
         if (!this.dirty) {
             this.dirty = true;
@@ -616,6 +621,10 @@ export class IKNode extends Saveable {
         this.globalMBasis.lazyRefresh();
     }
 
+    /*sets outvec to what the direction of inVec would be if rotated by the global rotation of this iknode*/
+    setVecToOrthonGlobalHeading(inVec, outVec) {
+        return this.getGlobalMBasis().setToOrthonHeading(inVec, outVec);
+    }
 
     setToOrthon_XHeading(vec) {
         if (this.dirty) this.updateGlobal();

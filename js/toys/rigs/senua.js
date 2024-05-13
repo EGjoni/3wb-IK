@@ -94,22 +94,22 @@ export function initSenuaPins(armature) {
 
     let root_04_pin = new IKPin(armature.bonetags["root_04"]);
     root_04_pin.setPinWeight(0.5000);
-    root_04_pin.setTargetPriorities(1, 0.2500,  0.2500);
+    root_04_pin.setPSTPriorities(1, 0.2500,  0.2500);
     root_04_pin.setInfluenceOpacity(1-0.0000);
 
     let head_046_pin = new IKPin(armature.bonetags["head_046"]);
     head_046_pin.setPinWeight(1);
-    head_046_pin.setTargetPriorities(1, 0.1500,  0.1500);
+    head_046_pin.setPSTPriorities(1, 0.1500,  0.1500);
     head_046_pin.setInfluenceOpacity(1-1);
 
     let signal_killer_pin = new IKPin(armature.face_signal_killer);
     signal_killer_pin.setPinWeight(0.0000);
-    signal_killer_pin.setTargetPriorities(1, 0.2500,  0.2500);
+    signal_killer_pin.setPSTPriorities(1, 0.2500,  0.2500);
     signal_killer_pin.setInfluenceOpacity(1-0.0000);
 
     let l_pupil_pin = new IKPin(armature.l_pupil);
     l_pupil_pin.setPinWeight(0.5023);
-    l_pupil_pin.setTargetPriorities(1, 1, 0.0000);
+    l_pupil_pin.setPSTPriorities(1, 1, 0.0000);
     l_pupil_pin.setInfluenceOpacity(1-1.0000);
     armature.l_pupil_pin = l_pupil_pin;
 
@@ -123,7 +123,7 @@ export function initSenuaPins(armature) {
 
     let FACIAL_L_EyelidUpper_082_pin = new IKPin(armature.bonetags["FACIAL_L_EyelidUpper_082"]);
     FACIAL_L_EyelidUpper_082_pin.setPinWeight(0.5000);
-    FACIAL_L_EyelidUpper_082_pin.setTargetPriorities(1, 0.0412,  0.1018);
+    FACIAL_L_EyelidUpper_082_pin.setPSTPriorities(1, 0.0412,  0.1018);
     FACIAL_L_EyelidUpper_082_pin.setInfluenceOpacity(1-0.0000);
     armature.bonetags["FACIAL_L_Eyeball_084"].add(FACIAL_L_EyelidUpper_082_pin.target_threejs);
     FACIAL_L_EyelidUpper_082_pin.ensure();
@@ -135,7 +135,7 @@ export function initSenuaPins(armature) {
 
     let FACIAL_L_EyelidLower_088_pin = new IKPin(armature.bonetags["FACIAL_L_EyelidLower_088"]);
     FACIAL_L_EyelidLower_088_pin.setPinWeight(0.5000);
-    FACIAL_L_EyelidLower_088_pin.setTargetPriorities(1, 0.0000,  0.1448);
+    FACIAL_L_EyelidLower_088_pin.setPSTPriorities(1, 0.0000,  0.1448);
     FACIAL_L_EyelidLower_088_pin.setInfluenceOpacity(1-0.0000);
     armature.bonetags["FACIAL_L_Eyeball_084"].add(FACIAL_L_EyelidLower_088_pin.target_threejs);
     FACIAL_L_EyelidLower_088_pin.ensure();

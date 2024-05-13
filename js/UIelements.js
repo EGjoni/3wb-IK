@@ -1327,12 +1327,9 @@ ${wb.forBone.toString()}
 }
 
 function updateNormedPriorities(pinDom, forPin) {
-    pinDom.qs("#pos-priority").parentNode.qs(".un-exp-output").value = `${forPin.positionPriority.toFixed(4)} \
-    (${forPin.position_normed_priority.toFixed(4)})`;        
-    pinDom.qs("#swing-priority").parentNode.qs(".un-exp-output").value = `${forPin.swingPriority.toFixed(4)} \
-    (${forPin.swing_normed_priority.toFixed(4)})`;        
-    pinDom.qs("#twist-priority").parentNode.qs(".un-exp-output").value = `${forPin.twistPriority.toFixed(4)} \
-    (${forPin.twist_normed_priority.toFixed(4)})`;
+    pinDom.qs("#pos-priority").parentNode.qs(".un-exp-output").value = `${forPin.positionPriority.toFixed(4)}`;        
+    pinDom.qs("#swing-priority").parentNode.qs(".un-exp-output").value = `${forPin.swingPriority.toFixed(4)}`; 
+    pinDom.qs("#twist-priority").parentNode.qs(".un-exp-output").value = `${forPin.twistPriority.toFixed(4)}`;
 }
 
 window.updateInfoPanel = async function (item) {

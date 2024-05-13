@@ -1,10 +1,10 @@
-import {  Vec3, any_Vec3} from "./../vecs.js";
-import { Ray, Rayd, Rayf } from "./../Ray.js";
-import { IKNode } from "./IKNodes.js";
+import {  Vec3, any_Vec3} from "../../vecs.js";
+import { Ray, Rayd, Rayf } from "../../Ray.js";
+import { IKNode } from "../IKNodes.js";
 const THREE = await import('three');
 import { Quaternion, Vector3, Object3D, Matrix4 } from "three";
-import { Rot } from "./../Rot.js";
-import { Saveable } from "../loader/saveable.js";
+import { Rot } from "../../Rot.js";
+import { Saveable } from "../../loader/saveable.js";
 
 export class IKTransform extends Saveable {
     static totalTransforms = 0;
@@ -63,6 +63,7 @@ export class IKTransform extends Saveable {
     forceUniformity = false;
     forceOrthogonality = false;
     isUniform = true;
+    wasOrthogonal = false;
     isOrthogonal = true;
     isOrthoUniform = true;
     isOrthoNormal = true;
@@ -198,6 +199,7 @@ export class IKTransform extends Saveable {
         const quat = this.tempQuat;
         const scale = this.tempScaleVector3;
         this.isOrthoNormal = this.forceOrthonormality;
+        this.wasOrthogonal = this.isOrthogonal;
         this.isOrthogonal = this.forceOrthogonality;
         this.isUniform = this.forceUniformity;
         mat4.decompose(pos, quat, scale);
@@ -238,34 +240,19 @@ export class IKTransform extends Saveable {
     }
 
     _updateNorms() {
-        this.mag.setComponents(Math.abs(this.scale.x), Math.abs(this.scale.y), Math.abs(this.scale.z));
-        this.xNormDir = this.scale.x < 0 ? -1 : 1;
-        this.yNormDir = this.scale.y < 0 ? -1 : 1;
-        this.zNormDir = this.scale.z < 0 ? -1 : 1;
+        this.mag.set(this.scale).absComponents();
+        this.avgMag = this.mag.sum()/3;
+        const scaledb = this.scale.dataBuffer; 
+        const scalebx = this.scale.baseIdx;
+        this.xNormDir = scaledb[scalebx] < 0 ? -1 : 1;
+        this.yNormDir = scaledb[scalebx+1] < 0 ? -1 : 1;
+        this.zNormDir = scaledb[scalebx+2] < 0 ? -1 : 1;
     }
 
-
-    _updateOrthoDefaults(avgMag = this.mag.sum()/3) {        
-        if(this.isOrthoNormal) {
-            this.scale.setComponents(this.xNormDir, this.yNormDir, this.zNormDir);
-            this.mag.setComponents(1,1,1);
-            this.isOrthogonal = true;
-        } else if(this.isUniform) {                
-            this.scale.x = this.scale.x < 0 ? -avgMag : avgMag;
-            this.scale.y = this.scale.y < 0 ? -avgMag : avgMag;
-            this.scale.z = this.scale.z < 0 ? -avgMag : avgMag;
-            this.isUniform = true;
-        }
-        if(this.isOrthogonal) {
-            this.skewMatrix.copy(IKTransform.zeroMat);
-        }
-        this.scaleMatrix.makeScale(this.scale.x, this.scale.y, this.scale.z);
-        this.isOrthogonal = true;
-        this.isOrthoNormal = this.isUniform && Math.abs(avgMag-1) < 1e-6;      
-    }
 
     /**Warning: presumes the skew has already been calculated */
-    _updateOrthoNormalHint(avgMag = this.mag.sum()/3) {
+    _updateOrthoNormalHint() {
+        const avgMag = this.avgMag;
         let v = this.pool.any_Vec3();
         let deltaScale = v.setComponents(avgMag, avgMag, avgMag).sub(this.mag).magnhattan()/3;
         this.isUniform = this.forceUniformity || deltaScale < 1e-6;
@@ -280,7 +267,26 @@ export class IKTransform extends Saveable {
             this.isOrthogonal = this.forceOrthogonality;            
         }
         this.isOrthoUniform = this.isOrthogonal && this.isUniform;
-        this.isOrthoNormal = this.forceOrthonormality || this.isOrthoUniform && avgMag == 1;
+        this.isOrthoNormal = (this.forceOrthonormality || this.isOrthoUniform) && avgMag == 1;
+    }
+
+    _updateOrthoDefaults(avgMag = this.mag.sum()/3) { 
+        const scaledb = this.scale.dataBuffer; 
+        const scalebx = this.scale.baseIdx;           
+        
+        if(this.isOrthoNormal) {
+            this.scale.setComponents(this.xNormDir, this.yNormDir, this.zNormDir);
+            this.mag.setComponents(1,1,1);
+        } else if(this.isUniform) {                       
+            scaledb[scalebx]  = scaledb[scalebx]   < 0 ? -avgMag : avgMag;
+            scaledb[scalebx+1] = scaledb[scalebx+1] < 0 ? -avgMag : avgMag;
+            scaledb[scalebx+2] = scaledb[scalebx+2] < 0 ? -avgMag : avgMag;
+        }
+        if(this.isOrthogonal != this.wasOrthogonal) {
+            this.skewMatrix.copy(IKTransform.zeroMat);
+        } 
+        this.scaleMatrix.makeScale(scaledb[scalebx], scaledb[scalebx+1], scaledb[scalebx+2]);
+        this.isOrthoNormal = this.isUniform && this.isOrthogonal && Math.abs(avgMag-1) < 1e-6 ;      
     }
 
     _calcSkewMat(mat4_e) {
@@ -483,6 +489,10 @@ export class IKTransform extends Saveable {
         this.rotation.applyToVec(IKTransform.zBase, this._orthon_zHeading).mult(this.zNormDir);
         this.state &= ~IKTransform.orthonHeadingsDirty;
     }
+
+    setToOrthonHeading(invec, outvec) {
+        return this.rotation.applyToVec(invec, outvec);
+    }
    
     get xHeading() {
         if(this.state & IKTransform.headingsDirty) this.updateHeadings();
@@ -561,6 +571,7 @@ export class IKTransform extends Saveable {
      * @returns 
      */
     setTransformToLocalOf(globalinput, localoutput) {
+        localoutput.wasOrthogonal = localoutput.isOrthogonal;
         if(this.isOrthogonal) { //I will go to amazing lengths to avoid a matrix inverse            
             localoutput.translate.set(globalinput.translate);
             localoutput.translate.sub(this.translate); 
@@ -584,6 +595,9 @@ export class IKTransform extends Saveable {
             localoutput.setFromMatrix4(localoutput.composedMatrix);
         }
         localoutput.lazyRefresh();
+        if(isNaN(localoutput.rotation.w)) {
+            throw new Error("oh oh");
+        }
         return localoutput;
     }
 
@@ -603,6 +617,7 @@ export class IKTransform extends Saveable {
     }
 
     setTransformToGlobalOf(localInput, globalOutput) {
+        globalOutput.wasOrthogonal = globalOutput.isOrthogonal;
         if(this.isOrthoNormal) {
             globalOutput.translate.set(localInput.translate).compMult(this.scale);
             this.rotation.applyAfter(localInput.rotation, globalOutput.rotation);
@@ -625,6 +640,9 @@ export class IKTransform extends Saveable {
             this.recompose();
             localInput.recompose();
             globalOutput.setFromMatrix4(this.secretMatrix.multiplyMatrices(this.composedMatrix, localInput.composedMatrix));
+        }
+        if(isNaN(globalOutput.rotation.w)) {
+            throw new Error("oh oh");
         }
         return globalOutput;
  	}
@@ -674,10 +692,24 @@ export class IKTransform extends Saveable {
         return outVec;  
     }
 
+
+    /**
+     * Same as getLocalOfRotation, but throws caution to the wind and doesn't normalize a thing.
+    */
+    getRawLocalOfRotation(inRot, outRot) {		
+        let resultNew = this.inverseRotation.applyAfter(inRot, outRot).applyAfter(this.rotation, outRot);
+        return resultNew;		
+    }
+
+    /**
+     * 
+     * @param {Rot} inRot in worldspace
+     * @param {Rot} outRot in localspace
+     * @returns a reference to outRot
+     */
     getLocalOfRotation(inRot, outRot) {		
         let resultNew = this.inverseRotation.applyAfter(inRot, outRot).applyAfter(this.rotation, outRot);
         outRot.normalize();
-        //let resultNew =  inRot.applyWithin(this.rotation).applyAfter(this.rotation); //hamilton
         return resultNew;		
     }
 

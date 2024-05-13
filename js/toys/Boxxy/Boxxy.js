@@ -2,7 +2,7 @@ import { IKPin } from "../../EWBIK/betterbones/IKpin.js";
 import { StateMachine, State } from "./StateNode.js";
 import { Vec3, any_Vec3 } from "../../EWBIK/util/vecs.js";
 import { Ray } from "../../EWBIK/util/Ray.js";
-import { IKTransform } from "../../EWBIK/util/nodes/IKTransform.js";
+import { IKTransform } from "../../EWBIK/util/nodes/Transforms/IKTransform.js";
 import { IKNode } from "../../EWBIK/util/nodes/IKNodes.js";
 import { ShadowNode } from "../../EWBIK/util/nodes/ShadowNode.js";
 const THREE = await import("three");
@@ -390,21 +390,6 @@ export class Boxxy {
             notChosenBal = rightProposalBalanceScore;
         }
 
-        /*if(chosen == this.lastchosen) {
-            console.group(`Double lift of ${chosen.foot.name} because`); 
-                console.log(`Total score is left: ${(1-normedScores).toFixed(4)}, right: ${normedScores.toFixed(4)}`);
-                console.group(`discomforts are: `);
-                    console.log(`${chosen.foot.name}.expected_discomfort is ${chosenProposal.expected_discomfort}`)
-                    console.log(`${notChosen.foot.name}.expected_discomfort is ${notChosenProposal.expected_discomfort}`);
-                console.groupEnd('discomforts are: ');
-                console.group(`balances are: `);
-                    console.log(`${chosen.foot.name}.balance is ${chosenBal}`)
-                    console.log(`${notChosen.foot.name}.balance is ${notChosenProposal.expected_discomfort}`);
-                console.groupEnd('balances are: ');
-            console.groupEnd(`Double lift of ${chosen.foot.name} because`);
-        }*/
-
-
         this.lastchosen = chosen;
         return chosen;
     }
@@ -441,14 +426,12 @@ export class Boxxy {
     /**returns true if the projections of both feet are planted equidistant and colinear to the projected center of mass, and the velocity is low enough that this will likely continue to be the case*/
     isInBalance() {
         if(this.velocity.mag() > this.terminalVel/20) return false;         
-        if(this.projectionObj.hipOnInterfootProjPlane.dist(this.projectionObj.hipOnInterfootProjPlane) > this.balanceThreshold) return false;
+        if(this.projectionObj.hipOnFirstFootPlane.dist(this.projectionObj.hipOnInterfootProjPlane) > this.balanceThreshold/2 
+        && this.projectionObj.hipOnOtherFootPlane.dist(this.projectionObj.hipOnInterfootProjPlane) > this.balanceThreshold/2 ) return false;
         let leftDist = this.left_foot.getHipDistance();
         let rightDist = this.right_foot.getHipDistance(); 
         if(leftDist > this.legLength || rightDist > this.legLength) return false;
         
-        //center of mass is beyond one of the feet.
-        //if(this.leftFootPos.sub(this.closestToGravityHipDir).dot(this.rightFootPos.sub(this.closestToGravityHipDir)) > 0) return false;
-
         this.propA.reset().unlock();
         this.propA.presumed_hip_transform.adoptValues(this.hipsNode.getGlobalMBasis());
         this.propA.proposed_foot_transform.adoptValues(this.left_foot.footNode.getGlobalMBasis());

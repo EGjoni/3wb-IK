@@ -1,6 +1,30 @@
 
 /**untyped vec3, use for any frequent instantiatons, as its faster to create than floatbuffer*/
 
+export class NoPool {
+    constructor() { }
+    new_Vec3(x = 0, y = 0, z = 0) {
+        return new Vec3(x, y, z);
+    }
+    any_Vec3(x = 0, y = 0, z = 0) {
+        return __tempVecPool.any_Vec3(x, y, z);
+    }
+
+    new_Vec3fv(v) {
+        return new Vec3(v.x, v.y, v.z);
+    }
+    any_Vec3fv(v) {
+        return __tempVecPool.any_Vec3fv(v);
+    }
+
+    releaseTemp() {
+
+    }
+    unfinalize() { }
+    finalize() { }
+}
+const nullPool = new NoPool();
+window.noPool = nullPool;
 
 export class Vec3 {
     static failedNormalizeCount = 0;
@@ -8,6 +32,7 @@ export class Vec3 {
     baseIdx = 0;
     dataBuffer = null;
     dims = 3;
+    inPool = nullPool;
     constructor(x = 0, y = 0, z = 0, dataBuffer = [0, 0, 0]) {
         this.dataBuffer = dataBuffer
         this.x = x, this.y = y, this.z = z;
@@ -37,18 +62,30 @@ export class Vec3 {
         return this.setComponents(cosAzim * sinPolar, sinAzim * sinPolar, cosPolar);
     }
 
-    /**returns the cross product of this vector and the input vector.**/
-    cross(input, storeIn = new Vec3()) {
-        storeIn.setComponents(
-            this.y * input.z - this.z * input.y,
-            this.z * input.x - this.x * input.z,
-            this.x * input.y - this.y * input.x
-        );
+    /**returns the cross product of this vector and the input vector. (returned vector is ephemeral)**/
+    cross(input, storeIn =this.inPool.any_Vec3()) {
+        const sdb = storeIn.dataBuffer;
+        const sbx = storeIn.baseIdx;
+        const db = this.dataBuffer;
+        const bx = this.baseIdx;
+        const idb = input.dataBuffer;
+        const ibx = input.baseIdx;
+        
+        sdb[sbx] = db[bx+1] * idb[ibx+2] - db[bx+2] * idb[ibx+1];
+        sdb[sbx+1] = db[bx+2] * idb[ibx] - db[bx] * idb[ibx+2];
+        sdb[sbx+2] = db[bx] * idb[ibx+1] - db[bx+1] * idb[ibx];
+        
         return storeIn;
     }
 
+    /**returns a non-epehemeral clone of this vector */
     clone() {
         return new Vec3(this.x, this.y, this.z);
+    }
+
+    /**returns an ephemeral clone of this vector from whichever pool it resides in */
+    tempClone() {
+        return this.inPool.any_Vec3fv(this);
     }
 
 
@@ -57,9 +94,11 @@ export class Vec3 {
         return isNaN(this.x) || isNaN(this.y) || isNaN(this.z);
     }
 
-    getOrthogonal() {
+    /**
+     * return a vector orthogonal to this one. the output is epehemeral unless you provide an input vector to store the result in.
+    */
+    getOrthogonal_temp(result = this.inPool.any_Vec3()) {
         const { x, y, z } = this;
-        let result = this.clone();
         result.setComponents(0, 0, 0);
         let threshold = this.mag() * 0.6;
         if (threshold > 0) {
@@ -82,10 +121,10 @@ export class Vec3 {
          * @return this vector for chaining
          */
     set(vec) {
-        const baseIdx = this.baseIdx, vidx = vec.baseIdx;
-        this.dataBuffer[baseIdx] = vec.dataBuffer[vidx];
-        this.dataBuffer[baseIdx + 1] = vec.dataBuffer[vidx + 1];
-        this.dataBuffer[baseIdx + 2] = vec.dataBuffer[vidx + 2];
+        const baseIdx = this.baseIdx, db = this.dataBuffer, vidx = vec.baseIdx, vdb = vec.dataBuffer;
+        db[baseIdx] = vdb[vidx];
+        db[baseIdx + 1] = vdb[vidx + 1];
+        db[baseIdx + 2] = vdb[vidx + 2];
         return this;
     }
 
@@ -139,17 +178,20 @@ export class Vec3 {
         const v1x = v1.baseIdx, v2x = v2.baseIdx;
         const v1y = v1.baseIdx + 1, v2y = v2.baseIdx + 1;
         const v1z = v1.baseIdx + 2, v2z = v2.baseIdx + 2;
-        v1.dataBuffer[v1x] = v1.dataBuffer[v1x] ^ v2.dataBuffer[v2x];
-        v2.dataBuffer[v2x] = v1.dataBuffer[v1x] ^ v2.dataBuffer[v2x];
-        v1.dataBuffer[v1x] = v1.dataBuffer[v1x] ^ v2.dataBuffer[v2x];
+        const v1db = v1.dataBuffer; 
+        const v2db = v2.dataBuffer;
 
-        v1.dataBuffer[v1y] = v1.dataBuffer[v1y] ^ v2.dataBuffer[v2y];
-        v2.dataBuffer[v2y] = v1.dataBuffer[v1y] ^ v2.dataBuffer[v2y];
-        v1.dataBuffer[v1y] = v1.dataBuffer[v1y] ^ v2.dataBuffer[v2y];
+        v1db[v1x] = v1db[v1x] ^ v2db[v2x];
+        v2db[v2x] = v1db[v1x] ^ v2db[v2x];
+        v1db[v1x] = v1db[v1x] ^ v2db[v2x];
 
-        v1.dataBuffer[v1z] = v1.dataBuffer[v1z] ^ v2.dataBuffer[v2z];
-        v2.dataBuffer[v2z] = v1.dataBuffer[v1z] ^ v2.dataBuffer[v2z];
-        v1.dataBuffer[v1z] = v1.dataBuffer[v1z] ^ v2.dataBuffer[v2z];
+        v1db[v1y] = v1db[v1y] ^ v2db[v2y];
+        v2db[v2y] = v1db[v1y] ^ v2db[v2y];
+        v1db[v1y] = v1db[v1y] ^ v2db[v2y];
+
+        v1db[v1z] = v1db[v1z] ^ v2db[v2z];
+        v2db[v2z] = v1db[v1z] ^ v2db[v2z];
+        v1db[v1z] = v1db[v1z] ^ v2db[v2z];
     }
 
     /**
@@ -174,9 +216,10 @@ export class Vec3 {
      */
     readFrom(arr, baseX) {
         const thisX = this.baseIdx;
-        this.dataBuffer[thisX] = arr[baseX];
-        this.dataBuffer[thisX + 1] = arr[baseX + 1];
-        this.dataBuffer[thisX + 2] = arr[baseX + 2];
+        const db = this.dataBuffer;
+        db[thisX] = arr[baseX];
+        db[thisX + 1] = arr[baseX + 1];
+        db[thisX + 2] = arr[baseX + 2];
         return this;
     }
 
@@ -201,6 +244,17 @@ export class Vec3 {
             Math.abs(db[baseX + 2]);
     }
 
+
+    /**sets all of the components of this vector their absolute values*/
+    absComponents() {
+        const baseX = this.baseIdx;
+        const db = this.dataBuffer;
+        db[baseX] = Math.abs(db[baseX]);
+        db[baseX + 1] = Math.abs(db[baseX+1]); 
+        db[baseX + 2] = Math.abs(db[baseX+2]); 
+        return this;    
+    }
+
     /**sum of components of this vector */
     sum() {
         const baseX = this.baseIdx;
@@ -212,11 +266,13 @@ export class Vec3 {
     /**multiplies the given vector by the given scalar, and adds the result to this vector, returning this vector */
     mulAdd(v, scalar) {
         const vbaseX = v.baseIdx;
+        const vdb = v.dataBuffer;
         const baseX = this.baseIdx;
+        const db = this.dataBuffer;
 
-        this.dataBuffer[baseX] += v.dataBuffer[vbaseX] * scalar;
-        this.dataBuffer[baseX + 1] += v.dataBuffer[vbaseX + 1] * scalar;
-        this.dataBuffer[baseX + 2] += v.dataBuffer[vbaseX + 2] * scalar;
+        db[baseX] += vdb[vbaseX] * scalar;
+        db[baseX + 1] += vdb[vbaseX + 1] * scalar;
+        db[baseX + 2] += vdb[vbaseX + 2] * scalar;
         return this;
     }
 
@@ -313,10 +369,13 @@ export class Vec3 {
 
     dot(v) {
         const vbaseX = v.baseIdx;
+        const vdb = v.dataBuffer;
         const baseX = this.baseIdx;
-        return this.dataBuffer[baseX] * v.dataBuffer[vbaseX] +
-            this.dataBuffer[baseX + 1] * v.dataBuffer[vbaseX + 1] +
-            this.dataBuffer[baseX + 2] * v.dataBuffer[vbaseX + 2];
+        const db = this.dataBuffer;
+        
+        return (db[baseX] * vdb[vbaseX] +
+        db[baseX + 1] * vdb[vbaseX + 1] +
+        db[baseX + 2] * vdb[vbaseX + 2]);
     }
 
     /**returns the projection of this vector onto the input vector*/
@@ -350,6 +409,24 @@ export class Vec3 {
         this.dataBuffer[baseX] *= v.dataBuffer[vbaseX];
         this.dataBuffer[baseX + 1] *= v.dataBuffer[vbaseX + 1];
         this.dataBuffer[baseX + 2] *= v.dataBuffer[vbaseX + 2];
+        return this;
+    }
+    /**
+     * like compMult, but stores the result in the provided Vec3 instead of into this vector
+     * @param {*} v 
+     * @param {*} storeIn 
+     * @returns 
+     */
+    compMultInto(v, storeIn) {
+        const vbaseX = v.baseIdx;
+        const vdb = v.dataBuffer;
+        const baseX = this.baseIdx;
+        const sbaseX = storeIn.baseIdx;
+        const sdb = storeIn.dataBuffer;
+        const db = this.dataBuffer;
+        sdb[sbaseX] = vdb[vbaseX] * db[baseX];
+        sdb[sbaseX + 1] = vdb[vbaseX + 1] * db[baseX+1];
+        sdb[sbaseX + 2] = vdb[vbaseX + 2] * db[baseX+2];
         return this;
     }
 
@@ -387,6 +464,12 @@ export class Vec3 {
         return result;
     }
 
+    /**
+     * multiplies the instance by a scalar and stores the result in the provided vector
+     * @param {Vec3} scalar 
+     * @param {Vec3} result 
+     * @returns 
+     */
     multClone(scalar, result = this.clone()) {
         result.set(this);
         result.mult(scalar);
@@ -712,6 +795,7 @@ export class Vec3Pool {
                 this.inProgressPool.push(newV);
             } else {
                 newV = new Vec3(x, y, z);
+                newV.inPool = this;
                 this.newVecsCreated++;
                 if (this.lastUnfinalizedBy != this.owner)
                     this.newVecsCreatedSinceOwnerUnfinalized++;
@@ -749,6 +833,7 @@ export class Vec3Pool {
                 this.inProgressPool.push(newV);
             } else {
                 newV = new Vec3(x, y, z);
+                newV.inPool = this;
                 this.newVecsCreated++;
                 if (this.lastUnfinalizedBy != this.owner)
                     this.newVecsCreatedSinceOwnerUnfinalized++;
@@ -794,6 +879,7 @@ export class Vec3Pool {
         this.tempPool = [];
         for (let i = 0; i < this.tempSize; i++) {
             const vec = new Vec3(0, 0, 0, this.tempBuffer);
+            vec.inPool = this;
             vec.amFree = true;
             vec.baseIdx = i * 3;
             this.tempPool.push(vec.release());
@@ -914,6 +1000,7 @@ export class Vec3Pool {
                 }
                 while (newTempPool.length < this.tempSize * shrinkTemp) {
                     let vec = new Vec3(0, 0, 0, newTempBuff);
+                    vec.inPool = this;
                     newTempPool.push(vec);
                     vec.amFree = true;
                     vec.baseIdx = (newTempPool.length - 1) * 3;
@@ -992,31 +1079,9 @@ export function any_Vec3fv(v) {
     return __tempVecPool.temp_acquirefv(v);
 }
 
-export class NoPool {
-    constructor() { }
-    new_Vec3(x = 0, y = 0, z = 0) {
-        return new Vec3(x, y, z);
-    }
-    any_Vec3(x = 0, y = 0, z = 0) {
-        return __tempVecPool.any_Vec3(x, y, z);
-    }
 
-    new_Vec3fv(v) {
-        return new Vec3(v.x, v.y, v.z);
-    }
-    any_Vec3fv(v) {
-        return __tempVecPool.any_Vec3fv(v);
-    }
-
-    releaseTemp() {
-
-    }
-    unfinalize() { }
-    finalize() { }
-}
 
 //I feel like anyone can spare 60kb for this convenience. 
 const __tempVecPool = new Vec3Pool(2500, window, 10);
 __tempVecPool.finalize().lock();
-window.noPool = new NoPool();
 window.globalVecPool = __tempVecPool;

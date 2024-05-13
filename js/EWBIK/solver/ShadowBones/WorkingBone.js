@@ -1,8 +1,8 @@
-import { Ray } from "../util/Ray.js";
-import { Rot } from "../util/Rot.js";
-import { IKPin } from "../betterbones/IKpin.js";
-import { ShadowNode } from "../util/nodes/ShadowNode.js";
-import { IKNode } from "../EWBIK.js";
+import { Ray } from "../../util/Ray.js";
+import { Rot } from "../../util/Rot.js";
+import { IKPin } from "../../betterbones/IKpin.js";
+import { ShadowNode } from "../../util/nodes/ShadowNode.js";
+import { IKNode } from "../../EWBIK.js";
 
 export class WorkingBone {
     /**@type {IKPin}*/
@@ -27,7 +27,7 @@ export class WorkingBone {
     pool = null;
     modeCode = -1; //the modeCode for this bone's pin if it has one.
     maxModeCode = -1; //the largest modeCode that's been registered on this bone. This is used internally to avoid expensive regenerations of the shadowSkeleton, since it's usually cheaper to just ignore the irrelevant headings
-    
+
     /** @type {(Limiting | Returnful | LimitingReturnful | ConstraintStack)}*/
     constraint = null;
     myWeights = []; //personal copy of the weights array per this bone;
@@ -40,27 +40,24 @@ export class WorkingBone {
     isTerminal = false;
     _acceptableRotBy = new Rot(1, 0, 0, 0);
     _comfortableRotBy = new Rot(1, 0, 0, 0);
-    _tempRot = new Rot(1,0,0,0);
+    _tempRot = new Rot(1, 0, 0, 0);
 
     effectorList = [];
     _tempEffectorList = [];
     effectorBoneIndex = [];
     effectorMap = new Map();
 
-    
+
     _reachIterations = 0; //tracks the number of times this bone has tried to rotate toward its effectors (does not include the number of rotations trying to get comfortable)
     _lastPainUpdate = 0; //tracks the last time (in terms of reach iterations) that this bone has checked how much pain its in.
-    
+
 
     constructor(forBone, chain) {
         /** @type {BoneState} */
         this.forBone = forBone;
-        this.forBone.wb = this;   
+        this.forBone.wb = this;
         this.updateState(chain);
-        this.simLocalAxes.forceOrthogonality(true);
-        this.simBoneAxes.forceOrthogonality(true);
-        this.simTipAxes?.forceOrthogonality(true);
-        this.simTargetAxes?.forceOrthogonality(true);
+
     }
 
 
@@ -74,10 +71,10 @@ export class WorkingBone {
         this.constraint = this.forBone.getConstraint();
         this.hasLimitingConstraint = this.constraint?.isLimiting();
         this.segmentRoot = null;
-        
-        if (this.forBone.trackedBy == null) 
+
+        if (this.forBone.trackedBy == null)
             this.forBone.trackedBy = (new ShadowNode(this.forBone, undefined, this.pool));
-        if (this.forBone.getIKBoneOrientation().trackedBy == null) 
+        if (this.forBone.getIKBoneOrientation().trackedBy == null)
             this.forBone.getIKBoneOrientation().trackedBy = new ShadowNode(this.forBone.getIKBoneOrientation(), undefined, this.pool);
 
         /** @type {IKNode} */
@@ -87,13 +84,21 @@ export class WorkingBone {
 
         if (this.forBone.getIKPin()?.isEnabled()) {
             this.ikPin = this.forBone.getIKPin();
-            this.simTipAxes = this.ikPin.getAffectoredOffset();
+            if(this.forBone.getAffectoredOffset().trackedBy == null) {
+                this.forBone.getAffectoredOffset().trackedBy = new ShadowNode(this.forBone.getAffectoredOffset(), undefined, this.pool);
+            }
+            this.simTipAxes = this.forBone.getAffectoredOffset().trackedBy;
             this.simTargetAxes = this.ikPin.targetNode;
         } else {
             this.ikPin = null;
             this.simTipAxes = null;
             this.simTargetAxes = null;
         }
+
+        this.simLocalAxes.forceOrthoUniformity(true);
+        this.simBoneAxes.forceOrthoUniformity(true);
+        this.simTipAxes?.forceOrthoUniformity(true);
+        this.simTargetAxes?.forceOrthoUniformity(true);
         this.updateCosDampening();
     }
 
@@ -103,10 +108,11 @@ export class WorkingBone {
      * 
      * Sorry yeah i know I need to clean it up.
     */
-    assignEffectors(effectorList) {
-        this.effectorList = effectorList;
+    assignEffectors(effectorGroup) {
+        this.effectorGroup = effectorGroup;
+        this.effectorList = effectorGroup.effectors;
         this.effectorBoneIndex = [];
-        for(let e of effectorList) {
+        for (let e of this.effectorList) {
             this.effectorBoneIndex.push(e.wboneList.indexOf(this));
         }
         //this._tempEffectorList.splice(0, this._tempEffectorList.length-1);
@@ -116,20 +122,21 @@ export class WorkingBone {
         this._tempEffectorList = [];
         this.effectorList = [];
         this.effectorBoneIndex = [];
-        
+
         this.effectorMap.clear();
+        this.effectorGroup = undefined;
         this.effectors_finalized = false;
     }
 
     register_tempEffector(effectorReference, boneIdx) {
-        if(boneIdx == -1) 
+        if (boneIdx == -1)
             this.effectorMap.delete(effectorReference);
         else
             this.effectorMap.set(effectorReference, boneIdx);
     }
 
     finalize_tempEffectors() {
-        for(let [effector, idx] of this.effectorMap) {
+        for (let [effector, idx] of this.effectorMap) {
             this._tempEffectorList.push(effector);
         }
         this.effectors_finalized = true;
@@ -156,35 +163,35 @@ export class WorkingBone {
         let stiffdampening = this.forBone.parent == null ? Math.PI : (1 - stiffness) * defaultDampening;
         let clampedKickinRate = 1 - Math.max(Math.min(0.99, this.forBone.IKKickIn), 0);
         this.totalDampening = stiffdampening / clampedKickinRate;
-        this.cosHalfDampen = Math.cos(Math.min(this.totalDampening / 2, 2 * Math.PI));
+        this.cosHalfDampen = Math.cos(Math.min(this.totalDampening, 2 * Math.PI) / 2);
     }
 
 
     updateSolvableChildren() {
-        this.solvableChildren = this.solvableChildren.splice(0, this.solvableChildren.length-1);
-        for(let b of this.forBone.children) {
-            if(b instanceof THREE.Bone) {
-                if(b?.wb?.effectorList?.length > 0 || b?.wb?._tempEffectorList?.length > 0)
+        this.solvableChildren = this.solvableChildren.splice(0, this.solvableChildren.length - 1);
+        for (let b of this.forBone.children) {
+            if (b instanceof THREE.Bone) {
+                if (b?.wb?.effectorList?.length > 0 || b?.wb?._tempEffectorList?.length > 0)
                     this.solvableChildren.push(b.wb);
             }
         }
     }
 
     setAsSegmentRoot(wb) {
-         /*segment roots are reset to null on shadowskel regeneration, 
-            and then repopulated again from ArmatureEffectors, which does the repopulation starting from the tips and moving rootward.
-            So basically this means we propogate the root segment to any descendants which haven't had it
-            set already earlier in the procedure*/
-        if(this.segmentRoot == null) {
-            if(wb == this)  {
+        /*segment roots are reset to null on shadowskel regeneration, 
+           and then repopulated again from ArmatureEffectors, which does the repopulation starting from the tips and moving rootward.
+           So basically this means we propogate the root segment to any descendants which haven't had it
+           set already earlier in the procedure*/
+        if (this.segmentRoot == null) {
+            if (wb == this) {
                 this.isSegmentRoot = true;
-            } 
-            this.segmentRoot = wb; 
-            for(let c of this.solvableChildren) {
+            }
+            this.segmentRoot = wb;
+            for (let c of this.solvableChildren) {
                 c.setAsSegmentRoot(wb);
             }
         }
-        
+
     }
 
     getRootSegment() {
@@ -198,7 +205,7 @@ export class WorkingBone {
             if (this.segmentRoot == this)
                 this.chain.previousDeviation = Infinity;
         }
-        
+
         this.updateTargetHeadings(this.chain.boneCenteredTargetHeadings, this.myWeights, this.painWeights);
         //const prevOrientation = Rot.fromRot(this.simLocalAxes.localMBasis.rotation);
         let gotCloser = true;
@@ -231,57 +238,68 @@ export class WorkingBone {
     fastUpdateOptimalRotationToPinnedDescendants(translate, skipConstraints, currentIteration) {
         if (currentIteration < this.kickInStep) return;
 
-        let length = this.updateTargetHeadings(!translate);
-        this.updateTipHeadings(!translate);
-        this.maybeRecordHeadings(this.chain.targetHeadings, this.chain.tipHeadings, currentIteration, 0);
+        let length = this.updateHeadings(!translate);
+        //this.updateTipHeadings(!translate);
+
+        //this.maybeRecordHeadings(this.chain.targetHeadings, this.chain.tipHeadings, currentIteration, 0);
         this.updateOptimalRotationToPinnedDescendants(translate, skipConstraints, length);
-        if(this.springy && !skipConstraints) {
+        if (this.springy && !skipConstraints) {
             this.constraint?.markDirty();
         }
 
-        if (this.forBone.parentArmature.recordHeadings) {
+        /*if (this.forBone.parentArmature.recordHeadings) {
             this.updateTargetHeadings(!translate);
             this.updateTipHeadings(!translate);
             this.maybeRecordHeadings(this.chain.targetHeadings, this.chain.tipHeadings, currentIteration, 1);
-        }
+        }*/
     }
 
     /**returns the rotation that was applied (in local space), but does indeed apply it*/
     updateOptimalRotationToPinnedDescendants(translate, skipConstraints, length) {
         let desiredRotation = this.chain.qcpConverger.weightedSuperpose(this.chain.tipHeadings, this.chain.targetHeadings, this.chain.weightArray, length, translate);
-        const translateBy = this.chain.qcpConverger.getTranslation();
+        desiredRotation.shorten();
+
         const boneDamp = this.cosHalfDampen;
-        //if (!translate) {
-            desiredRotation.clampToCosHalfAngle(boneDamp);
-        //}
-        let localDesiredRotby = this.simLocalAxes.getParentAxes().getGlobalMBasis().getLocalOfRotation(desiredRotation, this.chain.tempRot);
-        //let reglobalizedRot = desiredRotation;
-        if(!skipConstraints) {
-            if (this.hasLimitingConstraint) {
-                let rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, localDesiredRotby, this._acceptableRotBy);
-                this.currentHardPain = 1;
-                if(Math.abs(rotBy.applyConjugateToRot(localDesiredRotby, this._tempRot).w) > 1e-6) {
-                    this.currentHardPain = 1; //violating a hard constraint should be maximally painful.
-                }
-                this.simLocalAxes.rotateByLocal(rotBy);
-            } else {
-                if (translate) {
-                    this.simLocalAxes.translateByGlobal(translateBy);
-                }
-                this.simLocalAxes.rotateByLocal(localDesiredRotby);
-            }
-        }
+
         
+        //the parent worldspace transform should already be updated at this point in the procedure so it should be safe to get its globalMBasis directly for a tiny perf boost
+        //less safe however might be the fact that this is using rawLocalOfRotation, which doesn't normalize anything. 
+        let localDesiredRotby = this.simLocalAxes.getParentAxes().globalMBasis.getRawLocalOfRotation(desiredRotation, this.chain.tempRot);
+        //localDesiredRotby.clampToCosHalfAngle(boneDamp);
+        //let reglobalizedRot = desiredRotation;
+        if (skipConstraints || !this.hasLimitingConstraint) {
+            if (translate) {
+                const translateBy = this.chain.qcpConverger.getTranslation();
+                this.simLocalAxes.translateByGlobal(translateBy);
+            }
+            localDesiredRotby.clampToCosHalfAngle(boneDamp);
+            this.simLocalAxes.rotateByLocal(localDesiredRotby);
+        } else if (this.hasLimitingConstraint) {
+            let rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, localDesiredRotby, this._acceptableRotBy);
+            rotBy.clampToCosHalfAngle(boneDamp);
+            //rotBy.applyAfter(localDesiredRotby, localDesiredRotby);
+            //apply twice, once unclamped to find the best region to teleport to. Then clamp the rotation that teleports use there to
+            //merely move in that direction, then constrain that clamped direction to make sure we don't walk somewhere forbidden.
+            //rotBy.clampToCosHalfAngle(boneDamp)
+            //rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, localDesiredRotby, this._acceptableRotBy);
+            this.currentHardPain = 0;
+            if (Math.abs(rotBy.applyConjugateToRot(localDesiredRotby, this._tempRot).w) > 1e-6) {
+                this.currentHardPain = 1; //violating a hard constraint should be maximally painful.
+            }
+            this.simLocalAxes.rotateByLocal(rotBy);
+        }
         return localDesiredRotby;
     }
 
-    updateTargetHeadings(scale) {
+    updateHeadings(scale) {
         let writeIdx = 0;
         let descendantsPain = this.updateDescendantPain();
-        for(let i=0; i<this.effectorList.length;i++) {
-            let writtenCount = this.effectorList[i].updateTargetHeadings(
-                writeIdx, 
+        for (let i = 0; i < this.effectorList.length; i++) {
+            //this.effectorList[i].optimStep_Start(this, this.effectorBoneIndex[i]);
+            let writtenCount = this.effectorList[i].updateHeadings(
+                writeIdx,
                 this.chain.targetHeadings,
+                this.chain.tipHeadings,
                 this.chain.weightArray,
                 descendantsPain,
                 this.effectorList.length,
@@ -294,12 +312,12 @@ export class WorkingBone {
         return writeIdx;
     }
 
-    updateTipHeadings(scale) {
+    /*updateTipHeadings(scale) {
         let writeIdx = 0;
-        for(let i=0; i<this.effectorList.length;i++) {
+        for (let i = 0; i < this.effectorList.length; i++) {
             let writtenCount = this.effectorList[i].updateTipHeadings(
-                writeIdx, 
-                this.chain.tipHeadings, 
+                writeIdx,
+                this.chain.tipHeadings,
                 this.effectorBoneIndex[i],
                 this,
                 scale
@@ -307,9 +325,9 @@ export class WorkingBone {
             writeIdx += writtenCount;
         }
         return writeIdx;
-    }
+    }*/
 
-    
+
     /**@return the amount of pain this bone itself is experiencing */
     getOwnPain() {
         this.currentSoftPain = this.lastReturnfulResult?.preCallDiscomfort;
@@ -322,7 +340,7 @@ export class WorkingBone {
      */
     updateDescendantPain() {
         this.totalDescendantPain = 0;
-        for(let cb of this.solvableChildren) {
+        for (let cb of this.solvableChildren) {
             this.totalDescendantPain += cb.currentPain + cb.totalDescendantPain;
         }
         return this.totalDescendantPain;
@@ -330,13 +348,13 @@ export class WorkingBone {
 
     updatePain(iteration) {
         this.currentSoftPain = 0;
-        if(!this.hasLimitingConstraint) {
+        if (!this.hasLimitingConstraint) {
             this.currentHardPain = 0;
             this.currentSoftPain = 0;
         }
         if (this.springy && iteration >= this.kickInStep) {
             //this.currentPain = this.getOwnPain();
-            
+
             const res = this.constraint.getClampedPreferenceRotation(this.simLocalAxes, this.simBoneAxes, iteration - this.kickInStep, this);
             this.currentSoftPain = this.lastReturnfulResult?.preCallDiscomfort;
             this.currentSoftPain = isNaN(this.currentSoftPain) ? 0 : this.currentSoftPain;
@@ -363,8 +381,9 @@ export class WorkingBone {
     updateReturnfullnessDamp(iterations) {
         //if(window.perfing) performance.mark("updateReturnfullnessDamp start");
         this.kickInStep = parseInt(iterations * (this.forBone.IKKickIn));
-        this.kickInStep = Math.max(0, Math.min(iterations - 1, this.kickInStep));
+        this.kickInStep = Math.max(0, Math.min(iterations, this.kickInStep));
         if (this.maybeSpringy()) {
+            //we use the square root of the total damp to ensure smoothly less priority than the solving step
             this.constraint.setPreferenceLeeway(this.totalDampening);
             this.constraint.setPerIterationLeewayCache(iterations - this.kickInStep);
             /**

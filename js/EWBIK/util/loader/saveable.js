@@ -330,7 +330,7 @@ async function loadImportions() {
     const { Constraint, ConstraintStack, Kusudama, LimitCone, Rest, Twist } = await import("../../betterbones/Constraints/ConstraintStack.js");
     const {IKPin} = await import("../../betterbones/IKpin.js");
     const { IKNode, TrackingNode } = await import("../nodes/IKNodes.js");
-    const {IKTransform} = await import("../nodes/IKTransform.js");
+    const {IKTransform} = await import("../nodes/Transforms/IKTransform.js");
     return {
         'EWBIK' : EWBIK,
         'IKTransform' : IKTransform,

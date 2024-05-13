@@ -1,6 +1,6 @@
 const THREE = await import('three');
 import { ShadowSkeleton, DebugState} from "./solver/ShadowSkeleton.js"
-import { IKTransform } from "./util/nodes/IKTransform.js";
+import { IKTransform } from "./util/nodes/Transforms/IKTransform.js";
 import { Vec3, any_Vec3, any_Vec3fv, Vec3Pool } from "./util/vecs.js";
 import { CallbacksSequence } from "./CallbacksSequence.js";
 import { Interpolator } from "./util/nodes/Interpolator.js";
@@ -13,7 +13,7 @@ import { Bone } from "three";
 import { Saveable, Loader } from "./util/loader/saveable.js";
 import { Object3D, Vector3 } from "../three/three.module.js";
 import { ShadowNode } from "./util/nodes/ShadowNode.js";
-import { ArmatureEffectors } from "./solver/Effector.js";
+import { ArmatureEffectors } from './solver/effectorMath/ArmatureEffectors.js';
 
 //import * as THREE from 'three';
 //import { LineSegments, Bone } from "three";
@@ -268,7 +268,7 @@ export class EWBIK extends Saveable {
     }
 
     makeBoneGeo(boneRef, minHeight, radius, mat, hullpoints) {
-        const height = boneRef.height ?? boneRef.inferHeight('statistical', minHeight); 
+        const height = boneRef.__height_is_placeholder ? boneRef.getInferredHeight('statistical', minHeight) : boneRef.height; 
         const cone = new THREE.ConeGeometry(radius * height, height, 5);
         cone.translate(0, height / 2, 0);
         const hull = hullpoints.length > 0 ? convexBlob(cone, ...hullpoints) : cone;
@@ -874,6 +874,14 @@ export class EWBIK extends Saveable {
         return this._previousIterations;
     }
 
+    set defaultIterations(val) {
+        this._defaultIterations = parseInt(val);
+    }
+
+    get defaultIterations() {
+        return this.defaultIterations;
+    }
+
 
     recordHeadings = false;
     recordSteps = -1;
@@ -919,7 +927,8 @@ export class EWBIK extends Saveable {
         let doalign = (wb) => this.alignBoneToSolverResult(wb);
 
         this.shadowSkel.solveToTargets(this.getDefaultStabilizingPassCount(), endOnIndex, doalign, callbacks, ds.currentIteration);
-        
+        this.stablePool.releaseTemp();
+        this.volatilePool.releaseTemp();
         console.log('solve#: ' + ds.solveCalls + '\t:: itr :: ' + ds.currentIteration);
     }
 
@@ -993,6 +1002,7 @@ let betterbones = {
     stiffness: 0,
     tempLock: false,
     orientation: null,
+    __height_is_placeholder : true,
     IKKickIn: 0,
     stiffness: 0,
     /**
@@ -1090,6 +1100,12 @@ let betterbones = {
 
     registerToArmature(armature) {
         this.parentArmature = armature;
+        if(this.__height_is_placeholder) {
+            this._height = this.getInferredHeight('statistical', 0.001);
+        }
+        if(this.parent instanceof THREE.Bone && this.parent.__height_is_placeholder) {
+            this.parent._height = this.parent.getInferredHeight('statistical', 0.001);
+        }
         for (const b of this.childBones())
             b.registerToArmature(this.parentArmature);
         this.parentArmature.regenerateShadowSkeleton();
@@ -1121,6 +1137,7 @@ let betterbones = {
         if (this.orientation == null) {
             this.orientation = new THREE.Object3D()
             this.orientation.ikd = this.id + '-orientation';
+            this.orientation.name = this.name+'-orientation';
             this.orientation.placeholder = true;
             this.add(this.orientation);
         }
@@ -1227,22 +1244,26 @@ let betterbones = {
         if(elem.bonegeo != null) {
             this.setBonegeo(elem.bonegeo.clone(recursive));
         }
-        this.height = elem.height;
+        this.__height_is_placeholder = elem.__height_is_placeholder;
+        this._height = elem.height;
         return res;
     },
     /**
-     * This is NOT just useful for cosmetic stuff. For ideal results you should either define a boneheight so the solver has some idea as to what scale its working with, or let this function infer a height for you. The IKPin xScale, yScale, and zScale parameters get premultiplied by this height before being provided to the solver. This helps avoid over-prioritizing orientation with armatures of average bone distance < 1, and under-prioritizing with armatures of average bone distance > 1. 
-     * infers a height for this bone based on its childrens position. Inference mode can be 'statistical' or 'naive'. 
+     * Returns an inferred height for this bone without setting it. 
+     * The height is NOT just useful for cosmetic stuff. For ideal results you should either define a boneheight so the solver has some idea as to what scale its working with, or let this function infer a height for you. The IKPin xScale, yScale, and zScale parameters get premultiplied by this height before being provided to the solver. This helps avoid over-prioritizing orientation with armatures of average bone distance < 1, and under-prioritizing with armatures of average bone distance > 1. 
+     * By default the height is inferred based on the bone's childrens position. 
+     * Inference mode can be 'statistical' or 'naive'. 
      * the former will attempt to determine an ideal height based on the weighted average distance of its children,
      * the latter will set it to the distance to its closest child, unless that distance is closer than the provided minHeight value.
      * 
      * the computed value gets cached internally and can be called with bone.height. only use this function when you want to reinfer the height
-    * @param {*} mode 
-    * @param {*} minHeight the minimum bone height in global space
+    * @param {String} mode 
+    * @param {Number} minHeight the minimum bone height in global space
     * @return {Number} the inferred height.
     */
-    inferHeight(mode = 'statistical', minHeight = 0.001) {
-        let wMinHeight = minHeight/this.getWorldScale(this.scale.clone()).y;
+    getInferredHeight(mode = 'statistical', minHeight = 0.001) {
+        let worldRecip = 1/this.getWorldScale(this.scale.clone()).y;
+        let wMinHeight = minHeight*worldRecip;
         let pool = this.parentArmature?.volatilePool ?? window.globalVecPool;
         let sumVec = pool.any_Vec3(0, 0, 0);
         let sumheight = 0;
@@ -1254,8 +1275,8 @@ let betterbones = {
         for (let cb of this.childBones()) {
             count++;
             let childvec = pool.any_Vec3(cb.position.x, cb.position.y, cb.position.z);
-            let childMagSq = childvec.magSq();
-            let childMag = Math.sqrt(childMagSq);
+            let childMagSq = childvec.magSq() * worldRecip;
+            let childMag = Math.sqrt(childMagSq) * worldRecip;
             sum_sqheight += childMagSq; //helps weigh in favor of further bones, because a lot of rigs do weird annoying things with twist bones.
             sumheight += childMag;
             minChild = Math.max(Math.min(minChild, childMag), wMinHeight);
@@ -1270,27 +1291,55 @@ let betterbones = {
             if (mode == 'statistical')
                 newHeight = Math.sqrt(sum_sqheight) / Math.sqrt(count);
             if (mode == 'naive')
-                newHeightt = minChild;
+                newHeight = minChild;
         }
-        this.setHeight(newHeight);
-        return this.height;
+        return newHeight;
     },
-    /**sets the bone height and notifies the bone's ikpin if it has one 
-     * @param {Number} newHeight
-     * @returns {Bone} this bone for chaining.
+
+    /** 
+     * returns the transform on this bone which attempts to align with target. 
+     * By default this is the identity transform in the space of Bone.getIKBoneOrientation().
+     * It is lazily initialized.
+     * 
+     * @return Object3D
     */
-    setHeight(newHeight) {
-        this.height = newHeight;
-        if(this.getIKPin() != null) this.getIKPin().setTargetScales();
-        return this;
+    getAffectoredOffset() {
+        if(this.affectoredOffset == null) {
+            this.affectoredOffset = new Object3D();
+            this.affectoredOffset.ikd = `${this.name}-affector_offset`;
+            this.affectoredOffset.name = `${this.name}-affector_offset`;
+            this.getIKBoneOrientation().add(this.affectoredOffset);
+        }
+        return this.affectoredOffset;
     },
+
+    /** 
+     * initializes and/or specifies a transform on this bone to treat as the part of the bone which attempts to align with the target.
+     * the input is assumed to be in the local space of the transform returned by Bone.getIKBoneOrientation();
+     * 
+     * @type {THREE.Vector3} translation 
+     * @type {THREE.Quaternion} orientation
+    */
+    setAffectoredOffset(translation, orientation) {
+        if(translation !== undefined)
+            this.getAffectoredOffset().position.copy(translation);
+        if(orientation !== undefined)
+            this.getAffectoredOffset().quaternion.copy(orientation);
+    },    
     add(elem) {
         this.original_add(elem);
         if (elem instanceof THREE.Bone) {
             if (this.parentArmature != null) {
+                if(elem.orientation != null) {
+                    elem.orientation?.trackedBy?.ensure();
+                }
+                if(elem.affectoredOffset != null) {
+                    elem.affectoredOffset?.trackedBy?.ensure();
+                }
                 elem.registerToArmature(this.parentArmature);
                 this.parentArmature.recreateBoneList();
                 this.parentArmature.regenerateShadowSkeleton(true);
+                
             }
         }
     },
@@ -1299,6 +1348,12 @@ let betterbones = {
         this.original_attach(elem);
         if (elem instanceof THREE.Bone) {
             if (this.parentArmature != null) {
+                if(elem.orientation != null) {
+                    elem.orientation?.trackedBy?.ensure();
+                }
+                if(elem.affectoredOffset != null) {
+                    elem.affectoredOffset?.trackedBy?.ensure();
+                }
                 elem.registerToArmature(this.parentArmature);
                 this.parentArmature.recreateBoneList();
                 this.parentArmature.regenerateShadowSkeleton(true);
@@ -1350,6 +1405,27 @@ let betterbones = {
 }
 
 Object.assign(THREE.Bone.prototype, betterbones);
+Object.defineProperty(THREE.Bone.prototype, '_height', { //for notifying any IKPins of inferred height changes
+    get: function() {return this.__height;},
+    set: function(newValue) {
+        this.__height = newValue;
+        if(this.getIKPin() != null) this.getIKPin().setTargetScales();
+    },
+    enumerable: true,
+    configurable: true
+});
+
+Object.defineProperty(THREE.Bone.prototype, 'height', { //for userfacing changes to height, so the library doesn't override them
+    get: function() {return this.__height;},
+    set: function(newValue) {
+        this._height = newValue;
+        this.__height_is_placeholder = false;
+    },
+    enumerable: true,
+    configurable: true
+});
+
+
 export {IKPin, Kusudama, LimitCone, Twist, Rest, ShadowNode, Vec3, Vec3Pool, any_Vec3, any_Vec3fv, Rot, IKTransform, IKNode, ShadowSkeleton, Interpolator}
 
 

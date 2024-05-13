@@ -1,3 +1,4 @@
+import { IKTransform } from "../EWBIK.js";
 import { IKNode } from "../util/nodes/IKNodes.js";
 import { Vec3Pool } from "../util/vecs.js";
 
@@ -87,16 +88,135 @@ export class ShadowSkeleton {
         const endOnIndex = this.getEndOnIndex(solveUntil, literal)
         //this.pullBack(iterations, solveUntil, false, null);
         //this.updateReturnfulnessDamps(iterations);
+
+        if (this.traversalArray?.length == 0) return;
+        let translate = endOnIndex === this.traversalArray.length - 1;
+        
+        //if(window.perfing) performance.mark("solveToTargetsp1 start");
+        stabilizationPasses = Math.max(0, stabilizationPasses);
         
         for (let i = 0; i < iterations; i++) {
             this.pullBackAll(iterations, endOnIndex, callbacks, i);
-            this.solveToTargets(stabilizationPasses, endOnIndex, null, callbacks, i);
+            this.solveToTargets(stabilizationPasses, translate, endOnIndex, null, callbacks, i);
         }
+        this.stablePool.releaseTemp();
+        this.volatilePool.releaseTemp();
 
         //if(window.perfing) performance.mark("shadowSkelSolve end");
         //if(window.perfing) performance.measure("shadowSkelSolve", "shadowSkelSolve start", "shadowSkelSolve end");   
         this.updateBoneStates(onComplete, callbacks);
         this.debugState.solveCalls++;      
+    }
+
+    /*experimental*/
+    notifyBoneStart(index, iteration) {
+        const someDirty = IKTransform.allDirty & ~IKTransform.precompInverseDirty;
+        /*if(iteration == 0) {
+            let effectorlist = this.effectorBuffers.all_effectors;
+            for(let i = 0; i<effectorlist.length; i++) {
+                effectorlist[i].iteration_Start();
+            }
+        }*/
+        for(let i=index; i>=0; i--) {
+            let wb = this.traversalArray[i];
+            let ax = wb.simLocalAxes;
+            let loc = ax.localMBasis;
+            let glob =ax.globalMBasis;
+            let _parglob = ax.parent.globalMBasis;
+            _parglob.scale.compMultInto(loc.translate, glob.translate);
+            _parglob.rotation.applyAfter(loc.rotation, glob.rotation);
+            _parglob.rotation.applyToVec(glob.translate, glob.translate);
+            glob.translate.add(_parglob.translate);
+            glob.rotation.invertInto(glob._inverseRotation);
+            glob.state = someDirty;
+            ax.dirty = false;
+
+            _parglob = ax.globalMBasis;
+            ax = wb.simBoneAxes;
+            loc = ax.localMBasis;
+            glob = ax.globalMBasis;
+            _parglob.scale.compMultInto(loc.translate, glob.translate);
+            _parglob.rotation.applyAfter(loc.rotation, glob.rotation);
+            _parglob.rotation.applyToVec(glob.translate, glob.translate);
+            glob.translate.add(_parglob.translate);
+            glob.rotation.invertInto(glob._inverseRotation);
+            glob.state = someDirty;
+            ax.dirty = false;
+
+            /*if(wb.simTipAxes !== null) {
+                _parglob = ax.globalMBasis;
+                ax = wb.simTipAxes;
+                loc = ax.localMBasis;
+                glob = ax.globalMBasis;
+                _parglob.scale.compMultInto(loc.translate, glob.translate);
+                _parglob.rotation.applyAfter(loc.rotation, glob.rotation);
+                _parglob.rotation.applyToVec(glob.translate, glob.translate);
+                glob.translate.add(_parglob.translate);
+                glob.rotation.invertInto(glob._inverseRotation);
+                glob.state = someDirty;
+                ax.dirty = false;
+            }*/
+        }
+        /*
+        let effectorlist = this.effectorBuffers.all_effectors;
+        for(let i = 0; i<effectorlist.length; i++) {
+            effectorlist[i].iteration_Start();
+        }*/
+    }
+
+    notifyIterationStart(endOnIndex, iteration) {
+        const someDirty = IKTransform.allDirty & ~IKTransform.precompInverseDirty;
+        if(iteration == 0) {
+            let effectorlist = this.effectorBuffers.all_effectors;
+            for(let i = 0; i<effectorlist.length; i++) {
+                effectorlist[i].iteration_Start();
+            }
+        }
+        for(let i=index; i>=0; i--) {
+            let wb = this.traversalArray[i];
+            let ax = wb.simLocalAxes;
+            let loc = ax.localMBasis;
+            let glob =ax.globalMBasis;
+            let _parglob = ax.parent.globalMBasis;
+            _parglob.scale.compMultInto(loc.translate, glob.translate);
+            _parglob.rotation.applyAfter(loc.rotation, glob.rotation);
+            _parglob.rotation.applyToVec(glob.translate, glob.translate);
+            glob.translate.add(_parglob.translate);
+            glob.rotation.invertInto(glob._inverseRotation);
+            glob.state = someDirty;
+            ax.dirty = false;
+
+            _parglob = ax.globalMBasis;
+            ax = wb.simBoneAxes;
+            loc = ax.localMBasis;
+            glob = ax.globalMBasis;
+            _parglob.scale.compMultInto(loc.translate, glob.translate);
+            _parglob.rotation.applyAfter(loc.rotation, glob.rotation);
+            _parglob.rotation.applyToVec(glob.translate, glob.translate);
+            glob.translate.add(_parglob.translate);
+            glob.rotation.invertInto(glob._inverseRotation);
+            glob.state = someDirty;
+            ax.dirty = false;
+
+            if(wb.simTipAxes !== null) {
+                _parglob = ax.globalMBasis;
+                ax = wb.simTipAxes;
+                loc = ax.localMBasis;
+                glob = ax.globalMBasis;
+                _parglob.scale.compMultInto(loc.translate, glob.translate);
+                _parglob.rotation.applyAfter(loc.rotation, glob.rotation);
+                _parglob.rotation.applyToVec(glob.translate, glob.translate);
+                glob.translate.add(_parglob.translate);
+                glob.rotation.invertInto(glob._inverseRotation);
+                glob.state = someDirty;
+                ax.dirty = false;
+            }
+        }
+        /*
+        let effectorlist = this.effectorBuffers.all_effectors;
+        for(let i = 0; i<effectorlist.length; i++) {
+            effectorlist[i].iteration_Start();
+        }*/
     }
 
     pullBackAll(iterations, endOnIndex, callbacks = null, currentIteration) {
@@ -132,14 +252,10 @@ export class ShadowSkeleton {
        * @param notifier a (potentially threaded) function to call every time the solver has updated the transforms for a given bone. 
        * Called once per solve, per bone. NOT once per iteration.
        */
-    solveToTargets(stabilizationPasses, endOnIndex, onComplete, callbacks, currentIteration) {
-        if (this.traversalArray?.length == 0) return;
-        let translate = endOnIndex === this.traversalArray.length - 1;
+    solveToTargets(stabilizationPasses, doTranslate, endOnIndex, onComplete, callbacks, currentIteration) {
         let skipConstraints = stabilizationPasses < 0;
-        //if(window.perfing) performance.mark("solveToTargetsp1 start");
-        stabilizationPasses = Math.max(0, stabilizationPasses);
-        if (translate) { //special case. translate and rotate the rootbone first to minimize deviation from innermost targets
-            this.traversalArray[endOnIndex].fastUpdateOptimalRotationToPinnedDescendants(translate, true, currentIteration);
+        if (doTranslate) { //special case. translate and rotate the rootbone first to minimize deviation from innermost targets
+            this.traversalArray[endOnIndex].fastUpdateOptimalRotationToPinnedDescendants(doTranslate, true, currentIteration);
         }
         //if(window.perfing) performance.mark("solveToTargetsp1 end");
         //if(window.perfing) performance.measure("solveToTargetsp1", "solveToTargetsp1 start", "solveToTargetsp1 end");  
@@ -148,9 +264,10 @@ export class ShadowSkeleton {
         //if(window.perfing) performance.mark("solveToTargetsp2 start");
         for (let j = 0; j <= endOnIndex; j++) {
             const wb = this.traversalArray[j];
+            //this.notifyBoneStart(j, currentIteration);
             //callbacks?.beforeIteration(wb.forBone, wb.forBone.getFrameTransform(), wb);
             //wb.pullBackTowardAllowableRegion(currentIteration, callbacks);
-            wb.fastUpdateOptimalRotationToPinnedDescendants(translate && j === endOnIndex, skipConstraints, currentIteration);
+            wb.fastUpdateOptimalRotationToPinnedDescendants(doTranslate && j === endOnIndex, skipConstraints, currentIteration);
             let bonepain = wb.getOwnPain();
             if (bonepain > this.maxPain) {
                 this.maxPain = bonepain;
@@ -162,8 +279,6 @@ export class ShadowSkeleton {
         this.lastPainTotal = this.accumulatingPain;
 
         //this.updateBoneStates(onComplete, callbacks);
-        this.stablePool.releaseTemp();
-        this.volatilePool.releaseTemp();
         //if(window.perfing) performance.mark("solveToTargetsp2 end");
         //if(window.perfing) performance.measure("solveToTargetsp2", "solveToTargetsp2 start", "solveToTargetsp2 end");  
         //if(window.perfing) performance.measure("solveToTargets", "solveToTargetsp1 start", "solveToTargetsp2 end");  

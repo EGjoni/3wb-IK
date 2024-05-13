@@ -45,10 +45,13 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 4.1);
         window.scene = new THREE.Scene();
-        window.axHelp = new THREE.AxesHelper();
-        window.axHelp2 = new THREE.AxesHelper();
-        window.axHelp3 = new THREE.AxesHelper();
-        window.axHelp4 = new THREE.AxesHelper();
+        window.head_ax = window.axHelp = new THREE.AxesHelper();
+        window.head_pin_ax = window.axHelp2 = new THREE.AxesHelper();
+        window.r_hand_ax = window.axHelp3 = new THREE.AxesHelper();
+        window.r_hand_pin_ax = window.axHelp4 = new THREE.AxesHelper();
+        window.l_hand_ax = window.axHelp5 = new THREE.AxesHelper();
+        window.l_hand_pin_ax = window.axHelp6 = new THREE.AxesHelper();
+
         scene.add(hemisphereLight);
         document.body.appendChild(renderer.domElement);
         const itxmat = new THREE.MeshLambertMaterial({color: 0x004444});
@@ -166,28 +169,24 @@
             armature.hip_pin.setInfluenceOpacity(1-0.8);
             armature.hip_pin.setPinWeight(0.4);
             armature.l_hand_pin.setPinWeight(1);
-            armature.l_hand_pin.setXPriority(0.16);
-            armature.l_hand_pin.setYPriority(0.03);
-            armature.l_hand_pin.setZPriority(0);
-            armature.l_hand_pin.getAffectoredOffset().translateByLocal(any_Vec3(0, 0.06, 0)).project();
-            armature.l_hand_pin.target_threejs.add(axHelp3);
-            armature.l_hand_pin.forBone.add(axHelp4);
-            axHelp.visible = false; axHelp2.visible = false; axHelp3.visible = false; axHelp4.visible = false;
+            armature.l_hand_pin.setPSTPriorities(1, 0.1, 0.2);
+            armature.l_hand.setAffectoredOffset(any_Vec3(0, 0.5, 0));
+            armature.l_hand_pin.target_threejs.add(l_hand_pin_ax);
+            armature.l_hand_pin.forBone.add(l_hand_ax);
+            axHelp.visible = true; axHelp2.visible = true; axHelp3.visible = true; axHelp4.visible = true;
+            axHelp5.visible = true; axHelp6.visible = true;
 
             armature.r_hand_pin.setPinWeight(1);
-            armature.r_hand_pin.setXPriority(0.16);
-            armature.r_hand_pin.setYPriority(0.03);
-            armature.r_hand_pin.setZPriority(0);
-            armature.r_hand_pin.getAffectoredOffset().translateByLocal(any_Vec3(0, 0.06, 0)).project();
-            armature.r_hand_pin.target_threejs.add(axHelp);
-            armature.r_hand_pin.forBone.add(axHelp2);
+            armature.r_hand.setAffectoredOffset(any_Vec3(0, 0.5, 0));
+            armature.r_hand_pin.target_threejs.add(r_hand_pin_ax);
+            armature.r_hand_pin.forBone.add(r_hand_ax);
 
 
 
             let J_Bip_L_Hand_pin = armature.l_hand_pin;
             J_Bip_L_Hand_pin.target_threejs.position.set(-0.2628872730607969, 1.1320828172882704, -0.108023847915398);
             J_Bip_L_Hand_pin.target_threejs.quaternion.set(-0.466854980946203, -0.4415841689876301, 0.5158273464161427, 0.5665439057606263);
-            J_Bip_L_Hand_pin.setTargetPriorities(1, 0.5,  0.5);
+            J_Bip_L_Hand_pin.setPSTPriorities(1, 0.1, 0.2);
             //if(isRestOnly) {//Todo: This correcion shouldn't be necessary. Should figure out what's causing the difference
             //    J_Bip_L_Hand_pin.target_threejs.rotateZ(-1.5); 
             //}
@@ -197,7 +196,7 @@
             let J_Bip_R_Hand_pin = armature.r_hand_pin;
             J_Bip_R_Hand_pin.target_threejs.position.set(0.22725199632250082, 1.1271629356945718, -0.109638346652234);
             J_Bip_R_Hand_pin.target_threejs.quaternion.set(-0.4635192535441378, 0.4385467682483039, -0.5184121542461977, 0.5692762703491778);
-            J_Bip_R_Hand_pin.setTargetPriorities(1, 0.5,  0.5);
+            J_Bip_R_Hand_pin.setPSTPriorities(1, 0.1, 0.2);
             //if(isRestOnly) {//Todo: This correcion shouldn't be necessary. Should figure out what's causing the difference
             //    J_Bip_R_Hand_pin.target_threejs.rotateZ(1.5); 
             //}
@@ -208,6 +207,10 @@
             let J_Bip_C_Head_pin = armature.head_pin;
             J_Bip_C_Head_pin.target_threejs.position.set(-0.048201991083735636, 1.4857808131871846, 0.029283233212733198);
             J_Bip_C_Head_pin.target_threejs.quaternion.set(-0.24292338574302336, -0.04987885723340439, 0.026963677320800114, 0.9683869517737089);
+            J_Bip_C_Head_pin.setPSTPriorities(0.1, 0.3, 1);
+            armature.head_pin.target_threejs.add(head_pin_ax);
+            armature.head_pin.forBone.add(head_ax); 
+            
             headStart.set(armature.head_pin.targetNode.origin());
 
             let J_Bip_C_Hips_pin = armature.hip_pin;
@@ -309,12 +312,11 @@
                     lastLeftPounce = Date.now(); 
                     armature.l_hand_pin.setPinWeight(0.5);
                     if(!leftScored ) {
-                        leftScored = maybePoint(armature.l_hand_pin.getAffectoredOffset(), true);
+                        leftScored = maybePoint(armature.l_hand.getAffectoredOffset().trackedBy, true);
                     }
                 });
                 leftScored = false;
-                armature.l_hand_pin.setYPriority(0.03);
-                armature.l_hand_pin.setXPriority(0.2);
+                
                 armature.l_hand_pin.setPinWeight(0.6);
                 if(rightHandResting || rightHandReturning) {
                     armature.r_hand_pin.setPinWeight(0.1);
@@ -349,12 +351,11 @@
                     rightHandReturning = false;
                     lastRightPounce = Date.now();
                     if(!rightScored) {
-                        rightScored = maybePoint(armature.r_hand_pin.getAffectoredOffset(), true);
+                        rightScored = maybePoint(armature.r_hand.getAffectoredOffset().trackedBy, true);
                     }
                     
                 });            
-                armature.r_hand_pin.setYPriority(0.03);
-                armature.r_hand_pin.setXPriority(0.2);
+                
                 armature.r_hand_pin.setPinWeight(0.6);
                 rightScored = false;
                 if(leftHandResting || leftHandReturning) {
@@ -401,13 +402,12 @@
                             leftHandResting = true; 
                             leftHandReturning  = false;
                             isMidPounce_left = false;
-                            armature.l_hand_pin.setYPriority(0.5);
+                            armature.l_hand_pin.setSwingPriority(0.5);
                             unShy = Date.now();
                             shyMin = 1000;
                             leftScored = false;
                         });
                    
-                    armature.l_hand_pin.setXPriority(0.5);
                     armature.l_hand_pin.setPinWeight(0.6);
                     leftHandReturning = true; 
                     isMidPounce_left = false;
@@ -422,12 +422,11 @@
                         isMidPounce_right = false;
                         rightHandReturning = false;
                         shyMin = 1000;
-                        armature.r_hand_pin.setYPriority(0.5);
+                        armature.r_hand_pin.setSwingPriority(0.5);
                         unShy = Date.now();
                         rightScored = false;
                     });
                     //
-                    armature.r_hand_pin.setXPriority(0.5);
                     armature.r_hand_pin.setPinWeight(0.6);
                     
                     rightHandReturning = true;
@@ -458,8 +457,8 @@
             camera.layers.set(0);
             if(itx.length>0 && lookat) {
                 boxMesh.position.copy(itx[0].point);
-                maybePounce();
-                glare(armature, boxMesh.position, 0.2, downadjust/*, (leftHandResting && rightHandResting) || (isMidPounce_left || isMidPounce_right)*/);
+                //maybePounce();
+                //glare(armature, boxMesh.position, 0.2, downadjust/*, (leftHandResting && rightHandResting) || (isMidPounce_left || isMidPounce_right)*/);
             }            
             window.renderer.render(scene, camera);
             window.renderer.clearDepth();

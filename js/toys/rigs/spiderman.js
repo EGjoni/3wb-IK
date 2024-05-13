@@ -57,7 +57,7 @@ export function initSpideyPins(armature) {
 
 
     let head_013_pin = new IKPin(armature.bonetags["head_013"]);
-    head_013_pin.setPinWeight(0.5000);
+    head_013_pin.setPinWeight(1);
     head_013_pin.setPSTPriorities(1.0000, 1, 1);
     head_013_pin.setInfluenceOpacity(1.0000);
     head_013_pin.ensure();
@@ -69,7 +69,7 @@ export function initSpideyPins(armature) {
 
 
     let handR_017_pin = armature.r_hand_pin = new IKPin(armature.bonetags["handR_017"]);
-    handR_017_pin.setPinWeight(0.5000);
+    handR_017_pin.setPinWeight(1);
     handR_017_pin.setPSTPriorities(1.0000, 0.2905, 0.2611);
     handR_017_pin.setInfluenceOpacity(1.0000);
     handR_017_pin.ensure();
@@ -93,10 +93,10 @@ export function initSpideyPins(armature) {
     forearmL_035_pin.ensure();
     forearmL_035_pin.targetNode.mimic();
 
-    armature.c_head.setHeight(0.1);
+    armature.c_head.height = 0.15;
 
     let handL_036_pin = armature.l_hand_pin = new IKPin(armature.bonetags["handL_036"]);
-    handL_036_pin.setPinWeight(0.5000);
+    handL_036_pin.setPinWeight(1);
     handL_036_pin.setPSTPriorities(1.0000, 1, 1);
     handL_036_pin.setInfluenceOpacity(1.0000);
     handL_036_pin.ensure();
@@ -108,7 +108,7 @@ export function initSpideyPins(armature) {
 
 
     let footR_054_pin = armature.r_foot_pin = new IKPin(armature.bonetags["footR_054"]);
-    footR_054_pin.setPinWeight(0.5000);
+    footR_054_pin.setPinWeight(0.8000);
     footR_054_pin.setPSTPriorities(1.0000, 0.0000, 0.0000);
     footR_054_pin.setInfluenceOpacity(0.0000);
     footR_054_pin.target_threejs.position.set(0.08623473645226307, -0.08941193077249421, 0.6120269790679627);
@@ -116,7 +116,7 @@ export function initSpideyPins(armature) {
 
 
     let toeR_055_pin = armature.r_toe_pin = new IKPin(armature.bonetags["toeR_055"]);
-    toeR_055_pin.setPinWeight(0.5000);
+    toeR_055_pin.setPinWeight(1);
     toeR_055_pin.setPSTPriorities(1.0000, 1.0000, 1.0000);
     toeR_055_pin.setInfluenceOpacity(1.0000);
     toeR_055_pin.target_threejs.position.set(-0.5040818141952029, -1.3653333568222943, 2.3191806819921696);
@@ -124,7 +124,7 @@ export function initSpideyPins(armature) {
 
 
     let footL_059_pin = armature.l_foot_pin = new IKPin(armature.bonetags["footL_059"]);
-    footL_059_pin.setPinWeight(0.5000);
+    footL_059_pin.setPinWeight(0.8);
     footL_059_pin.setPSTPriorities(1.0000, 0.0000, 0.0000);
     footL_059_pin.setInfluenceOpacity(0.0000);
     footL_059_pin.target_threejs.position.set(0.15609182733195434, -0.24366297762518432, 0.5984076523130948);
@@ -133,7 +133,7 @@ export function initSpideyPins(armature) {
 
 
     let toeL_061_pin = armature.l_toe_pin = new IKPin(armature.bonetags["toeL_061"]);
-    toeL_061_pin.setPinWeight(0.5000);
+    toeL_061_pin.setPinWeight(1);
     toeL_061_pin.setPSTPriorities(1.0000, 1.0000, 1.0000);
     toeL_061_pin.setInfluenceOpacity(1.0000);
     toeL_061_pin.target_threejs.position.set(0.7418013765707814, -1.1318218666144881, 2.4826137973970583);
@@ -145,6 +145,9 @@ export function initSpideyPins(armature) {
 
     armature.r_toe_pin.target_threejs.add(armature.r_foot_pin.target_threejs);
     armature.r_foot_pin.ensure();
+
+    spine_07_pin.target_threejs.attach(head_013_pin.target_threejs);
+    head_013_pin.ensure();
 }
 
 
@@ -152,7 +155,7 @@ function oldinitSpideyPins(armature) {
     armature.head_pin = new IKPin(armature.c_head);
     armature.hip_pin = new IKPin(armature.c_hips).setInfluenceOpacity(1 - 0.8);
     armature.l_hand_pin = new IKPin(armature.l_hand).setPSTPriorities(1, 0.2, 0.2);
-    armature.r_hand_pin = new IKPin(armature.r_hand).setTargetPriorities(1, 0.2, 0.2);
+    armature.r_hand_pin = new IKPin(armature.r_hand).setPSTPriorities(1, 0.2, 0.2);
     armature.l_foot_pin = new IKPin(armature.l_foot);
     armature.l_foot_pin.setPSTPriorities(1, 0, 0).setInfluenceOpacity(0);
     armature.r_foot_pin = new IKPin(armature.r_foot);

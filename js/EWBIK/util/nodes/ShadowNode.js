@@ -1,6 +1,6 @@
 import { Vec3 } from "../vecs.js";
 import { Rot } from "../Rot.js";
-import { IKTransform } from "./IKTransform.js";
+import { IKTransform } from "./Transforms/IKTransform.js";
 import { generateUUID } from "../uuid.js";
 const THREE = await import('three');
 import { Quaternion, Vector3, Object3D, Matrix4 } from "three";

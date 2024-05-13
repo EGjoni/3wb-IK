@@ -72,7 +72,7 @@ export class LimitCone extends Saveable {
         
         this.radialHandle = null; 
         this.setControlPoint(direction);
-        this.tangentCircleCenterNext1 = direction.getOrthogonal();
+        this.tangentCircleCenterNext1 = direction.getOrthogonal_temp(new Vec3(0,0,0));
         this.tangentCircleCenterNext2 = this.tangentCircleCenterNext1.multClone(-1);
 
         this.setRadius(Math.max(1e-12, rad));
@@ -360,8 +360,8 @@ updateTangentHandles(next) {
         let radA = this.radius;
         let radB = next.radius;
 
-        let A = this.getControlPoint().clone();
-        let B = next.getControlPoint().clone();
+        let A = this.getControlPoint().tempClone();
+        let B = next.getControlPoint().tempClone();
         if(A.dist(B) == 0) { //to avoid issues with identical limitcone controlpoints
             B.add(this.pool.any_Vec3(Math.random(), Math.random(), Math.random()).mult(0.00001)).normalize();
         }
@@ -419,18 +419,18 @@ updateTangentHandles(next) {
         let intersectionRay = new Ray(intersection1, intersection2, this.pool);
         intersectionRay.elongate(99);
 
-        let sphereIntersect1 = new Vec3(0,0,0); //for result storage
-        let sphereIntersect2 = new Vec3(0,0,0); //for result storage
+        let sphereIntersect1 = this.pool.any_Vec3(0,0,0); //for result storage
+        let sphereIntersect2 = this.pool.any_Vec3(0,0,0); //for result storage
         
         let intersections = intersectionRay.intersectsSphere(1, sphereIntersect1, sphereIntersect2);
 
-        this.tangentCircleCenterNext1 = sphereIntersect1.clone();
-        this.tangentCircleCenterNext2 = sphereIntersect2.clone();
+        this.tangentCircleCenterNext1.set(sphereIntersect1);//.clone();
+        this.tangentCircleCenterNext2.set(sphereIntersect2);//.clone();
         this.setTangentCircleRadiusNext(tRadius);
 
         if (intersections < 2) { //should only trigger when we only have one cone.
-            this.tangentCircleCenterNext1 = this.controlPoint.getOrthogonal().normalize();
-            this.tangentCircleCenterNext2 = this.controlPoint.getOrthogonal().normalize().mult(-1);
+            this.tangentCircleCenterNext1 = this.controlPoint.getOrthogonal_temp(this.tangentCircleCenterNext1).normalize();
+            this.tangentCircleCenterNext2 = this.controlPoint.getOrthogonal_temp(this.tangentCircleCenterNext2).normalize().mult(-1);
         }
     }
     

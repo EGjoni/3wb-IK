@@ -456,7 +456,7 @@ export class Rot {
         if (dot < ((2.0e-15 - 1.0) * normProduct)) {
             // special case u = -v: we select a PI angle rotation around
             // an arbitrary vector orthogonal to u
-            let w = u.getOrthogonal();
+            let w = u.getOrthogonal_temp(this.workingInput);
             this.w = 0.0;
             this.x = -w.x;
             this.y = -w.y;

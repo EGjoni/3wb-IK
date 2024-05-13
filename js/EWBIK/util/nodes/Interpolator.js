@@ -1,6 +1,6 @@
 import { Vec3, any_Vec3, any_Vec3fv} from "../vecs.js";
 import { Ray } from "../Ray.js";
-import { IKTransform } from "./IKTransform.js";
+import { IKTransform } from "./Transforms/IKTransform.js";
 import { IKNode } from "./IKNodes.js";
 import { ShadowNode } from "./ShadowNode.js";
 const THREE = await import("three");
