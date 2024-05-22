@@ -6,13 +6,16 @@
     <script> global = window;</script>
     <script type="importmap">
         {
-          "imports": {
-            "three": "./js/three/three.module.js",
-            "orbitControls": "./js/three/jsm/OrbitControls.js",
-            "transformControls": "./js/penziltransform.js",
-            "gltf" : "./js/three/jsm/GLTFLoader.js",
-            "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
-            "enviro" : "./js/environment.js"
+            "imports": {
+                "three": "./js/three/three.module.js",
+                "orbitControls": "./js/three/jsm/OrbitControls.js",
+                "transformControls": "./js/penziltransform.js",
+                "gltf" : "./js/three/jsm/GLTFLoader.js",
+                "vrm" : "./js/three/jsm/three-vrm.module.js",
+                "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
+                "enviro" : "./js/environment.js",
+                "uiElements" : "./js/UIelements.js",
+                "sceneStuff" : "./js/sceneStuff.js"
           }
         }
     </script>
@@ -21,27 +24,21 @@
 
 
 <body>
-    <script type="module" src="./js/UIelements.js"></script>
-    <script src="js/sceneStuff.js"></script>
+    
     <script type="module">
         import *  as THREE from "three";
-        import { LayeredRender } from "./js/LayeredRender.js"
-        import { TransformControls } from 'transformControls';
-        import { OrbitControls } from 'orbitControls';
+        import * as uielems from "uiElements";
+        import * as sceneStuff from "sceneStuff";
         import { GLTFLoader } from 'gltf';
+        import { VRMLoaderPlugin } from 'vrm';
         import { EWBIK } from "./js/EWBIK/EWBIK.js";
-        import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
-        import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
-        import { Rest, Kusudama, Twist } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
-        import { getMeshDescendants, initEnvironment, setShadowD } from "enviro";
+        import { IKSkelHelper } from "./js/EWBIK/helpers/IKSkelHelper.js"; 
+        import { getMeshDescendants, initEnvironment, addToEnvironment, setShadowD, setLuminosity} from "enviro";
+        import { initWolfGirl, initSneakPinPose, addElbowSuggestions} from "./js/toys/rigs/wolfgirl_vrm.js";
         import {initSpidey} from "./js/toys/rigs/spiderman.js";
-        //import { Rest } from "./js/EWBIK/betterbones/Constraints/Rest/Rest.js"
-        addDebugFuncs(THREE);
-        window.Rest = Rest;
+       
         window.OrbitControls = OrbitControls;
         window.TransformControls = TransformControls;
-        window.IKNode = IKNode;
-        window.TrackingNode = TrackingNode;
         window.IKPin = IKPin;
         window.autoSolve = true;
 
@@ -73,7 +70,7 @@
             //scene.add(ambientLight);
             window.addEventListener('resize', onWindowResize, false);
             interactionSolve = false;
-            initControls(THREE, renderer);
+            sceneStuff.initControls(renderer);
 
             let inst1 = await loadModel({ x: 0, y: 0, z: 0 }, 0, ikify);
             window.nek1 = inst1;
@@ -81,17 +78,38 @@
             armature.setDefaultIterations(15);
             armature.setDampening(0.35);
             armature.dirtyRate = true;
+
+            let helper = new IKSkelHelper(armature);
+            helper.pinVisibilityCondition = (forPin, forBone) => uielems.contextPinCondition(forPin, forBone);
+            helper.constraintVisibilityCondition = (forConstraint, forBone) => uielems.contextConstraintCondition(forConstraint, forBone); 
+            helper.updateCallback = sceneStuff.updateSceneStuff;
+            helper.init(1,2, -1, 4);
+            helper.updateCallback=sceneStuff.updateSceneStuff;
+            window.updateParseStream(null, 0);
+
             initEnvironment(scene, renderer, //scene,
                 [...getMeshDescendants(nek1.armatureObj3d.parent),
                 ...getMeshDescendants(nek1.rootBone)],
-                [0, 1]
+                [0, 1, 2]
             );
             setShadowD(5);
-            window.snapToFocus(armatures[0].c_head, 5);
+            sceneStuff.snapToFocus(armatures[0].c_head, 5);
+            armature.solve();
+            render();
+            helper.setDisplayLayers();
+        }
 
-            //instances = await Promise.all([inst1, inst2]);
-            //armature.solve();
-            //render();
+        async function loadModel(position, loadId, onloaded) {
+
+            let glb = await loader.loadAsync(
+                './gltftests/miles_morales.glb',
+                (xhr, otherParam) => { window.updateLoadStream(xhr, loadId) },
+                (error) => { window.notifyStreamError(error, loadId) }
+            );
+            let startAt = sceneStuff.findBone(glb.scene).parent;
+            scene.add(startAt);
+            window.updateParseStream("Scene instaniated...", loadId);
+            return ikify(startAt, loadId);
         }
 
         let lastIK = 0;
@@ -104,17 +122,11 @@
             armature.armatureNode.mimic();
 
             window.armatures.push(armature);
-            window.updateParseStream("Inferring Bone directions and appearance...", loadId);
-            initPrettyBones(armature);
-            window.updateParseStream("Addings constraints...", loadId);
+            window.updateParseStream("Adding constraints...", loadId);
             initSpidey(armature);
-            makePinsList(1, armature.armatureObj3d, armature, false, true);
             window.updateParseStream("UI stuff...", loadId);
-            updateGlobalBoneLists();
-            render();
-            initIK(armature);
-
-            window.updateParseStream(null, loadId);
+            
+           
             return armature;
         }
 
@@ -133,18 +145,7 @@
             }
         }
 
-        async function loadModel(position, loadId, onloaded) {
-
-            let glb = await loader.loadAsync(
-                './gltftests/miles_morales.glb',
-                (xhr, otherParam) => { window.updateLoadStream(xhr, loadId) },
-                (error) => { window.notifyStreamError(error, loadId) }
-            );
-            let startAt = findBone(glb.scene).parent;
-            scene.add(startAt);
-            window.updateParseStream("Scene instaniated...", loadId);
-            return ikify(startAt, loadId);
-        }
+       
 
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;

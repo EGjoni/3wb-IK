@@ -84,7 +84,7 @@ export class WorkingBone {
 
         if (this.forBone.getIKPin()?.isEnabled()) {
             this.ikPin = this.forBone.getIKPin();
-            if(this.forBone.getAffectoredOffset().trackedBy == null) {
+            if (this.forBone.getAffectoredOffset().trackedBy == null) {
                 this.forBone.getAffectoredOffset().trackedBy = new ShadowNode(this.forBone.getAffectoredOffset(), undefined, this.pool);
             }
             this.simTipAxes = this.forBone.getAffectoredOffset().trackedBy;
@@ -261,7 +261,7 @@ export class WorkingBone {
 
         const boneDamp = this.cosHalfDampen;
 
-        
+
         //the parent worldspace transform should already be updated at this point in the procedure so it should be safe to get its globalMBasis directly for a tiny perf boost
         //less safe however might be the fact that this is using rawLocalOfRotation, which doesn't normalize anything. 
         let localDesiredRotby = this.simLocalAxes.getParentAxes().globalMBasis.getRawLocalOfRotation(desiredRotation, this.chain.tempRot);
@@ -283,7 +283,7 @@ export class WorkingBone {
             //rotBy.clampToCosHalfAngle(boneDamp)
             //rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, localDesiredRotby, this._acceptableRotBy);
             this.currentHardPain = 0;
-            if (Math.abs(rotBy.applyConjugateToRot(localDesiredRotby, this._tempRot).w) > 1e-6) {
+            if (1 - Math.abs(rotBy.applyConjugateToRot(localDesiredRotby, this._tempRot).w) > 1e-6) {
                 this.currentHardPain = 1; //violating a hard constraint should be maximally painful.
             }
             this.simLocalAxes.rotateByLocal(rotBy);
@@ -346,7 +346,13 @@ export class WorkingBone {
         return this.totalDescendantPain;
     }
 
-    updatePain(iteration) {
+    /**
+     * updates the amount of pain the bone is currently in, and which way it would like to rotate to be in less pain
+     * @param {Number} iteration current iteration
+     * @param {Number} totalIterations total iterations intended by the solver
+     * @param {Number} completionT iteration / totalIterations  (this is to avoid recomputing each time)
+     */
+    updatePain(iteration, totalIterations, completionT) {
         this.currentSoftPain = 0;
         if (!this.hasLimitingConstraint) {
             this.currentHardPain = 0;
@@ -355,7 +361,11 @@ export class WorkingBone {
         if (this.springy && iteration >= this.kickInStep) {
             //this.currentPain = this.getOwnPain();
 
-            const res = this.constraint.getClampedPreferenceRotation(this.simLocalAxes, this.simBoneAxes, iteration - this.kickInStep, this);
+            const res = this.constraint.getClampedPreferenceRotation(
+                this.simLocalAxes, this.simBoneAxes, 
+                iteration - this.kickInStep,
+                this.kickInStep == 0 ? completionT : iteration / (totalIterations - this.kickInStep),
+                this);
             this.currentSoftPain = this.lastReturnfulResult?.preCallDiscomfort;
             this.currentSoftPain = isNaN(this.currentSoftPain) ? 0 : this.currentSoftPain;
             this.chain.previousDeviation = Infinity;
@@ -365,15 +375,16 @@ export class WorkingBone {
         this._lastPainUpdate = this._reachIterations;
     }
 
-    pullBackTowardAllowableRegion(iteration, callbacks) {
-        if (this.springy && iteration >= this.kickInStep) {
-            //this.constraint.markDirty();
-            //callbacks?.beforePullback(this.forBone.directRef, this.forBone.getFrameTransform(), this);
-            //const res = this.constraint.getClampedPreferenceRotation(this.simLocalAxes, this.simBoneAxes, iteration - this.kickInStep, this);
-            this.updatePain(iteration); //this function already calls getClampedPreferenceRotation
+    /**Pulls the bone back to where it would be less painful, keeping track of how much pain it was in before doing so
+     * @param {Number} iteration current iteration
+     * @param {Number} totalIterations total iterations intended by the solver
+     * @param {Number} completionT iteration / totalIterations  (this is to avoid recomputing each time)
+     */
+    pullBackTowardAllowableRegion(iteration, totalIterations, completionT, callbacks) {
+        if (this.springy && iteration >= this.kickInStep) {          
+            this.updatePain(iteration, totalIterations, completionT); //this function already calls getClampedPreferenceRotation
             this.simLocalAxes.rotateByLocal(this.lastReturnfulResult.clampedRotation);
-            this.constraint.markDirty(); //the constraint state isn't correct anymore because we just rotated.
-            //callbacks?.afterPullback(this.forBone.directRef, this.forBone.getFrameTransform(), this);
+            this.constraint.markDirty(); 
         }
     }
 

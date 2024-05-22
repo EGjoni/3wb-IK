@@ -350,12 +350,26 @@ export class ShadowSkeleton {
 
     updateBoneStates(onComplete, callbacks) {
         this.commonAncestor.quickMimic();
-        for (let i = 0; i < this.traversalArray.length; i++) {
-            const wb = this.traversalArray[i];
-            callbacks?.afterSolve(wb);
-            if(onComplete)
-                onComplete(wb);
+        if(onComplete != null) {
+            for (let i = 0; i < this.traversalArray.length; i++) {
+                onComplete(this.traversalArray[i]);
+            }
         }
+        if(callbacks != null) {
+            for (let i = 0; i < this.traversalArray.length; i++) {
+                callbacks.afterSolve(this.traversalArray[i]);
+            }
+        }
+        /**I'm just trying to squeeze out every last bit of performance I can, okay?
+         * I don't come into *your* codebase and get all judgy with you, do I?
+        */
+        if(callbacks != null && onComplete != null) {
+            for (let i = 0; i < this.traversalArray.length; i++) {
+                callbacks.afterSolve(this.traversalArray[i]);
+                onComplete(this.traversalArray[i]);
+            }
+        }
+        
     }
 
     buildArmaturSegmentHierarchy() {
@@ -415,6 +429,7 @@ export class ShadowSkeleton {
             this.traversalArray[j].updateCosDampening();
             this.traversalArray[j].updateReturnfullnessDamp(iterations);
         }
+        this.previousIterationRequest = iterations;
     }
 
 

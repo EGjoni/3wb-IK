@@ -7,25 +7,17 @@ import { Ray } from "../../../util/Ray.js";
 import { IKNode } from "../../../util/nodes/IKNodes.js";
 import { generateUUID } from "../../../util/uuid.js";
 import { Constraint, Limiting, LimitingReturnful } from "../Constraint.js";
-import { kusudamaFragShader, kusudamaVertShader } from "./shaders.js";
+import { kusudamaFragShader, kusudamaVertShader } from "../../../helpers/constraintHelpers/Kusudamas/shaders.js";
 import { LimitCone } from "./LimitCone.js";
 import { Saveable } from "../../../util/loader/saveable.js";
-import { LayerGroup } from "../Constraint.js";
 
 export class Kusudama extends Limiting {
 
     static TAU = Math.PI * 2;
     static PI = Math.PI;
-    static totalInstances = 0;
-    static vertShade = kusudamaVertShader;
-    static fragShade = kusudamaFragShader;
-    static baseShellColor = new THREE.Vector4(0.4, 0, 0.4, 1.0);
-    static violationColor = new THREE.Vector4(1, 0, 0, 1);
+    static totalInstances = 0;    
     coneSeq = [];
-    limitCones = [];
-    static desireGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
-    static desiredMat = new THREE.MeshBasicMaterial({color: new THREE.Color('blue')});
-    _visible = true;
+    limitCones = [];   
     
     static async fromJSON(json, loader, pool, scene) {
         let result = new Kusudama(undefined, json.ikd, pool);
@@ -52,7 +44,7 @@ export class Kusudama extends Limiting {
         return req;
     }
 
-    constructor(forBone = null, visibilityCondition = undefined, ikd = 'Kusudama-' + (Kusudama.totalInstances++), pool = globalVecPool) {
+    constructor(forBone = null, ikd = 'Kusudama-' + (Kusudama.totalInstances++), pool = globalVecPool) {
         let basis = new IKNode(undefined, undefined, undefined, pool)
         super(forBone, basis, ikd, pool);
         basis.forceOrthoNormality(true);
@@ -63,7 +55,6 @@ export class Kusudama extends Limiting {
         this.axiallyConstrained = false;
         this.strength = 1.0;
         this.flippedBounds = false;
-        this.setVisibilityCondition(visibilityCondition);
         if(!Saveable.loadMode) {
             /*if(this.forBone) {
                 let yHead = this.tempNode1.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation()).getLocalMBasis().getYHeading();
@@ -72,116 +63,27 @@ export class Kusudama extends Limiting {
             }*/
             this.initKusuNodes()
         }
-        this.layers = new LayerGroup(this, (val)=>this.layerSet(val), 
-            (val)=>this.layersEnable(val), (val)=>this.layersDisable(val));
     }
 
     initKusuNodes() {
         this.frameCanonical = this.basisAxes;
         this.boneCanonical = this.basisAxes.freeClone();
         this.boneCanonical.setParent(this.frameCanonical);
-        this.desiredTracer = new THREE.Mesh(Kusudama.desireGeo, Kusudama.desiredMat);
-        this.desiredTracer.visible = false;
+       
         
         this.__frame_calc_internal = new IKNode(undefined, undefined, undefined, this.pool);
         this.__frame_calc_internal.forceOrthoNormality(true);
         this.__bone_calc_internal = new IKNode(undefined, undefined, undefined, this.pool);
         this.__bone_calc_internal.forceOrthoNormality(true);
-        if (this.forBone?.height) {
-            this.boneCanonical.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
-            this.geometry = new THREE.SphereGeometry(this.forBone.height * .75, 32, 32);
-        } else {
-            this.geometry = new THREE.SphereGeometry(.75, 32, 32);
-        }
-
-        for (let i = 0; i < 120; i++) { this.coneSeq.push(new THREE.Vector4()); }
-
-        this.coneSeqMaterial = new THREE.ShaderMaterial({
-            vertexShader: Kusudama.vertShade,
-            fragmentShader: Kusudama.fragShade, // Your fragment shader code here
-            transparent: false,
-            blending: THREE.NormalBlending,
-            side: THREE.DoubleSide,
-            uniforms: {
-                shellColor: { value: Kusudama.baseShellColor },
-                vertLightDir: { value: new THREE.Vector3(0, 0, 1) },
-                coneSequence: { value: this.coneSeq },
-                coneCount: { value: 1 },
-                multiPass: { value: true },
-                frame: { value: 0 },
-                screensize: { value: new THREE.Vector2(1920, 1080) }
-            },
-        });
-        this.coneSeqMaterial.oldOnBFR = this.coneSeqMaterial.onBeforeRender;
-        this.coneSeqMaterial.onBeforeRender = function (renderer, scene, camera, geometry, mesh, ...others) {
-            this.uniforms.frame.value = renderer.info.render.frame;
-            this.uniforms.screensize.value.x = renderer.domElement.width;
-            this.uniforms.screensize.value.y = renderer.domElement.height;
-            if (this.oldOnBFR != null)
-                this.oldOnBFR(renderer, scene, camera, geometry, mesh, ...others);
-        }
-        this.shell = new THREE.Mesh(this.geometry, this.coneSeqMaterial);
-        this.shell._visible = this.shell.visible;
         this.__bone_calc_internal.setRelativeToParent(this.__frame_calc_internal);
-        let me = this;
-        Object.defineProperty(this.shell, 'visible', 
-        {
-            get() {return this._visible && me._visible && me._visibilityCondition(me, me.forBone)},
-            set(val) {this._visible = val}
-        });
+        this.boneCanonical.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
 
-        this.updateDisplay();
+        this.constraintUpdateNotification();
     }
 
-    get visible() {
-        return this._visibilityCondition(this, this.forBone) && this._visible;
-    }
-
-    set visible(val) {
-        this._visible = val; 
-        this.shell.visible = this._visible; 
-    }
-
-    updateDisplay() {
-        this.shell.quaternion.set(0, 0, 0, 1);
-        this.shell.position.set(this.forBone.position.x, this.forBone.position.y, this.forBone.position.z);
-        this.forBone.parent.add(this.shell);
-        this.shell.add(this.desiredTracer);
-        let i = 0;
-        for (let lc of this.limitCones) {
-            let cp = lc.controlPoint.normalize();
-            let tc1 = lc.tangentCircleCenterNext1.normalize();
-            let tc2 = lc.tangentCircleCenterNext2.normalize();
-            this.shell.material.uniforms.coneSequence.value[i].set(cp.x, cp.y, cp.z, lc.radius);
-            this.shell.material.uniforms.coneSequence.value[i + 1].set(tc1.x, tc1.y, tc1.z, lc.tangentCircleRadiusNext);
-            this.shell.material.uniforms.coneSequence.value[i + 2].set(tc2.x, tc2.y, tc2.z, lc.tangentCircleRadiusNext);
-            i += 3;
-        }
-        this.shell.material.uniforms.coneCount.value = this.limitCones.length;
-        this.updateViolationHint();
-    }
-
-    layerSet(val) {
-        this.shell.layers.set(val);
-    }
-
-    layersEnable(val) {
-        this.shell.layers.enable(val);
-    }
-
-    layersDisable(val) {
-        this.shell.layers.disable(val);
-    }
-
-    inBoundsDisplay = [1.0];
+   
     inBoundsConstrain = [1.0];
-    updateViolationHint() {
-        
-        if(this.getViolationStatus()) 
-            this.shell.material.uniforms.shellColor.value = Kusudama.violationColor;
-        else
-            this.shell.material.uniforms.shellColor.value = Kusudama.baseShellColor;
-    }
+    
 
     /**returns true if the bone is currently in violation of this constraint, false if otherwise */
     getViolationStatus() {
@@ -190,8 +92,8 @@ export class Kusudama extends Limiting {
         this.tempHeading.set(this.__bone_calc_internal.getGlobalMBasis().getYHeading());
         this.frameCanonical.setVecToLocalOf(this.tempHeading, this.tempHeading);
         if(this.limitCones.length ==0) return true;
-        let result = this.pointInLimits(this.tempHeading, this.inBoundsDisplay);
-        if (this.inBoundsDisplay[0] == -1 && result.sub(this.tempHeading).magSq() > 1e-12)
+        let result = this.pointInLimits(this.tempHeading, this.inBoundsConstrain);
+        if (this.inBoundsConstrain[0] == -1 && result.sub(this.tempHeading).magSq() > 1e-12)
             return true;
         else return false;
     }
@@ -277,9 +179,8 @@ export class Kusudama extends Limiting {
         const index = this.limitCones.indexOf(limitCone);
         if (index !== -1) {
             this.limitCones.splice(index, 1);
-            this.updateTangentRadii();
-            this.updateRotationalFreedom();
         }
+        this.constraintUpdateNotification();
     }
 
     addLimitConeAtIndex(index, coneDir,  coneRadius = null) {
@@ -316,7 +217,6 @@ export class Kusudama extends Limiting {
         } 
     }
 
-
     /**Automatically adds a cone between whatever cones the bone is currently closest to. If there are no cones, creates one */
     addConeHere() {
         //preinitialize the tempHeading; 
@@ -329,17 +229,13 @@ export class Kusudama extends Limiting {
         return this.addLimitConeAtIndex(prev+1, head);
     }
 
-    constraintUpdateNotification() {
-        this.updateTangentRadii();
-        this.updateRotationalFreedom();
-    }
 
     updateTangentRadii() {
         for (let i = 0; i < this.limitCones.length; i++) {
             let next = i < this.limitCones.length - 1 ? this.limitCones[i + 1] : null;
             this.limitCones[i].updateTangentHandles(next);
         }
-        this.updateDisplay();
+        this.constraintUpdateNotification();
     }
 
     /**
@@ -349,10 +245,11 @@ export class Kusudama extends Limiting {
      * @param {Rot} desiredRotation the local space rotation you are attempting to apply to currentState.
      * @param {Rot} storeIn an optional Rot object in which to store the result
      * @param {WorkingBone} calledBy a reference to the current solver's internal representation of the bone, in case you're maing a custom constraint that goes deep into the rabbit hole
-     * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring it to.
+     * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring it to. 
+     * If there is no violation, the instance of the desired rotation will be returned.
      */
     getAcceptableRotation(currentState, currentBoneOrientation, desiredRotation, storeIn, calledBy = null) {
-        let inBounds = [1.0];
+        
         let currentOrientation = currentState.localMBasis.rotation.applyAfter(currentBoneOrientation.localMBasis.rotation, this.tempOutRot);
         let desiredOrientation = desiredRotation.applyAfter(currentOrientation, this.tempRot2);
         this.tempVec1.setComponents(0, 1, 0);
@@ -360,15 +257,20 @@ export class Kusudama extends Limiting {
         this.tempVec2.setComponents(0, 1, 0);
         let desiredHeading = desiredOrientation.applyToVec(this.tempVec2, this.tempVec2);
         let frameLocalDesiredHeading = this.frameCanonical.setVecToLocalOf(desiredHeading, this.tempHeading);
-        let inLimits = this.pointInLimits(frameLocalDesiredHeading, inBounds);
+        let inLimits = this.pointInLimits(frameLocalDesiredHeading, this.inBoundsConstrain);
 
-        if (inBounds[0] == -1 && inLimits != null) {
+        if (this.inBoundsConstrain == -1 && inLimits != null) {
             let constrainedHeading = this.frameCanonical.getGlobalMBasis().setVecToGlobalOf(inLimits, this.tempVec3);
             let rectifiedRot = this.tempOutRot.setFromVecs(desiredHeading, constrainedHeading);
             rectifiedRot = rectifiedRot.applyAfter(desiredRotation, rectifiedRot);
+            if(storeIn !== undefined) storeIn.setFromRot(rectifiedRot);
             return rectifiedRot;
+        } else {
+            if(storeIn != null)
+                storeIn.setFromRot(desiredRotation);
+            return desiredRotation;
         }
-        return desiredRotation;
+        
     }
 
     setAxesToReturnfulled(toSet, currentOrientation, swingAxes, twistAxes, cosHalfReturnfullness, angleReturnfullness) {
@@ -427,33 +329,7 @@ export class Kusudama extends Limiting {
     }
 
 
-    /**quick and dirty way to easily regenerate this constraint without bothering with saving and loading parameters*/
-    printInitializationString(doPrint=true, parname) {
-        let tag = "";
-        for(let [t, b] of Object.entries(this.forBone.parentArmature.bonetags)) {
-            if(b == this.forBone) {
-                tag = t; break;
-            }
-        }
-        parname = parname == null ? `armature.bonetags["${tag}"]` : parname;
-        let ta = this.twistAxis;
-        let postPar = parname==null ? '' : `.forBone`;
-        let result = `new Kusudama(${parname}, ${this._visibilityCondition}, "${this.ikd}", armature.stablePool)` 
-        for(let i = 0;  i<this.limitCones.length; i++) {
-            let l = this.limitCones[i];
-            let cd = l.getControlPoint();
-            let cr = l.getRadius();
-            result += `
-            .addLimitConeAtIndex(${i}, armature.stablePool.any_Vec3(${cd.x}, ${cd.y}, ${cd.z}), ${cr})`; 
-            if(i<this.limitCones.length-1 || this.enabled == false)
-                result += `.parentKusudama`
-        }
-        if(!this.enabled) result+='.disable()';
-        result += ';\n';
-        if(doPrint) 
-            console.log(result);
-        else return result;
-    }
+    
 
     /**
      * 
@@ -510,41 +386,4 @@ export class Kusudama extends Limiting {
         return this.painfulness;
     }
 
-
-    /*optimizeTwistAxes() {
-        let directions = [];
-        if (this.getLimitCones().length === 1) {
-            directions.push(this.limitCones[0].getControlPoint().clone());
-        } else {
-            let thisC = this.getLimitCones()[0];
-            directions.push(thisC.getControlPoint().clone().mult(thisC.getRadius()));
-            for (let i = 0; i < this.getLimitCones().length - 1; i++) {
-                thisC = this.getLimitCones()[i];
-                let nextC = this.getLimitCones()[i + 1];
-                let thisCp = thisC.getControlPoint().clone();
-                let nextCp = nextC.getControlPoint().clone();
-                let thisToNext = Rot.fromVecs(thisCp, nextCp);
-                let halfThisToNext = Rot.fromAxisAngle(thisToNext.getAxis(), thisToNext.getAngle() / 2);
-
-                let halfAngle = halfThisToNext.applyToClone(thisCp);
-                halfAngle.normalize();
-                halfAngle.mult((thisC.getRadius() + nextC.getRadius()) / 2 + thisToNext.getAngle());
-                directions.push(halfAngle);
-                directions.add(nextCp.mult(nextC.getRadius()));
-            }
-        }
-
-        let newY = this.pool.any_Vec3();
-        directions.forEach(dv => {
-            newY.add(dv);
-        });
-        newY.normalize();
-
-        let newYRay = new Ray(this.pool.any_Vec3(0, 0, 0), newY);
-
-        let oldYtoNewY = Rot.fromVecs(this.swingOrientationAxes().yRay().heading(), this.swingOrientationAxes().getGlobalOf(newYRay).heading());
-        this.twistAxes.alignOrientationTo(this.swingOrientationAxes());
-        this.twistAxes.rotateByGlobal(oldYtoNewY);
-        this.updateTangentRadii();
-    }*/
 }

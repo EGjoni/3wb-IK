@@ -19,6 +19,7 @@ import { Constraint, ConstraintStack, Returnful, Rest, Twist, Kusudama } from ".
 import { IKNode } from "./EWBIK/util/nodes/IKNodes.js";
 import { Saveable, Loader } from "./EWBIK/util/loader/saveable.js";
 import { hemiLight } from "./environment.js";
+import { ShadowNode } from "./EWBIK/EWBIK.js";
 
 window.Vec3 = Vec3;
 window.Rot = Rot;
@@ -31,10 +32,13 @@ window.armatures = [];
 window.meshLayer = 0;
 window.boneLayer = 1;
 window.constraintLayer = 3;
-window.showBones = true;
+window.pinLayer = 3;
+window.showIKBones = true;
+window.showIrrelevantBones = true;
 window.showMesh = true;
 window.showConstraints = true;
-window.renderableLayers = [showMesh, showBones, showBones, showConstraints];
+window.showPins = true;
+window.renderableLayers = [showMesh, showIKBones, showIrrelevantBones, showConstraints, showPins];
 window.pin_transformActive = false;
 window.bone_transformActive = false;
 window.pin_transformDragging = false;
@@ -95,8 +99,9 @@ const defaultStack = `
 </div>
 `;
 
+
 window.render = function (incrFrame = false) {
-    if (incrFrame) window.frameCount++;
+    window.frameCount++;
     doSolve();
     if(window.renderableLayers[0]) {
         camera.layers.set(0);
@@ -119,6 +124,11 @@ window.render = function (incrFrame = false) {
         camera.layers.set(3);
         window.renderer.render(scene, camera);
     }
+    if(pinsVisible()) {
+        window.renderer.clearDepth();
+        camera.layers.set(4);
+        window.renderer.render(scene, camera);
+    }
     scene.background = currentBackground;
     scene.fog = currentFog;
     if(window.updateFogColors !== undefined) 
@@ -131,7 +141,7 @@ window.render = function (incrFrame = false) {
 
 
 
-window.makeUI = function () {
+window.makeUI = async function () {    
     let panelStyle = document.createElement('style');
     panelStyle.innerText = `
  body {
@@ -432,6 +442,8 @@ window.makeUI = function () {
         <label for="show-nonik-bones">Irrelevant bones</label>
         <input type="checkbox" id="show-constraints" name="show-constraints" checked>
         <label for="show-constraints">Constraints (on focused bone)</label>
+        <input type="checkbox" id="show-pins" name="show-pins" checked>
+        <label for="show-pins">Pins</label>
     </fieldset>
     <div> 
         <button id="save">Save Constraints</button>
@@ -497,6 +509,8 @@ window.makeUI = function () {
 
     htmlcontrols.id = 'control-panel';
     document.querySelector("body").appendChild(htmlcontrols);
+    window.hoverhints = document.createElement('div');
+    htmlcontrols.appendChild(window.hoverhints);
 
 
 
@@ -516,14 +530,14 @@ window.makeUI = function () {
 
     window.getdbgstring = function (wb) {
         let solveString = `
-PreSolve for ${wb.forBone.ikd}.\n
-%%%%%% Initial WB condition:                                            
-${wb.simLocalAxes.getLocalMBasis().toString()} 
-${wb.simLocalAxes.getGlobalMBasis().toString()}
+        PreSolve for ${wb.forBone.ikd}.\n
+        %%%%%% Initial WB condition:                                            
+        ${wb.simLocalAxes.getLocalMBasis().toString()} 
+        ${wb.simLocalAxes.getGlobalMBasis().toString()}
 
-######Initial Bone condition:
-${wb.forBone.toString()}
-`;
+        ######Initial Bone condition:
+        ${wb.forBone.toString()}
+        `;
         return solveString;
     }
 
@@ -751,11 +765,9 @@ ${wb.forBone.toString()}
             } else if (window.contextBone != null) {
                 newPin = new IKPin(window.contextBone);
                 newPin.forBone.parentArmature.regenerateShadowSkeleton(true);
-                makePinMeshHint(newPin, 1, window.contextBone.parentArmature.armatureObj3d, true);
+                forBone.parentArmature.helper?.refreshSubHelpers();
             }
-            makePinsList(1, window.contextBone.parentArmature.armatureObj3d, window.contextBone.parentArmature);
-            updateGlobalPinLists();
-            updateGlobalBoneLists();
+            updateSceneStuff();
             if (diddisable) {
                 select(window.contextPin.forBone);
             } else {
@@ -764,10 +776,12 @@ ${wb.forBone.toString()}
         } else if (window.contextPin != null) {
             window.contextPin.disable();
             contextPin.forBone.parentArmature.regenerateShadowSkeleton(true); //force regeneration so we can update the preview
-            makePinsList(1, window.contextBone.parentArmature.armatureObj3d, window.contextBone.parentArmature);
+            forBone.parentArmature.helper?.refreshSubHelpers();
+            /*makePinsList(1, window.contextBone.parentArmature.armatureObj3d, window.contextBone.parentArmature);
             //window.contextBone.parentArmature.generateBoneMeshes(0.1, true);
             updateGlobalPinLists();
-            updateGlobalBoneLists();
+            updateGlobalBoneLists();*/
+            updateSceneStuff();
             select(window.contextPin.forBone);
 
         }
@@ -927,6 +941,7 @@ ${wb.forBone.toString()}
             if (window.rendlrs != null)
                 window.rendlrs?.show(boneLayer+1);
         }
+        window.showIrrelevantBones = e.target.checked;
     });
 
     D.byid('show-ik-bones').addEventListener('change', function (e) {
@@ -952,6 +967,7 @@ ${wb.forBone.toString()}
             if (window.rendlrs != null)
                 window.rendlrs?.show(boneLayer);
         }
+        window.showIKBones = e.target.checked;
     });
 
     D.byid("show-constraints").addEventListener('change', function (e) { 
@@ -964,6 +980,20 @@ ${wb.forBone.toString()}
             if (window.rendlrs != null)
                 window.rendlrs?.show(constraintLayer);
         }
+        window.showConstraints = e.target.checked;
+    });
+
+    D.byid("show-pins").addEventListener('change', function (e) { 
+        if (e.target.checked == false) {
+            window.renderableLayers[pinLayer] = false;
+            if (window.rendlrs != null)
+                window.rendlrs?.hide(pinLayer);
+        } else {
+            window.renderableLayers[pinLayer] = true;
+            if (window.rendlrs != null)
+                window.rendlrs?.show(pinLayer);
+        }
+        window.showPins = e.target.checked;
     });
 
     window.emptyConstraintNode = D.byid("default-stack").qs('.constraint-stack');
@@ -1165,7 +1195,7 @@ ${wb.forBone.toString()}
             let dir=forKusudama.tempHeading.clone(); 
             lc.setControlPoint(dir); 
             forKusudama.updateTangentRadii();
-            forKusudama.updateDisplay();
+            forKusudama.constraintUpdateNotification();
             lcc.refresh();
         });
         coneBefore.addEventListener("click", (event) => {
@@ -1180,24 +1210,17 @@ ${wb.forBone.toString()}
         });
         lccx.addEventListener("input", (event) => {
             lc.setControlPoint((new Vec3(lccx.value, lccy.value, lccz.value)).normalize());
-            forKusudama.updateTangentRadii();
-            forKusudama.updateDisplay();
         });
         lccy.addEventListener("input", (event) => {
             lc.setControlPoint((new Vec3(lccx.value, lccy.value, lccz.value)).normalize());
-            forKusudama.updateTangentRadii();
-            forKusudama.updateDisplay();
         });
         lccz.addEventListener("input", (event) => {
             lc.setControlPoint((new Vec3(lccx.value, lccy.value, lccz.value)).normalize());
-            forKusudama.updateTangentRadii();
-            forKusudama.updateDisplay();
+            
         });
         lccr.addEventListener("input", (event) => {
             lc.setRadius(lccr.value);
             lccro.value = lccr.value;
-            forKusudama.updateTangentRadii();
-            forKusudama.updateDisplay();
         });
         lcc.refresh = () => {
             lccx.value = lc.getControlPoint().x;
@@ -1287,7 +1310,7 @@ ${wb.forBone.toString()}
         let enforce = result.qs(".enforce-immediately");
         enforce.addEventListener('click', () => {
             window.enforceConstraint(forTwist.forBone, forTwist);
-            forTwist.updateDisplay();
+            forTwist.helper?.updateDisplay();
         });
 
         let range = result.qs(".range-form");
@@ -1324,6 +1347,7 @@ ${wb.forBone.toString()}
     constraintStackControls.classList.add("constraint-stack");
     constraintStackControls.innerHTML = stackInnards;
     setDOMtoInternalState();
+    await window.updateInfoPanel();
 }
 
 function updateNormedPriorities(pinDom, forPin) {
@@ -1422,7 +1446,9 @@ window.updateInfoPanel = async function (item) {
     }
 
     const pinDom = D.byid("pin-options")
-    const pinToggle = pinDom.parentNode.qs("#pin-enabled")
+    window.pinToggle = pinDom.parentNode.qs("#pin-enabled");
+    window.constraintToggle =  D.byid("show-constraints");
+    window.allPinsToggle = D.byid("show-pins");
     const label = pinToggle.nextElementSibling;
     const labelSpan = pinToggle.nextElementSibling.querySelector('span');
     if (window.contextPin == null) {
@@ -1546,10 +1572,12 @@ window.setDOMtoInternalState = function () {
         D.byid('interaction-solve').checked = false;
         D.byid('no-solve').checked = true;
     }
-    
+    window.renderableLayers = [showMesh, showIKBones, showIrrelevantBones, showConstraints, showPins];
     D.byid('show-ik-bones').checked = window.renderableLayers[1];
     D.byid('show-nonik-bones').checked = window.renderableLayers[2];
     D.byid('show-constraints').checked = window.renderableLayers[3];
+    D.byid('show-pins').checked = window.renderableLayers[4];
+
     
     window.setInternalStatetoDOM();
 }
@@ -1570,9 +1598,9 @@ function determineConstraintName(corb, type) {
  */
 function initStack(corb) {
     let ident = determineConstraintName(corb, "ConstraintStack")
-    let newC = new ConstraintStack(corb, null, ident);
+    let newC = new ConstraintStack(corb, ident);
     let resultConst = getMakeConstraint_DOMElem(newC);
-    newC.layers.set(1);
+    newC.forBone.parentArmature?.helper?.refreshSubHelpers();
     return resultConst;
 }
 
@@ -1582,9 +1610,9 @@ function initStack(corb) {
  */
 function initTwist(corb) {
     let ident = determineConstraintName(corb, "Twist")
-    let newC = new Twist(corb, 0.1, contextBone, undefined, undefined, (cnstrt, bone) => bone == contextBone, ident);
+    let newC = new Twist(corb, 0.1, contextBone, undefined, undefined, ident);
     let resultConst = getMakeConstraint_DOMElem(newC);
-    newC.layers.set(1);
+    newC.forBone.parentArmature?.helper?.refreshSubHelpers();
     return resultConst;
 }
 
@@ -1594,9 +1622,9 @@ function initTwist(corb) {
  */
 function initKusudama(corb) {
     let ident = determineConstraintName(corb, "Kusudama")
-    let newC = new Kusudama(corb, (t, b) => b==contextBone, ident);
-    newC.layers.set(1);
+    let newC = new Kusudama(corb, ident);
     let resultConst = getMakeConstraint_DOMElem(newC);
+    newC.forBone.parentArmature?.helper?.refreshSubHelpers();
     return resultConst;
 }
 
@@ -1606,8 +1634,9 @@ function initKusudama(corb) {
  */
 function initRest(corb) {
     let ident = determineConstraintName(corb, "Rest")
-    let newC = new Rest(corb, null, ident);
+    let newC = new Rest(corb, ident);
     let resultConst = getMakeConstraint_DOMElem(newC);
+    newC.forBone.parentArmature?.helper?.refreshSubHelpers();
     return resultConst;
 }
 
@@ -1624,6 +1653,8 @@ constraintEffectPreviewer2.setParent(constraintEffectPreviewer1);
 window.FKConstrain = function (bone, cstr) {
     //window.enforceConstraint(bone, cstr);
 }
+
+
 
 window.enforceConstraint = function (bone, cstr) {
     if(cstr.isLimiting()) {    
@@ -1644,3 +1675,15 @@ window.enforceConstraint = function (bone, cstr) {
 }
 makeUI();
 document.getElementById(window.autoSolve ? 'auto-solve' : 'interaction-solve').checked = true;
+function pinsVisible(){return window.allPinsToggle.checked};
+function constraintsVisible(){return window.constraintToggle.checked};
+function contextConstraintCondition(forConstraint, forBone) {
+    return (forConstraint == window?.contextConstraint || forConstraint?.parentConstraint == window?.contextConstraint) && constraintsVisible();
+}
+function contextPinCondition (forPin, forBone) {return pinsVisible();}
+export {
+    pinsVisible,
+    constraintsVisible,
+    contextConstraintCondition,
+    contextPinCondition
+}

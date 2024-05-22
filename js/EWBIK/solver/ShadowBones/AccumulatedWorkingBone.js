@@ -189,6 +189,12 @@ export class AccumulatedWorkingBone extends WorkingBone{
         return this.totalDescendantPain;
     }
 
+     /**
+     * updates the amount of pain the bone is currently in, and which way it would like to rotate to be in less pain
+     * @param {Number} iteration current iteration
+     * @param {Number} totalIterations total iterations intended by the solver
+     * @param {Number} completionT iteration / totalIterations  (this is to avoid recomputing each time)
+     */
     updatePain(iteration) {
         this.currentSoftPain = 0;
         if(!this.hasLimitingConstraint) {
@@ -198,7 +204,11 @@ export class AccumulatedWorkingBone extends WorkingBone{
         if (this.springy && iteration >= this.kickInStep) {
             //this.currentPain = this.getOwnPain();
             
-            const res = this.constraint.getClampedPreferenceRotation(this.simLocalAxes, this.simBoneAxes, iteration - this.kickInStep, this);
+            const res = this.constraint.getClampedPreferenceRotation(
+                this.simLocalAxes, this.simBoneAxes, 
+                iteration - this.kickInStep,
+                this.kickInStep == 0 ? completionT : iteration / (totalIterations - this.kickInStep),
+                this);
             this.currentSoftPain = this.lastReturnfulResult?.preCallDiscomfort;
             this.currentSoftPain = isNaN(this.currentSoftPain) ? 0 : this.currentSoftPain;
             this.chain.previousDeviation = Infinity;

@@ -14,7 +14,8 @@
             "vrm" : "./js/three/jsm/three-vrm.module.js",
             "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
             "enviro" : "./js/environment.js",
-            "uielements" : "./js/UIelements.js"
+            "uiElements" : "./js/UIelements.js",
+            "sceneStuff" : "./js/sceneStuff.js"
           }
         }
     </script>
@@ -22,25 +23,19 @@
 </head>
 
 
-<body>
-    <!--<script type="module" src="./js/UIelements.js"></script>-->
-    <script src="js/sceneStuff.js"></script>
+<body>    
     <script type="module">
         import *  as THREE from "three";
-        import * as uiElems from "uielements";
-        import { LayeredRender } from "./js/LayeredRender.js"        
+        import * as uielems from "uiElements";
+        import * as sceneStuff from "sceneStuff";
+        import { LayeredRender } from "./js/LayeredRender.js";        
         import { GLTFLoader } from 'gltf';
         import { EWBIK } from "./js/EWBIK/EWBIK.js";
-        import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
+        import { IKSkelHelper } from "./js/EWBIK/helpers/IKSkelHelper.js";         
         import { initSpotMiniRig } from "./js/toys/rigs/spotMini.js";
         import { getMeshDescendants, initEnvironment, setShadowD } from "enviro";
-        //import { Rest } from "./js/EWBIK/betterbones/Constraints/Rest/Rest.js"
-        addDebugFuncs(THREE);        
-        window.autoSolve = false;
-        window.interactionSolve = false;
-        window.showBones = false;
+        
         window.pinsOnly = true;
-
         window.meshLayer = 0;
         window.boneLayer = 1;
 
@@ -51,111 +46,72 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         window.camera = camera;
         window.renderer = renderer;
-
-
-        window.cameraLight = new THREE.DirectionalLight(0xffffff, 1);        
-        
-
-        //let orbitControls, boneCtrls, pinOrientCtrls, pinTranslateCtrls;
-        var scene = null;
-
-        let selectedBone = null;
-        let rootBone = null;
-        let armature = null;
+        window.cameraLight = new THREE.DirectionalLight(0xffffff, 1);       
+        var scene = new THREE.Scene();
+        window.armature = null;
         window.frameCount = 0;
         window.instances = [];
 
         const loader = new GLTFLoader();
 
         async function init() {
-            scene = new THREE.Scene();
+            window.interactionSolve = false;
+            window.showIKBones = false;
+            window.showIrrelevantBones = false;
             scene.add(cameraLight);
             cameraLight.position.set(0, 0, 1);
             window.renderableLayers = [true, true, false, true];
-            //scene.add(hemisphereLight);
             window.scene = scene;
             document.body.appendChild(renderer.domElement);
-            //scene.add(ambientLight);
-            window.addEventListener('resize', onWindowResize, false);
-            await initControls(THREE, renderer);
 
-            let inst1 = await loadModel({ x: 0, y: 0, z: 0 }, 0, ikify);
-            window.nek1 = inst1;
+            await sceneStuff.initControls(renderer);
+            let inst1 = await loadModel({ x: 0, y: 0, z: 0 }, 0);
             armature = inst1;
             armature.setDefaultIterations(15);
             armature.setDampening(0.8);
+            window.updateParseStream("UI stuff...", 0);
+            
+
+            window.armatureHelper = new IKSkelHelper(armature);
+            armatureHelper.pinVisibilityCondition = (forPin, forBone) => uielems.contextPinCondition(forPin, forBone);
+            armatureHelper.constraintVisibilityCondition = (forConstraint, forBone) => uielems.contextConstraintCondition(forConstraint, forBone); 
+            armatureHelper.updateCallback = sceneStuff.updateSceneStuff;
+            armatureHelper.init(1,2, -1, 4);
+            
+            window.updateParseStream(null, 0);
+
             window.autoSolve = true;
             armature.dirtyRate = true;
             initEnvironment(scene, renderer, //scene,
-                [...getMeshDescendants(nek1.armatureObj3d.children[1]),
-                ...getMeshDescendants(nek1.rootBone)],
-                [0, 1]
+                [...sceneStuff.getMeshDescendants(armature.armatureObj3d.children[1]),
+                ...sceneStuff.getMeshDescendants(armature.rootBone)],
+                [0, 1, 2]
             );
 
-            window.snapToFocus(armature.bonetags["spot_body_02"], 3);
-            //instances = await Promise.all([inst1, inst2]);
-            //armature.solve();
-            //render();
+            sceneStuff.snapToFocus(armature.bonetags["spot_body_02"], 3);
+            sceneStuff.setOrbit(armature.bonetags["spot_body_02"]);
         }
 
         let lastIK = 0;
-        function ikify(inst, loadId) {
-            window.updateParseStream("Building IK Armature...", loadId);
-            let armature = new EWBIK(inst);
-            armature.armatureNode.forceOrthonormality = false;
-            window.armatures.push(armature);
 
-            window.updateParseStream("Inferring Bone directions and appearance...", loadId);
-            initPrettyBones(armature);
-            window.updateParseStream("Addings constraints...", loadId);
-            initBoneConstraints(armature);
-            makePinsList(1, armature.armatureObj3d, armature, false, true);
-            window.updateParseStream("UI stuff...", loadId);
-            updateGlobalBoneLists();
-            render();
-            initIK(armature);
-            window.updateParseStream(null, loadId);
-            armature.regenerateShadowSkeleton(true);
-            return armature;
-        }
-
-        function initBoneConstraints(armature) {
-            initSpotMiniRig(armature);
-
-            for (let b of armature.bones) {
-                if (b.parent instanceof THREE.Bone) {
-                    if (b.getConstraint() != null) {
-                        b.getConstraint().layers?.set(1);
-                        continue;
-                    }
-                }
-            }
-
-            armature.body = armature.bonetags["spot_body_02"];
-            armature.body.parent.position.z = armature.body.position.z - 0.01
-            armature.body.position.z = 0.01;
-            armature.body.parent.height = 0.01;
-            armature.makeBoneMesh(armature.body.parent, 0.1);
-        }
-
-        async function loadModel(position, loadId, onloaded) {
-
+        async function loadModel(position, loadId) {
+            window.updateLoadStream("Loading model...", loadId);
             let glb = await loader.loadAsync(
                 './gltftests/old_spot_mini_rigged.glb',
                 (xhr, otherParam) => { window.updateLoadStream(xhr, loadId) },
                 (error) => { window.notifyStreamError(error, loadId) }
             );
-            let startAt = findBone(glb.scene).parent;
-            scene.add(startAt);
-            window.updateParseStream("Scene instaniated...", loadId);
-            return ikify(startAt, loadId);
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            render();
+            let startAt = sceneStuff.findBone(glb.scene).parent;
+            scene.add(startAt);            
+            
+            window.updateParseStream("Building IK Armature...", loadId);
+            let armature = new EWBIK(startAt);
+            armature.armatureNode.forceOrthonormality = false;
+            window.armatures.push(armature);
+            window.updateParseStream("Addings constraints...", loadId);
+            initSpotMiniRig(armature);
+            
+            return armature;
         }
 
         async function animate() {
@@ -163,22 +119,6 @@
             cameraLight.position.copy(camera.position);
             render(true);
         }
-
-        /*window.render = function (incrFrame = false) {
-            if (incrFrame) frameCount++;
-            doSolve();
-
-            camera.layers.set(0);
-            window.renderer.render(scene, camera);
-            window.renderer.clearDepth();
-            const currentBackground = scene.background;
-            const currentFog = scene.fog;
-            scene.background = null;
-            scene.fog = null;
-            camera.layers.set(1);
-            window.renderer.render(scene, camera);
-        }*/
-
 
         init();
         animate();

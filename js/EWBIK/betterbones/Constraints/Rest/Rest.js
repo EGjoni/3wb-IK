@@ -16,7 +16,9 @@ import { Saveable } from '../../../util/loader/saveable.js';
 export class Rest extends Returnful {
     static totalInstances = 0;
     /**@type {Bone} */
-    painfulness = 0.5;
+    painfulness = 0.1;
+    stockholmRate = 0.4;
+
     
     getRequiredRefs() {
         let req = super.getRequiredRefs();
@@ -37,7 +39,7 @@ export class Rest extends Returnful {
      * 
      * Note that the solver needs to run at least 2 iterations per solve in order for this to accomplish anything. And the more iterations the merrier
      */
-    constructor(forBone, visibilityCondition = undefined, ikd='RestConstraint-'+(Rest.totalInstances++), pool) {
+    constructor(forBone, ikd='RestConstraint-'+(Rest.totalInstances++), pool) {
         super(forBone, undefined, ikd, pool);
         if(!Constraint.loadMode) {
             /**@type {IKNode}*/
@@ -74,7 +76,7 @@ export class Rest extends Returnful {
         let currRotFrame = currentState.getLocalMBasis().rotation;
         currRotFrame.getRotationTo(targframe, this.constraintResult.fullRotation);
 
-        this.constraintResult.fullRotation.shorten();      
+        this.constraintResult.fullRotation;//.shorten();      
         this.constraintResult.markSet(true);
         return this.constraintResult;
     }
@@ -105,6 +107,7 @@ export class Rest extends Returnful {
      }
 
      printInitializationString(doPrint=true, parname) {
+        if(this.autoGen) return '';
         let tag = "";
         for(let [t, b] of Object.entries(this.forBone.parentArmature.bonetags)) {
             if(b == this.forBone) {
@@ -114,14 +117,15 @@ export class Rest extends Returnful {
         parname = parname == null ? `armature.bonetags["${tag}"]` : parname;
         let postPar = parname==null ? '' : `.forBone`;
         let r = this.boneFrameRest.localMBasis.rotation.toArray();
-        let result = `new Rest(${parname}, undefined,
-                "${this.ikd}_on_bone_${tag}", armature.stablePool).setPainfulness(${this.getPainfulness()})
+        let result = `new Rest(${parname}, 
+                "Rest_${this.instanceNumber}_on_bone_${tag}", armature.stablePool).setPainfulness(${this.getPainfulness()})
                 .setStockholmRate(${this.getStockholmRate()})
-                .boneFrameRest.localMBasis.rotateTo(
+                .boneFrameRest.setLocalOrientationTo(
                     new Rot(${r[0]}, ${r[1]}, ${r[2]}, ${r[3]}))`;
         if(this.enabled == false) 
             result += '.disable()';
         result+=';\n';
+        if(this.forRest.autoGen) result = '';
         if(doPrint) 
             console.log(result);
         else return result;

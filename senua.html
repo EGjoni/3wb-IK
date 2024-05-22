@@ -13,7 +13,8 @@
             "gltf" : "./js/three/jsm/GLTFLoader.js",
             "vrm" : "./js/three/jsm/three-vrm.module.js",
             "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
-            "enviro" : "./js/environment.js"
+            "enviro" : "./js/environment.js",
+            "uiElements" : "./js/UIelements.js"
           }
         }
     </script>
@@ -26,12 +27,15 @@
     <script src="js/sceneStuff.js"></script>
     <script type="module">
         import *  as THREE from "three";
+        import * as uielems from "uiElements";
         import { LayeredRender } from "./js/LayeredRender.js"
         import { TransformControls } from 'transformControls';
         import { OrbitControls } from 'orbitControls';
         import { GLTFLoader } from 'gltf';
         import { EWBIK } from "./js/EWBIK/EWBIK.js";
-        import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
+        import { IKSkelHelper } from "./js/EWBIK/helpers/IKSkelHelper.js"; 
+        import { IKNode} from "./js/EWBIK/util/nodes/IKNodes.js";
+        import { ShadowNode} from "./js/EWBIK/util/nodes/ShadowNode.js";
         import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
         import { Rest, Kusudama, Twist } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
         import { getMeshDescendants, initEnvironment, setShadowD} from "enviro";
@@ -42,7 +46,6 @@
         window.OrbitControls = OrbitControls;
         window.TransformControls = TransformControls;
         window.IKNode = IKNode;
-        window.TrackingNode = TrackingNode;
         window.IKPin = IKPin;
         window.autoSolve = true;
         window.getMeshDescendants = getMeshDescendants; window.setShadowD = setShadowD;
@@ -50,16 +53,21 @@
         window.meshLayer = 0;
         window.boneLayer = 1;
 
-        let camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
-        camera.position.set(0.2053389274368656, 1.6540428596163805, 0.6341671957133861);
+        let camera = new THREE.PerspectiveCamera(10, window.innerWidth / window.innerHeight, 0.01, 1000);
+        camera.position.set(0.5907470452024858, 1.8701419070385126, 2.8771281921815253);
         window.renderer = new THREE.WebGLRenderer({ antialias: true });
+        window.scene =  new THREE.Scene();
         renderer.setClearColor(0x000000, 0);
         renderer.setSize(window.innerWidth, window.innerHeight);
         window.camera = camera;
         window.renderer = renderer;
+        window.camTracker = new THREE.Object3D();
+        window.scene.add(window.camTracker);
+        window.camNode = new ShadowNode(window.camTracker, 'camera tracker', window.globalVecPool);
+        window.camNode.forceOrthoNormality();
 
         let orbitControls, boneCtrls, pinOrientCtrls, pinTranslateCtrls;
-        var scene = null;
+        
 
         let selectedBone = null;
         let rootBone = null;
@@ -70,7 +78,6 @@
         const loader = new GLTFLoader();
 
         async function init() {
-            scene = new THREE.Scene();
             dirLight.position.z = 10;
             
             dirLight.intensity = 4;
@@ -84,11 +91,20 @@
             initControls(THREE, renderer);
 
             let inst1 = await loadModel({ x: 0, y: 0, z: 0 }, 0, ikify);
+            //inst1.generateBoneMeshes(0.05, true, 'cone', 0.2);
             window.nek1 = inst1;
             armature = inst1;
             armature.setDefaultIterations(15);
             armature.setDampening(0.08);
             armature.dirtyRate = true;
+            let helper = new IKSkelHelper(armature);
+            helper.pinVisibilityCondition = (forPin, forBone) => uielems.contextPinCondition(forPin, forBone);
+            helper.constraintVisibilityCondition = (forConstraint, forBone) => uielems.contextConstraintCondition(forConstraint, forBone); 
+            helper.boneGeoMode = 'cone';
+            window.armatureHelpers.push(helper);
+            helper.init(1,2, -1, 4);
+            updateSceneStuff();
+            render();
             initEnvironment(scene, renderer, //scene,
                 [...getMeshDescendants(nek1.armatureObj3d),
                 ...getMeshDescendants(nek1.rootBone)],
@@ -123,17 +139,18 @@
             //armature.generateBoneMeshes(0.05, false, 'cone');
             window.updateParseStream("Addings constraints...", loadId);
             //initSenua(armature);
-            makePinsList(1, armature.armatureObj3d, armature, true, true);
+            
             armature.l_pupil_pin.target_threejs.position.z = 0.2;
-            armature.l_pupil_pin.targetNode.mimic();
+            window.camTracker.add(armature.l_pupil_pin.target_threejs);
+            armature.l_pupil_pin.ensure();
+            
             armature.l_eyeball.getIKPin().target_threejs.position.set(0,0,0); 
             armature.l_eyeball.getIKPin().target_threejs.quaternion.set(0,0,0,1);
             armature.l_eyeball.getIKPin().targetNode.mimic();
-            window.updateParseStream("UI stuff...", loadId);
-            updateGlobalBoneLists();
-            render();
-            initIK(armature);
-
+            snapToFocus(armature.l_eyeball, 2);
+            window.manualOrbit = true;
+            setOrbit(armature.l_eyeball);
+            window.updateParseStream("UI stuff...", loadId);            
             window.updateParseStream(null, loadId);
             return armature;
         }
@@ -165,6 +182,9 @@
 
         async function animate() {
             requestAnimationFrame(animate);
+            window.camTracker.position.copy(window.camera.position);
+            window.camTracker.quaternion.copy(window.camera.quaternion);
+            window.camNode.mimic();
             render(true);
         }
 

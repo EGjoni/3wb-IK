@@ -219,11 +219,11 @@ export class Effector {
         
         const localizedTargOrig = targHeadingsArray[currIdx].set(targetOrigin).sub(boneOrigin);
         const localizedTipOrig = tipHeadingsArray[currIdx].set(tipOrigin).sub(boneOrigin);
-        outWeightArray[currIdx] = painWeighted;
+        outWeightArray[currIdx] = painWeighted * pin.positionPriority;
         writeCount++; currIdx++; nextIdx++;
         
         if(pin._swingMagnitude > 0) {
-            outWeightArray[currIdx] = outWeightArray[nextIdx] = painWeighted;
+            outWeightArray[currIdx] = outWeightArray[nextIdx] = painWeighted * pin.swingPriority;
             targetAxes.setVecToOrthonGlobalHeading(pin._scaled_swing_heading, targHeadingsArray[currIdx]).mult(distScaled); //.mult(outWeights[currIdx]).mult(scaleBy);
             targHeadingsArray[currIdx].multInto(-1, targHeadingsArray[nextIdx]).add(localizedTargOrig);
             targHeadingsArray[currIdx].add(localizedTargOrig);
@@ -235,7 +235,7 @@ export class Effector {
             writeCount+=2; currIdx += 2; nextIdx+=2
         }
         if (pin._twistMagnitude > 0) {
-            outWeightArray[currIdx] = outWeightArray[nextIdx] = painWeighted;
+            outWeightArray[currIdx] = outWeightArray[nextIdx] = painWeighted * pin.twistPriority;
             targetAxes.setVecToOrthonGlobalHeading(pin._scaled_twist_heading, targHeadingsArray[currIdx]).mult(distScaled); //.mult(outWeights[currIdx]).mult(scaleBy);
             targHeadingsArray[currIdx].multInto(-1, targHeadingsArray[nextIdx]).add(localizedTargOrig);
             targHeadingsArray[currIdx].add(localizedTargOrig);

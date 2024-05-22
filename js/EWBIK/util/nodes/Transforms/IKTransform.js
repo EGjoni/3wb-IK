@@ -550,11 +550,17 @@ export class IKTransform extends Saveable {
         return vec.set(this._zHeading);
     }    
 
-    setFromObj3d(object3d) {
+    setFromObj3d(object3d) {        
         if(this.forceOrthogonality || this.forceOrthonormality) {
             this.translate.readFromTHREE(object3d.position);
             this.scale.readFromTHREE(object3d.scale);
-            this.rotation.setComponents(object3d.quaternion.w, -object3d.quaternion.x, -object3d.quaternion.y, -object3d.quaternion.z);
+            if(isNaN(object3d.quaternion.w)) {
+                //TODO: avoid having this
+                console.warn("attempt to write NaN rotation ignored, replaced with identity");
+                this.rotation.toIdentity();
+            } else {
+                this.rotation.setComponents(object3d.quaternion.w, -object3d.quaternion.x, -object3d.quaternion.y, -object3d.quaternion.z);
+            }
             this._updateNorms();
         } else {
             object3d.updateMatrix();

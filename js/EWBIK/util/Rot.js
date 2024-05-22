@@ -553,16 +553,16 @@ export class Rot {
     clampToCosHalfAngle(cosHalfAngle) {
         
         this.shorten();
-        let prevCoeff = (1 - (this.q0 * this.q0));
-        if (cosHalfAngle <= this.q0 || prevCoeff == 0) {
+        let prevCoeff = (1 - (this.w * this.w));
+        if (cosHalfAngle <= this.w || prevCoeff == 0) {
             return this;
         }
         else {
             let compositeCoeff = Math.sqrt((1 - (cosHalfAngle * cosHalfAngle)) / prevCoeff)
-            this.q0 = cosHalfAngle;
-            this.q1 *= compositeCoeff;
-            this.q2 *= compositeCoeff;
-            this.q3 *= compositeCoeff;
+            this.w = cosHalfAngle;
+            this.x *= compositeCoeff;
+            this.y *= compositeCoeff;
+            this.z *= compositeCoeff;
         }
         return this;
     }
@@ -793,6 +793,14 @@ export class Rot {
         return into;
     }
 
+    toIdentity() {
+        this.w = 1;
+        this.x = 0; 
+        this.y = 0;
+        this.z = 0;
+        return this;
+    }
+
 
     get q0() {
         return this.w;
@@ -914,7 +922,7 @@ export class Rot {
         this.workingInput.setComponents(this.x, this.y, this.z);
         let d = this.workingInput.dot(axis);
         twistOut.setComponents(this.w, axis.x * d, axis.y * d, axis.z * d, true);
-        if (d < 0) twistOut.flip();
+        //if (d < 0) twistOut.flip();
 
         swingOut.setFromRot(twistOut);
         swingOut.conjugate();

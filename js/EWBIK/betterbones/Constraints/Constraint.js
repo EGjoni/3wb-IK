@@ -30,9 +30,10 @@ export class Constraint extends Saveable {
     tempRot1 = Rot.IDENTITY.clone();
     tempRot2 = Rot.IDENTITY.clone();
     enabled = true;
-    _visible = true;
+    cachedDecays = [];
     cachedLeeways = [];
     cachedGiveups = [];
+    constraintModListeners = [];
 
     /**@return {JSON} a json object by which this constraint may later be loaded*/
     toJSON() {
@@ -166,10 +167,13 @@ export class Constraint extends Saveable {
      * returns true if the cache needs updating, false otherwise. 
      * Cache is expectd to be updating by classes extending this one.*/
     setPerIterationLeewayCache(iterations) {
-        if(this.cachedLeeways[iterations] == null || this.cachedGiveups[iterations] == null) return true;
+        if(this.cachedLeeways[iterations] == null 
+        || this.cachedGiveups[iterations] == null
+        || this.cachedDecays[iterations] == null) return true;
         else {
             this.giveup = this.cachedGiveups[iterations];
             this.leewayCache = this.cachedLeeways[iterations];
+            this.decayCache = this.cachedDecays[iterations];
             return false;
         }
     }
@@ -181,9 +185,11 @@ export class Constraint extends Saveable {
         if(this.leewayCache == null) return; //indicates cache has already been invalidated
         this.giveup = null;
         this.leewayCache = null;
+        this.decayCache = null;
         for(let i = 0; i < this.cachedGiveups.length; i++) {
             this.cachedGiveups[i] = null;
             this.cachedLeeways[i] = null;
+            this.cachedDecays[i] = null;
         }
         this.lastCalled = 0;
     }
@@ -200,12 +206,15 @@ export class Constraint extends Saveable {
         this.lastCalled = 0;
         if(this.parentConstraint != null) {
             this.parentConstraint.remove(this);
+            this.parentConstraint = null;
         }
         else if(this.forBone != null) {
             this.invalidateCache();
             this.invalidatePain();
             this.forBone.constraint = null;
         }
+        this.forBone = null;
+        this.constraintUpdateNotification(this);
         this.lastCalled = 0;
     }
 
@@ -257,18 +266,6 @@ export class Constraint extends Saveable {
     clone(forBoneOrConstraint) {
         let result = new Constraint(forBoneOrConstraint, this.basisAxes, undefined, this.pool);
         return result;
-    }
-
-    _visibilityCondition(cnstrt, bone) {
-        return true;
-    }
-
-    get visible() {
-        return this._visibilityCondition(this, this.forBone) && this._visible;
-    }
-
-    set visible(val) {
-        this._visible = val;
     }
 
 
@@ -335,17 +332,40 @@ export class Constraint extends Saveable {
         this.constraintResult.__raw_preCallDiscomfort = null;
     }
 
-    setVisibilityCondition(condition) {
-        if(condition == null)
-            this._visibilityCondition = (cnstrt, forBone) =>  false;
-        else 
-            this._visibilityCondition = condition;
+
+    constraintUpdateNotification() {
+        for(let cl of this.constraintModListeners) {
+            cl(this);
+        }
+    }
+
+     /**
+     * register a listener to be notified whenever the parameters of this constraint are modified.
+     * 
+     * @param {Function} callback will be provided with a reference to this constraint as the only argument.
+     * @return {Constraint} this constraint for chaining.
+     **/
+     registerModListener(callback) {
+        if(this.constraintModListeners.indexOf(callback) == -1) {
+            this.constraintModListeners.push(callback);
+        }
+        return this;
+     }
+
+    /**
+     * removes the provided callback if it's registered with this constraint
+     * @param {Function} callback 
+     * @returns {Constraint} this constraint for chaining
+     */
+    removeModListener(callback) {
+        let cbidx = this.constraintModListeners.indexOf(callback);
+        if(cbidx > -1) {
+            this.constraintModListeners.splice(cbidx, 1);
+        }
         return this;
     }
+     
 
-    updateDisplay() {
-
-    }
     tempNode1 = null;
     tempNode2 = null; 
     
@@ -410,6 +430,7 @@ export class Returnful extends Constraint {
     */
     lastCalled = 0;
     leewayCache = [];
+    decayCache = [];
     baseRadians = 0.08;
     constructor(...params) {
         super(...params);
@@ -449,7 +470,7 @@ export class Returnful extends Constraint {
      * @param {Number} iteration the current iteration of this solver pass
     * @return {ConstraintResult} an object providing information about how much to rotate the object in which direction to make it maximally comfortable. How much to rotate to do so while obeying clamp rules. how much pain the joint was in prior to fixing, how much after the proposed fix, etc.
       */   
-     getClampedPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy) {
+     getClampedPreferenceRotation(currentState, currentBoneOrientation, iteration, completionRatio, calledBy) {
         if(!this.constraintResult.isSet()) {
             this.updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy)
         }
@@ -500,7 +521,7 @@ export class Returnful extends Constraint {
       * @return {Constraint} this instance for chaining
       */
      setPainfulness (val) {
-         this.painfulness = val;
+         this.painfulness = parseFloat(val);
          this.invalidatePain();
          this.invalidateCache();
          this.lastCalled = 0; 
@@ -565,15 +586,19 @@ export class Returnful extends Constraint {
         if(!super.setPerIterationLeewayCache(iterations)) return false;
         this.giveup = Math.ceil(iterations*this.stockholmRate);
         this.leewayCache = new Array(Math.ceil(this.giveup));
-        let max = this.preferenceLeeway;
+        this.decayCache = new Array(Math.ceil(this.giveup));
+        let maxAng = this.preferenceLeeway;
+        let maxRatio = maxAng/Math.TAU;
         let enpow = Math.pow(Math.E, -Math.E);
         let enpow_z = enpow *1.35; //hits 0 around 95% of the way in
         for(let i = 0; i<this.giveup; i++) {
             let ratio = (i/this.giveup);
             let t = (Math.pow(Math.E, ratio*-Math.E) - enpow_z) / (1-enpow_z);
-            let angle = max * t;
+            let angle = maxAng * t;
+            this.decayCache[i] = t*this.painfulness;
             this.leewayCache[i] = Math.cos(angle*0.5);
         }
+        this.cachedDecays[iterations] = this.decayCache;
         this.cachedLeeways[iterations] = this.leewayCache;
         this.cachedGiveups[iterations] = this.giveup;
         return true;
@@ -735,8 +760,6 @@ export class ConstraintStack extends LimitingReturnful {
         }
         if(!Saveable.loadMode)
             this.initNodes();
-        this.layers = new LayerGroup(this, (val)=>this.layerSet(val), 
-            (val)=>this.layersEnable(val), (val)=>this.layersDisable(val));
     }
 
     initNodes() {
@@ -748,7 +771,6 @@ export class ConstraintStack extends LimitingReturnful {
         this.lastLimitBoneOrientation = new IKNode(undefined, undefined, undefined, this.pool).forceOrthogonality(true);
         this.lastLimitBoneOrientation.setParent(this.lastLimitState); 
         this.lastLimitBoneOrientation.adoptLocalValuesFromObject3D(this.forBone?.getIKBoneOrientation());
-        if(this.parentConstraint != null) this.setVisibilityCondition(this.parentConstraint.visible);
     }
 
     add(...subconstraints) {
@@ -765,6 +787,7 @@ export class ConstraintStack extends LimitingReturnful {
     remove(...subconstraints) {
         for(let c of subconstraints) {
             this.allconstraints.delete(c);
+            c.remove();
         }
         this.allconstraints_array = [...this.allconstraints];
         this.updateLimitingSet();
@@ -846,12 +869,13 @@ export class ConstraintStack extends LimitingReturnful {
      */
     getTyped(classOrInstanceOrInstance) {
         let typeName = null;
-        if (c instanceof String) typeName = classOrInstanceOrInstance.toLowerCase();
+        let c = classOrInstanceOrInstance;
+        if (typeof c == 'string') typeName = c.toLowerCase();
         else if(c instanceof Object) typeName = c.constructor.name.toLowerCase();
         else if(c instanceof Function) typeName = c.name.toLowerCase();
         else throw new Error("This function only accepts class references, raw strings, or object instances");
         for(let a of this.allconstraints) {
-            if(a.toLowerCase() == typeName) return a;
+            if(a.constructor.name.toLowerCase() == typeName) return a;
         }
         return false;
     }
@@ -904,10 +928,10 @@ export class ConstraintStack extends LimitingReturnful {
         }
     }
 
-    updateDisplay() {
+    constraintUpdateNotification() {
         if(this.visible) {
             for(let c of this.allconstraints)
-                c.updateDisplay();
+                c.constraintUpdateNotification();
         }
     }
     
@@ -927,25 +951,7 @@ export class ConstraintStack extends LimitingReturnful {
         }
     }
 
-    _visible = true;
-    get visible() {
-        let parconstvis = this.parentConstraint == null ? true : this.parentConstraint.visible;
-        return this._visibilityCondition(this, this.forBone)
-        && this.forBone.parentArmature.visible 
-        && this.forBone.visible
-        && parconstvis;
-    }
-
-    set visible(val) {
-        this._visible = val; 
-        let c = null; 
-        for(let i = 0;  i<this.allconstraints_array.length; i++) {
-            c = this.allconstraints_array[i];
-            c.visible = false;
-            c.updateDisplay();
-        }
-    }
-
+   
     childDisabled() {
         this.updateLimitingSet(); 
         this.updateReturnfulledSet();
@@ -1017,24 +1023,8 @@ export class ConstraintStack extends LimitingReturnful {
             maxChildGiveup = Math.max(this.giveup, c.giveup);     
         }
         this.giveup = Math.min(this.giveup, maxChildGiveup);        
-        if(cacheDirty && maxChildGiveup > 0) {
-            this.leewayCache = new Array(Math.min(iterations, Math.ceil(this.giveup)));
-            let enpow = Math.pow(Math.E, -Math.E);
-            let enpow_z = enpow *1.35; //hits 0 around 95% of the way in
-            for(let i = 0;  i<this.returnfulled_array.length; i++) {
-                c = this.returnfulled_array[i];
-                if(c.isEnabled()) {
-                    for(let i = 0; i<this.leewayCache.length; i++) {
-                        let ratio = (i/this.giveup);
-                        let t = (Math.pow(Math.E, ratio*-Math.E) - enpow_z) / (1-enpow_z); //decay function that stops around 95%
-                        if(this.stockholmRate == null || this.stockholmRate == 1) t = 1;
-                        let angle = max * t;
-                        this.leewayCache[i] = Math.min(Math.cos(angle*0.5), c.leewayCache.length > i ? c.leewayCache[i] : 1);
-                    }
-                }
-            }
-            this.cachedLeeways[iterations] = this.leewayCache;
-            this.cachedGiveups[iterations] = this.giveup;
+        if(cacheDirty) {
+            super.setPerIterationLeewayCache(this.giveup);
             return true;
         } 
         return false;
@@ -1059,58 +1049,75 @@ export class ConstraintStack extends LimitingReturnful {
     }
 
     /**I need to rethink this function for consistency, as it currently mixes together the clamped and full rotation concepts by generating the constraintstacks full rotation as a function of its children's clamped rotations*/
-    updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy, cosHalfReturnfullness, angleReturnfullness) {
+    updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, completionRatio, calledBy) {
         this.constraintResult.reset(iteration);
         
         if(iteration >= this.giveup) {
             return this.constraintResult;
         }
         this.lastCalled = iteration;
-        let accumulatedRot = this.tempOutRot.setComponents(1,0,0,0);
 
         this.lastPrefState.localMBasis.approxAdoptValues(currentState.localMBasis);
         let c = null;
         for(let i = 0;  i<this.returnfulled_array.length; i++) {
             c = this.returnfulled_array[i];
-            if(c.lastCalled >= c.giveup) continue;            
-            c.updateFullPreferenceRotation(this.lastPrefState, currentBoneOrientation, iteration, calledBy, cosHalfReturnfullness, angleReturnfullness);
+            //if(c.lastCalled >= c.giveup) continue;            
+            c.updateFullPreferenceRotation(this.lastPrefState, currentBoneOrientation, iteration, completionRatio, calledBy);
         }
 
-        if(this.returnfulled_array.length > 1) {
-            let weightCount = 0;
+        //if(this.returnfulled_array.length > 1) {
+            let wsum = 0;
+            let accumulatedRot = this.tempOutRot.setComponents(0,0,0,0);
             for(let i = 0;  i<this.returnfulled_array.length; i++) {
                 c = this.returnfulled_array[i];
-                weightCount++;
-                if(iteration >= c.giveup) {
-                    accumulatedRot.w += 1; //equivalent to doing nothing
-                } else {
-                
-                    let constraintResult = c.getClampedPreferenceRotation(this.lastPrefState, currentBoneOrientation, iteration, calledBy);
+                if(iteration < c.giveup) {
+                    //let constraintResult = c.getClampedPreferenceRotation(this.lastPrefState, currentBoneOrientation, iteration, completionRatio, calledBy);
+                    /*let rotBy = constraintResult.clampedRotation;
+                    this.lastPrefState.rotateByLocal(rotBy);
+                    rotBy.applyAfter(accumulatedRot, accumulatedRot);*/
                     
-                    let rotBy = constraintResult.clampedRotation;
-                    /**this relies on nlerping the resulting clamped rotations, which isn't super precise for large rotations, but most clamped rotations aren't large, and it does at least approximate averaging*/
+                    //constraintResult._clampedRotation.setComponents(constraintResult.fullRotation);
+                    //constraintResult._clampedRotation.clampToCosHalfAngle(1-((1-c.leewayCache[iteration])*this.constraintResult.preCallDiscomfort)); 
+                    //the code below is attempting to approximate the lines above, but using the full rotations instead to allow for averaging
+                    let constraintResult = c.constraintResult;
+                    let relWeight = Math.min(1, Math.max(0, constraintResult.preCallDiscomfort * c.decayCache[iteration]));
+                    wsum += relWeight;
+                    let rotBy = constraintResult.fullRotation;
 
-                    /*let constraintResult = c.getWeightClampedPreferenceRotation(this.lastPrefState, currentBoneOrientation, iteration, 
-                                            c.constraintResult.preCallDiscomfort*discomfortNorm, calledBy);*/
+                    
                     //let rotBy = constraintResult.clampedRotation;
                     //this.lastPrefState.rotateByLocal(rotBy);
                     //rotBy.applyAfter(accumulatedRot, accumulatedRot);
-                    accumulatedRot.w += rotBy.w; accumulatedRot.x += rotBy.x; accumulatedRot.y += rotBy.y; accumulatedRot.z+= rotBy.z;
+                    accumulatedRot.w += rotBy.w*relWeight;
+                    accumulatedRot.x += rotBy.x*relWeight; 
+                    accumulatedRot.y += rotBy.y*relWeight; 
+                    accumulatedRot.z += rotBy.z*relWeight;
+                    
                 }
             }
-            accumulatedRot.w /= weightCount; accumulatedRot.x /= weightCount; accumulatedRot.y /= weightCount; accumulatedRot.z /= weightCount; 
-            accumulatedRot.normalize(); //averaging rotations by adding quaternions is actually kind of insane so let's normalize just in case.
-        } else if(this.returnfulled_array.length == 1) {            
+            let remainder = Math.ceil(wsum+.00001) - wsum;
+            accumulatedRot.w += remainder; //identity rotation for remainder 
+            wsum += remainder;
+            accumulatedRot.w /= wsum; accumulatedRot.x /= wsum; accumulatedRot.y /= wsum; accumulatedRot.z /= wsum; 
+            /*
+            *If all of the rotations we've summed up are already normalized, then dividing by wsum as above should already result
+            in a unit magnitude quaternion. However, averaging rotations by adding quaternions is actually kind of insane so let's normalize just in case.*/
+            accumulatedRot.normalize(); 
+            accumulatedRot.shorten();
+            this.constraintResult.fullRotation = accumulatedRot;//currentState.localMBasis.rotation.getRotationTo(this.lastPrefState.localMBasis.rotation);
+             
+       /* } else if(this.returnfulled_array.length == 1) {            
             c = this.returnfulled_array[0];
             if(iteration < c.giveup) {
-                let constraintResult = c.getClampedPreferenceRotation(this.lastPrefState, currentBoneOrientation, iteration, calledBy);
+                let constraintResult = c.getClampedPreferenceRotation(this.lastPrefState, currentBoneOrientation, iteration, completionRatio, calledBy);
                 let rotBy = constraintResult.clampedRotation;
                 this.lastPrefState.rotateByLocal(rotBy);
                 rotBy.applyAfter(accumulatedRot, accumulatedRot);
             }
-        }
+            this.constraintResult.fullRotation = accumulatedRot.shorten();
+        }*/
         
-        this.constraintResult.fullRotation = accumulatedRot.shorten();
+        
         this.constraintResult.markSet(true);        
         return this.constraintResult;
     }
@@ -1121,16 +1128,17 @@ export class ConstraintStack extends LimitingReturnful {
      * @param {IKNode} currentState the state the node is currently in. should be a sibling of @param previousState.
      * @param {IKNode} currentBoneOrientation the node corresponding to the physical bone orientation, should be a child of @param currentState.
      * @param {Number} iteration the current iteration of this solver pass
+     * @param {Number} completionRatio iterations/(total number of iterations intended)
     * @return {ConstraintResult} an object providing information about how much to rotate the object in which direction to make it maximally comfortable. How much to rotate to do so while obeying clamp rules. how much pain the joint was in prior to fixing, how much after the proposed fix, etc.
       */   
-    getClampedPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy) {
+    getClampedPreferenceRotation(currentState, currentBoneOrientation, iteration, completionRatio, calledBy) {
         if(!this.constraintResult.isSet()) {
-            this.updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, calledBy)
+            this.updateFullPreferenceRotation(currentState, currentBoneOrientation, iteration, completionRatio, calledBy)
         }
         this.constraintResult.clampedRotation = this.constraintResult.fullRotation;
         /**
-         * unlike single constraints, constraintstacks are meant more of as a grouping mechanism and don't hace their own meaningful discomfort measure. However, we do want them to be recursively groupable, where some stacks have less influence than others, so we just scale everything by their painfulness (which is 1 by default)*/
-        this.constraintResult._clampedRotation.clampToCosHalfAngle(1-((1-this.leewayCache[iteration]) * this.painfulness));   
+         * unlike single constraints, constraintstacks are meant more of as a grouping mechanism and don't have their own meaningful discomfort measure. However, we do want them to be recursively groupable, where some stacks have less influence than others, so we just scale everything by their painfulness (which is 1 by default)*/
+        this.constraintResult._clampedRotation.clampToCosHalfAngle(this.leewayCache[iteration]);   
         
         return this.constraintResult;
     }
@@ -1304,23 +1312,5 @@ export class ConstraintResult {
         if(this.__raw_postCallDiscomfort == null) 
             this.__raw_postCallDiscomfort = this.forConstraint._computePast_Post_RawDiscomfortFor(this);
         return this.__raw_postCallDiscomfort;
-    }
-}
-
-
-export class LayerGroup {
-    constructor(forG, onSet, onEnable, onDisable) {
-        this.forG = forG;
-        this.set = onSet;
-        this.onEnable = onEnable;
-        this.onDisable = onDisable;
-    }
-
-    enable(val) {
-        this?.onEnable(val);
-    }
-
-    disable(val) {
-        this?.onDisable(val);
     }
 }

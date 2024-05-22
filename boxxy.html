@@ -134,7 +134,6 @@
             //snip the root bone (make it shorter).
             armature.c_hips.parent.position.y = armature.c_hips.position.y - 0.01;
             armature.c_hips.position.y = 0.01;
-            armature.makeBoneMesh(armature.c_hips.parent, armature.c_hips.parent.boneRadius);
             //initPrettyBones(armature);
             initHumanoidRestConstraints(armature);
             //makePinsList(1, armature.armatureObj3d, armature, false, false);

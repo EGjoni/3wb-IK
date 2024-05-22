@@ -8,16 +8,13 @@ import { generateUUID } from "../../../util/uuid.js";
 const { Constraint, LimitingReturnful} = await import( "../Constraint.js");
 import { Saveable } from '../../../util/loader/saveable.js';
 import { Vector3 } from '../../../../three/three.module.js';
-import { LayerGroup } from '../Constraint.js';
 
 
 export class Twist extends LimitingReturnful {
     static TAU = Math.PI * 2;
     static PI = Math.PI;
     static totalInstances = 0;
-    display = null// new TwistConstraintDisplay();
     zHint = null //line along the z-axis to visualize twist affordance;
-    displayGroup = new Group();
     swing = new Rot(1,0,0,0);
     twist = new Rot(1,0,0,0); 
     workingVec = new Vec3(0,0,0);
@@ -59,11 +56,10 @@ export class Twist extends LimitingReturnful {
      * @param {IKNode} referenceBasis the reference basis to check the bone against. This is expected to be defined in the space of the bone's parent. This constraint will operate such that the transform returned by bone.getIKBoneOrientation() aligns with this basis. (Remember that the IKBoneOrientation of any bone doesn't necessarily have to align with the bone transform, as it is defined in the space of the bone transform). If you do not provide this, the constraint will initialize with whatever the current orientation of the bone is. You can change it by calling either optimize() or setCurrentAsReference();
      * @param {Vec3|Vector3} twistAxis as an alternative to specifying the referenceBasis, you can specify a reference y-axis direction in oonjunction with a reference baseZ angle.
      * @param {Number} baseZ the base angle against which range/2 on either side defines an allowable twist region
-     * @param {function} visibilityCondition a callback function to determine whether to display this constraint. The callback will be provided with a reference to this constraint and its bone as arguments.
      * @param {*} ikd optional  unique string identifier
      * @param {*} pool 
      */
-    constructor(forBone, range=2*Math.PI-0.0001, referenceBasis = undefined, twistAxis = undefined, baseZ = undefined, visibilityCondition=undefined, ikd = 'Twist-'+(Twist.totalInstances++), pool=globalVecPool) {
+    constructor(forBone, range=2*Math.PI-0.0001, referenceBasis = undefined, twistAxis = undefined, baseZ = undefined, ikd = 'Twist-'+(Twist.totalInstances++), pool=globalVecPool) {
         let basis = referenceBasis;
         if(referenceBasis == null && !Constraint.loadMode) {
             pool = Constraint.findPool(forBone, pool);
@@ -76,31 +72,12 @@ export class Twist extends LimitingReturnful {
             this.forBone.springy = true;
         }
         
-        this.display = new TwistConstraintDisplay(range, 1, this);
-        this.setVisibilityCondition(visibilityCondition);
+        
         this.range = range; 
         this.coshalfhalfRange = Math.cos(0.25*range);
-        if(visibilityCondition != null)
-            this.display.setVisibilityCondition(visibilityCondition);
-
-        this.zhintgeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,1)]);
-        this.zhintmat_safe = new THREE.LineBasicMaterial({ color: new THREE.Color(0,0,1), linewidth: 3});
-        this.zhintmat_ouch = new THREE.LineBasicMaterial({ color: new THREE.Color(0.9,0,0.3), linewidth: 3});
-        this.zhint = new THREE.Line(this.zhintgeo, this.zhintmat_safe);
-        this.displayGroup.add(this.zhint);
-        this.layers = new LayerGroup(this, (val) => {
-            this.display.layers.set(val);
-            this.zhint.layers.set(val);
-        }, 
-        (val) => {
-            this.display.layers.enable(val);
-            this.zhint.layers.enable(val);
-        },
-        (val) => {
-            this.display.layers.disable(val);
-            this.zhint.layers.disable(val);
-        });      
         
+
+    
         if(!Constraint.loadMode) {
             this.initTwistNodes();
             if(referenceBasis == undefined && this.forBone != null) {
@@ -133,17 +110,6 @@ export class Twist extends LimitingReturnful {
         this.frameCanonical = this.basisAxes;
         this.boneCanonical = this.basisAxes.freeClone();
         this.boneCanonical.setParent(this.frameCanonical);
-        let me = this;
-        this.displayGroup._visible = true;
-        Object.defineProperty(this.displayGroup, 'visible', 
-        {
-            get() {return this._visible && me._visibilityCondition(me, me.forBone)},
-            set(val) {this._visible = val}
-        });
-
-        this.tempDrawRot1 = new Rot(1,0,0,0);
-        this.tempDrawRot2 = new Rot(1,0,0,0);
-
         this.setCurrentAsReference()
     }
 
@@ -199,12 +165,11 @@ export class Twist extends LimitingReturnful {
         this.__bone_calc_internal.setRelativeToParent(this.__frame_calc_internal);
         this.twistAxis.set(this.frameCanonical.localMBasis.getYHeading());
         this.__frame_calc_internal.localMBasis.rotation.getSwingTwist(this.pool.any_Vec3(0,1,0), this.swing, this.twist);
+        this.swing.shorten(); this.twist.shorten();
         this.baseZ = this.twist.getAngle();
         this.frameCanonical.markDirty();
         this.frameCanonical.updateGlobal();
-        this.frameCanonical.localMBasis.writeToTHREE(this.displayGroup);
-        this.display.updateGeo(this.range, this.forBone.height);
-        this.updateDisplay();
+        this.constraintUpdateNotification();
         return this;
     }
 
@@ -219,6 +184,7 @@ export class Twist extends LimitingReturnful {
         }*/
         this.baseZ = parseFloat(baseZ);
         this.frameCanonical.localMBasis.rotation.getSwingTwist(this.pool.any_Vec3(0,1,0), this.swing, this.twist);
+        this.swing.shorten(); this.twist.shorten();
         let newZRot = this.tempOutRot.setFromAxisAngle(this.pool.any_Vec3(0,1,0), this.baseZ);
         this.swing.applyAfter(newZRot, this.frameCanonical.localMBasis.rotation);
         this.frameCanonical.localMBasis.lazyRefresh();
@@ -226,9 +192,7 @@ export class Twist extends LimitingReturnful {
         this.frameCanonical.updateGlobal();
         this.__frame_internal.adoptLocalValuesFromIKNode(this.frameCanonical).markDirty();
         this.__frame_calc_internal.adoptLocalValuesFromIKNode(this.frameCanonical).markDirty();        
-        this.frameCanonical.getGlobalMBasis().writeToTHREE(this.displayGroup);
-               
-        this.updateDisplay();
+        this.constraintUpdateNotification();
         return this;
     }
 
@@ -251,9 +215,7 @@ export class Twist extends LimitingReturnful {
         if(ensureBaseZ) {
             this.setBaseZ(startZ, false);
         }
-        this.frameCanonical.updateGlobal();
-        this.frameCanonical.localMBasis.writeToTHREE(this.displayGroup);
-        this.display.updateGeo(this.range, this.forBone.height);
+        this.constraintUpdateNotification();
         return this;
     }
 
@@ -269,8 +231,9 @@ export class Twist extends LimitingReturnful {
         let ta = this.twistAxis;
         let result = `new Twist(${parname}, ${this.range}, undefined, 
                 armature.stablePool.any_Vec3(${ta.x}, ${ta.y}, ${ta.z}), 
-                ${this.baseZ}, ${this._visibilityCondition},
-                "${this.ikd}", armature.stablePool)`;
+                ${this.baseZ},
+                "${this.ikd}", 
+                armature.stablePool)`;
         if(this.enabled == false) 
             result += '.disable()';
         result+=';\n';
@@ -290,9 +253,8 @@ export class Twist extends LimitingReturnful {
     setRange(range) {
         this.range = range;
         this.coshalfhalfRange = Math.cos(0.25*range); // set to a fourth, because the range is defined as being on either side of the reference orientation.
-        this.frameCanonical.localMBasis.writeToTHREE(this.displayGroup);
-        this.display.updateGeo(this.range, this.forBone.height);
-        this.updateDisplay();
+        
+        this.constraintUpdateNotification();
         return this;
     }
 
@@ -301,21 +263,10 @@ export class Twist extends LimitingReturnful {
     }
 
     remove() {
-        this.displayGroup.remove();
-        this.zhint.remove();
-        this.zhintgeo.dispose();
         if(this.parentConstraint != null) 
             this.parentConstraint.remove(this);
         else if(this.forBone != null)
             this.forBone.constraint = null;
-    }
-
-    updateDisplay() {        
-        if(this.display.parent == null && this.forBone?.parent != null)
-            this.forBone.parent.add(this.displayGroup);
-        if(this.display.parent == null)
-            this.displayGroup.add(this.display);
-        this.updateZHint();
     }
 
     /**
@@ -342,7 +293,7 @@ export class Twist extends LimitingReturnful {
         this.frameCanonical.localMBasis.rotation.applyToVec(this.tempVec1, this.tempVec1);
         canonToDesired.getSwingTwist(this.tempVec1, this.swing, this.twist);
         this.twist.clampToCosHalfAngle(this.coshalfhalfRange);
-        let clampedDesireTarget = this.swing.applyAfter(this.twist, this.tempOutRot)
+        let clampedDesireTarget = this.swing.applyAfter(this.twist, this.tempOutRot);
         let frameToClampedTarget = clampedDesireTarget.applyAfter(this.frameCanonical.localMBasis.rotation, this.tempOutRot);
         let result = currentOrientation.getRotationTo(frameToClampedTarget, storeIn);
         return result;
@@ -376,123 +327,7 @@ export class Twist extends LimitingReturnful {
         return previousResult.raw_preCallDiscomfort - ((Math.acos(Math.abs(previousResult.clampedRotation.w))) * Constraint.HALF_PI_RECIP);
      }
 
-    
-    updateZHint() {
-        /**This zhint code is a literal implementation of what the class docstring explains, just to 
-         * 1. get the literal z-axis coordinates and
-         * 2. prove that it's true.
-         * 
-         * But the actual constraining algo is much more efficient and just amounts to a swing-twist decomposition.
-         */
-
-        //if(this.__bone_internal.parent != this.__frame_internal) {
-            //sheer paranoia
-            this.__bone_internal.emancipate();
-            this.__bone_internal.reset();
-            this.__bone_internal.localMBasis.lazyRefresh();
-            this.__frame_internal.emancipate();
-            this.__frame_internal.reset();
-            this.__frame_internal.localMBasis.lazyRefresh();
-            this.__frame_internal.markDirty()
-            this.__bone_internal.setRelativeToParent(this.__frame_internal);
-            this.__bone_internal.adoptLocalValuesFromObject3D(this.forBone.getIKBoneOrientation());
-        //}
-
-        this.__frame_internal.adoptLocalValuesFromObject3D(this.forBone);        
-
-        //now that we're sure the lineage is properly set up, let's destroy it entirely.
-        //set the internal bone relative to the canonical frame / basis axes in global space so we can y-axis align in local space
-        this.__bone_internal.setParent(this.frameCanonical);
-        let yAlignRot = this.tempDrawRot1.setFromVecs(this.__bone_internal.localMBasis.getYHeading(), this.pool.any_Vec3(0,1,0));
-        this.__bone_internal.rotateByLocal(yAlignRot);        
-        let newZ = this.__bone_internal.localMBasis.getZHeading();
-        newZ.normalize();
-        newZ.mult(this.display.displayRadius);
-        
-        //we're already in the same space the visualization is defined in, so we just draw the z-heading from here.
-        const positions = this.zhint.geometry.attributes.position;
-        positions.array[3] = newZ.x;
-        positions.array[4] = newZ.y;
-        positions.array[5] = newZ.z;
-        positions.needsUpdate = true;
-
-        if(this.__bone_internal.localMBasis.rotation.shorten().getAngle() > this.range/2) {
-            this.zhint.material = this.zhintmat_ouch;
-        } else {
-            this.zhint.material = this.zhintmat_safe;
-        }
-
-        //put everything back the way we found it.
-        this.__bone_internal.setRelativeToParent(this.__frame_internal);
-        this.__bone_internal.adoptLocalValuesFromIKNode(this.boneCanonical);
-        this.__frame_internal.adoptLocalValuesFromIKNode(this.frameCanonical);
-    }
-
-    /**a callback function to determine whether to display this constraint */
-    setVisibilityCondition(visibleCallback) {
-        if (visibleCallback ==null) 
-            this._visibilityCondition = (forConstraint, forBone) => false;
-        else { 
-            this._visibilityCondition = visibleCallback;
-        }
-        this.display.setVisibilityCondition(visibleCallback);
-        return this;
-    }
-    _visibilityCondition(forConstraint, forBone) {
-        return false;
-    }
-
-    set visible(val) {
-        this.displayGroup.visible = val; 
-    }
-    get visible() {
-        return this.displayGroup.visible;
-    }
 }
 
-class TwistConstraintDisplay extends THREE.Mesh {
-    forTwist = null;
-    mesh = null;
-    static material = new THREE.MeshBasicMaterial({ color: 0xaa9922, side: THREE.DoubleSide, transparent: true, opacity: 0.8});
-    constructor(range = Math.PI*2-0.0001, displayRadius = 1, forTwist = null) {
-        let geo = new THREE.CircleGeometry(displayRadius, 100, (Math.PI / 2) - (range/2), range);
-        super(geo, TwistConstraintDisplay.material);
-        this.displayRadius = displayRadius;
-        this.rotation.x = Math.PI/2;
-        this.forTwist = forTwist;
-    }
 
-    updateGeo(range = this?.forTwist?.range ?? null, radius = this.displayRadius) {        
-        if(range == null) 
-            throw new Error("needs a range");
-        this.displayRadius = radius;
-        this.geometry.dispose();
-        this.geometry = new THREE.CircleGeometry(radius, 100, (Math.PI / 2) - (range/2), range);
-        this.rotation.x = Math.PI/2;
-    }
-
-    /**a callback function to determine whether to display this constraint */
-    setVisibilityCondition(visibleCallback) {
-        if (visibleCallback ==null) 
-            this._visibilityCondition = (forConstraint, forBone) => false;
-        else { 
-            this._visibilityCondition = visibleCallback;
-        }
-    }
-    _visibilityCondition(forConstraint, forBone) {
-        return false;
-    }
-
-    set visible(val) {
-        this._visible = val; 
-    }
-    get visible() {
-        return this._visible && this._visibilityCondition(this.forTwist, this.forTwist.forBone);
-    }
-
-    dispose() {
-        this.geometry.dispose();
-        this.remove();
-    }
-}
 

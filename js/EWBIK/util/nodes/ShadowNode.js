@@ -197,7 +197,10 @@ export class ShadowNode extends IKNode{
             -this.localMBasis.rotation.z,
             this.localMBasis.rotation.w
         );
-        if(linear) {
+        this.toTrack.matrixWorldNeedsUpdate = true;
+        if(!this.toTrack.matrixAutoUpdate && !linear) {
+            this.toTrack.updateMatrix();
+        } else if(linear) {
             this.localMBasis.recompose();
             this.toTrack.matrix.copy(this.localMBasis.composedMatrix);
         }

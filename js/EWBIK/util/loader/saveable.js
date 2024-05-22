@@ -2,6 +2,7 @@ const { Object3D, Bone } = await import("three");
 
 export class Saveable {
     static loadingList = [];
+    autoGen = false;
     constructor(ikd, type, instanceNumber, pool=globalVecPool) {
         this.ikd = ikd;
         this.type = type;

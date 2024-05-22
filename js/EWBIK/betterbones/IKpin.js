@@ -30,10 +30,8 @@ export class IKPin extends Saveable {
     _swingHeading = new notVector3(0,1,0);
     _scaled_swing_heading = new Vec3(0,1,0);
 
-    posOnlyMesh = null;
-    orientTargMesh = null;
-    hintMesh = null;
     normed_weights = [0.5,.25,.5,.25];
+    pinModListeners = [];
     
     static XDir = 0b001;
     static YDir = 0b010;
@@ -124,19 +122,12 @@ export class IKPin extends Saveable {
                 this.targetNode = targetNode;
             }
             this.target_threejs = this.targetNode.toTrack;
-            if(this.target_threejs instanceof THREE.Mesh)
-                this.hintMesh = this.target_threejs;
-
             this.target_threejs.forPin = this;
         }
         this.targetNode.forceOrthoUniformity(true);
         this.targetNode.registerTrackChangeListener((node, oldtracked, newtracked)=>this.onTargetNodeTrackChange(node, oldtracked, newtracked));
         this.enabled = !disabled;
-        this.forBone.setIKPin(this);
-        if(this.forBone.height == 0) 
-            this.setPSTPriorities(1,0,0);
-        else 
-            this.setPSTPriorities(1, 1, 1);
+        this.forBone.setIKPin(this);       
         this.position = new notVector3(this.target_threejs.position.x, this.target_threejs.position.y, this.target_threejs.position.z);
         this.scale = new notVector3(this.target_threejs.scale.x, this.target_threejs.scale.y, this.target_threejs.scale.z);
         this.quaternion = this.target_threejs.quaternion;
@@ -155,6 +146,11 @@ export class IKPin extends Saveable {
             this._scaled_twist_heading.normalize().mult(this.twistPriority*this.forBone.height*0.5); //divide by 2 to account for the fact that the solver doubles these up
             this._twistMagnitude = this._scaled_twist_heading.mag(); //used to quickly determine if the solver should even bother
         });
+
+        if(this.forBone.height == 0) 
+            this.setPSTPriorities(1,0,0);
+        else 
+            this.setPSTPriorities(1, 1, 1);
 
         return new Proxy(this, {
             get: (target, prop, receiver) => {
@@ -181,6 +177,8 @@ export class IKPin extends Saveable {
                 return result;
             }
         });
+
+        
     }
 
     isEnabled() {
@@ -216,6 +214,38 @@ export class IKPin extends Saveable {
     disable() {
         this.enabled = false;
         this.forBone?.parentArmature?.regenerateShadowSkeleton();
+    }
+
+    /**
+     * register a listener to be notified whenever the parameters of this pin are modified.
+     * 
+     * @param {Function} callback will be provided with a reference to this pin as the only argument.
+     * @return {IKPin} this pin for chaining.
+     **/
+    registerModListener(callback) {
+        if(this.pinModListeners.indexOf(callback) == -1) {
+            this.pinModListeners.push(callback);
+        }
+        return this;
+     }
+
+    /**
+     * removes the provided callback if it's registered with this pin
+     * @param {Function} callback 
+     * @returns {IKPin} this pin for chaining
+     */
+    removeModListener(callback) {
+        let cbidx = this.pinModListeners.indexOf(callback);
+        if(cbidx > -1) {
+            this.pinModListeners.splice(cbidx, 1);
+        }
+        return this;
+    }
+
+    pinUpdateNotification() {
+        for(let p of this.pinModListeners) {
+            p(this);
+        }
     }
 
 
@@ -323,6 +353,7 @@ export class IKPin extends Saveable {
         this._swingPriority = swing;
         this._swingHeading.onChange(); //triggers the notification that multiplies by the priority and boneheight
         this._twistHeading.onChange();
+        this.pinUpdateNotification();
         this.forBone?.parentArmature?.updateShadowSkelRateInfo();
         return this;
     }
@@ -438,23 +469,6 @@ export class IKPin extends Saveable {
     }
 
 
-
-    /**changes the displayed hintmesh based on whether the target has an orientation */
-    updateHintMesh() {
-        if(this.hintMesh != null && this.posOnlyMesh != null && this.orientTargMesh != null) {
-            this.posOnlyMesh.forPin = this;
-            this.orientTargMesh.forPin = this;
-            this.hintMesh.visible = false;
-            this.posOnlyMesh.visible = false;
-            this.orientTargMesh.visible = false;
-            if(!this.hasOrientation()) {
-                this.hintMesh = this.posOnlyMesh;
-            } else {
-                this.hintMesh = this.orientTargMesh;
-            }
-            this.hintMesh.visible = true;
-        }
-    }
 
     /**
      * @returns {boolean} true if this ikpin has a non-zero translation component, false otherwise

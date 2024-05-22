@@ -14,7 +14,8 @@
             "vrm" : "./js/three/jsm/three-vrm.module.js",
             "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
             "enviro" : "./js/environment.js",
-            "uiElements" : "./js/UIelements.js"
+            "uiElements" : "./js/UIelements.js",
+            "sceneStuff" : "./js/sceneStuff.js"
           }
         }
     </script>
@@ -24,29 +25,20 @@
 
 <body>
     <!--<script type="module" src="./js/UIelements.js"></script>-->
-    <script src="js/sceneStuff.js"></script>
     <script type="module">
         import *  as THREE from "three";
-        const uielems = await import("./js/UIelements.js");
-        import { LayeredRender } from "./js/LayeredRender.js"
-        import { TransformControls } from 'transformControls';
-        import { OrbitControls } from 'orbitControls';
+        import * as uielems from "uiElements";
+        import * as sceneStuff from "sceneStuff";
         import { GLTFLoader } from 'gltf';
         import { VRMLoaderPlugin } from 'vrm';
         import { EWBIK } from "./js/EWBIK/EWBIK.js";
-        import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
-        import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
-        import { Rest, Twist, Kusudama } from "./js/EWBIK/betterbones/Constraints/ConstraintStack.js";
-        import { getMeshDescendants, initEnvironment, setShadowD, setLuminosity} from "enviro";
-        import {initWolfGirl, addElbowSuggestions} from "./js/toys/rigs/wolfgirl_vrm.js";
-        addDebugFuncs(THREE);
-        window.Rest = Rest;
-        window.OrbitControls = OrbitControls;
-        window.TransformControls = TransformControls;
-        window.IKNode = IKNode;
-        window.TrackingNode = TrackingNode;
-        window.IKPin = IKPin;
-        window.autoSolve = false;
+        import { IKSkelHelper } from "./js/EWBIK/helpers/IKSkelHelper.js"; 
+        import { getMeshDescendants, initEnvironment, addToEnvironment, setShadowD, setLuminosity} from "enviro";
+        import { initWolfGirl, initSneakPinPose, addElbowSuggestions} from "./js/toys/rigs/wolfgirl_vrm.js";
+       
+        window.autoSolve = true;
+        window.showIKBones = false;
+        window.showIrrelevantBones = false;
 
         window.meshLayer = 0;
         window.boneLayer = 1;
@@ -58,21 +50,6 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         window.camera = camera;
         window.renderer = renderer;
-        /*window.rendlrs = new LayeredRender(renderer, window.innerWidth, window.innerHeight, 
-            (renderer, target) => { //renders mesh stuff
-                camera.layers.set(meshLayer);
-                renderer.render(scene, camera);
-            },
-            (renderer, target) => { //renders bones
-                camera.layers.set(boneLayer);
-                renderer.render(scene, camera);
-            }
-        );*/
-
-        //const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.5);
-        //const ambientLight = new THREE.AmbientLight(0x404040);
-        //hemisphereLight.layers.enable(boneLayer);
-        //ambientLight.layers.enable(boneLayer);
 
         let orbitControls, boneCtrls, pinOrientCtrls, pinTranslateCtrls;
         var scene = null;
@@ -81,84 +58,53 @@
         let rootBone = null;
         let armature = null;
         window.frameCount = 0;
-        window.instances = [];
-        window.debugLog = []
-        window.log = function (elem, identifier = null) {
-            if (elem.clone !== null) {
-                let state = elem.clone();
-                state.__of = identifier;
-                debugLog.push(state);
-            } else {
-                debugLog.push(elem);
-            }
-        }
+        
 
         const loader = new GLTFLoader();
 
         async function init() {
             scene = new THREE.Scene();
-            //scene.add(hemisphereLight);
             window.scene = scene;
             document.body.appendChild(renderer.domElement);
-            //scene.add(ambientLight);
 
             loader.register((parser) => {
                 return new VRMLoaderPlugin(parser);
             });
-
-        
-            //autoSolve = false;
             window.interactionSolve = false;
-            initControls(THREE, renderer);
+            await sceneStuff.initControls(renderer);
 
-            let inst1 = await loadModel({ x: 0, y: 0, z: 0 }, 0, ikify);
+            let inst1 = await loadModel({ x: 0, y: 0, z: 0 }, 0);
+            
             window.nek1 = inst1;
             armature = inst1;
-            //let inst2 = await loadModel({x: 0.5, y:0, z:0}, 1, ikify);
-            //window.nek2= inst2
-
-
-
+            window.updateParseStream("UI stuff...", 0); 
+            let helper = new IKSkelHelper(armature);
+            helper.pinVisibilityCondition = (forPin, forBone) => uielems.contextPinCondition(forPin, forBone);
+            helper.constraintVisibilityCondition = (forConstraint, forBone) => uielems.contextConstraintCondition(forConstraint, forBone); 
+            helper.updateCallback = sceneStuff.updateSceneStuff;
+            helper.init(1,2, -1, 4);
+            helper.updateCallback=sceneStuff.updateSceneStuff;
+            
+            window.updateParseStream(null, 0);
             armature.dirtyRate = true;
-            initEnvironment(scene, renderer, //scene,
+            initEnvironment(scene, renderer);
+            addToEnvironment(
                 [...getMeshDescendants(nek1.armatureObj3d.children[1]),
                 ...getMeshDescendants(nek1.armatureObj3d.children[2])],
-                [0, 1]
+                [0, 1, 2]
             );
             
             setShadowD(1.5);
             setLuminosity(1.5);
-
-            //instances = await Promise.all([inst1, inst2]);
-            //armature.solve();
+            sceneStuff.snapToFocus(nek1.c_hips);
+            sceneStuff.setOrbit(nek1.c_hips);
             render();
         }
 
         let lastIK = 0;
-        function ikify(inst, loadId) {
-            window.updateParseStream("Building IK Armature...", loadId);
-            let armature = new EWBIK(inst.scene.children[0]);
-            armature.setDefaultIterations(15);
-            armature.setDampening(0.7);
-            armature.armatureNode.forceOrthonormality = false;
-            window.armatures.push(armature);
 
-            window.updateParseStream("Inferring Bone directions and appearance...", loadId);
-            initPrettyBones(armature);
-            window.updateParseStream("Addings constraints...", loadId);
-            initHumanoidRestConstraints(armature);
-            makePinsList(1, armature.armatureObj3d, armature, false, true);
-           
-            //makePinsList(1, armature.armatureObj3d, armature, false, true); //to handle the new pins we added, making meshes for them but not aligning them to the bone
-            window.updateParseStream("UI stuff...", loadId);
-            updateGlobalBoneLists();
-            initIK(armature);
-            window.updateParseStream(null, loadId);
-            return armature;
-        }
-
-        async function loadModel(position, loadId, onloaded) {
-
+        async function loadModel(position, loadId) {
+            window.updateLoadStream("Scene instaniated...", loadId);
             let vrm = await loader.loadAsync(
                 './vrmtests/testmodel.vrm',
                 (xhr, otherParam) => { window.updateLoadStream(xhr, loadId) },
@@ -167,34 +113,31 @@
             scene.add(vrm.scene);
             let rootBone1 = vrm.scene.children[0];
             rootBone1.position.set(position.x, position.y, position.z);
-            window.updateParseStream("Scene instaniated...", loadId);
-            return onloaded(vrm, loadId);
+            
+
+            window.updateParseStream("Building IK Armature...", loadId);
+            let armature = new EWBIK(vrm.scene.children[0]);
+            armature.setDefaultIterations(5);
+            armature.setDampening(1.6);
+            armature.armatureNode.forceOrthonormality = false;
+            window.armatures.push(armature);
+            window.updateParseStream("Addings constraints...", loadId);
+            initHumanoidRestConstraints(armature);
+
+            window.updateParseStream("Inferring Bone appearance...", loadId);
+             
+            return armature;
         }
 
 
         async function animate() {
-            window.frameCount++;
             requestAnimationFrame(animate);
-            doSolve();
             render();
         }
 
-        /*window.render = function () {
-            camera.layers.set(0);
-            window.renderer.render(scene, camera);
-            window.renderer.clearDepth();
-            const currentBackground = scene.background;
-            const currentFog = scene.fog;
-            scene.background = null;
-            scene.fog = null;
-            camera.layers.set(1);
-            window.renderer.render(scene, camera);
-            scene.background = currentBackground;
-            scene.fog = currentFog;
-        }*/
-
         function initHumanoidRestConstraints(armature) {
-            initWolfGirl(armature, true, false, true);
+            initWolfGirl(armature, true, true, true);
+            initSneakPinPose(armature);
             //addElbowSuggestions(armature);
         }
 

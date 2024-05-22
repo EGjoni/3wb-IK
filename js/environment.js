@@ -79,7 +79,7 @@ const skyMat = new THREE.ShaderMaterial( {
 const sky = new THREE.Mesh( skyGeo, skyMat );
 
 
-export function initEnvironment(scene, renderer, meshesList, layers) {
+export function initEnvironment(scene, renderer, meshesList=[], layers=[]) {
     renderer.autoClear = false;
     scene.background = new THREE.Color().setRGB( 1,1,1);
     let horizCol = new THREE.Color(hemiTopColor).lerp(groundColor, 0.5);
@@ -134,24 +134,27 @@ export function initEnvironment(scene, renderer, meshesList, layers) {
 
     shadAmbient.layers.set(0);
     dirLight.layers.set(0);
+
+    scene.add( sky );
+    setSkyCols(hemiTopColor, hemiBottomColor, 1, scene);   
     
+    addToEnvironment(meshesList, layers);
+   
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.VSMShadowMap
+}
+
+
+export function addToEnvironment(meshesList, layers) {
     for(let l in layers) {    
         bounce.layers.enable(l);    
         dirLight.layers.enable(l);
         //hemiLight.layers.enable(l);
     }
-
-    // SKYDOME
- 
-    setSkyCols(hemiTopColor, hemiBottomColor, 1, scene);
-    scene.add( sky );
-
     for(let mesh of meshesList) {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
     }
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.VSMShadowMap
 }
 
 

@@ -859,7 +859,7 @@ class TransformControlsGizmo extends Object3D {
         // Make unique material for each axis/color
 
         const matInvisible = gizmoMaterial.clone();
-        matInvisible.opacity = 0.15;
+        matInvisible.opacity = 0;
 
         const matHelper = gizmoLineMaterial.clone();
         matHelper.opacity = 1;
@@ -936,7 +936,7 @@ class TransformControlsGizmo extends Object3D {
         lineGeometry2.translate(0, 0.25, 0);
 
         function CircleGeometry(radius) {
-            const geometry = new TorusGeometry(0.5, 0.01, 5, 50, 3 * Math.PI / 4);//new RingGeometry(radius + 0.01 , radius -0.01, 24, 24, 0.2, Math.PI / 2);            
+            const geometry = new TorusGeometry(0.5, 0.01, 5, 50, 4 * Math.PI / 3);//new RingGeometry(radius + 0.01 , radius -0.01, 24, 24, 0.2, Math.PI / 2);            
             geometry.rotateY(-Math.PI / 2);
             geometry.rotateX(Math.PI / 2);
             //geometry.rotateY(Math.PI / 2);
@@ -959,19 +959,19 @@ class TransformControlsGizmo extends Object3D {
 
         const gizmoTranslate = {
             X: [
-                [new Mesh(arrowGeometry, matRed), [1, 0, 0], [0, 0, - Math.PI / 2]],
-                // [new Mesh(arrowGeometry, matRed), [- 0.5, 0, 0], [0, 0, Math.PI / 2]],
-                // [new Mesh(lineGeometry2, matRed), [0, 0, 0], [0, 0, - Math.PI / 2]]
+                //[new Mesh(arrowGeometry, matRed), [1, 0, 0], [0, 0, - Math.PI / 2]],
+                 [new Mesh(arrowGeometry, matRed), [0.5, 0, 0], [0, 0, -Math.PI / 2]],
+                 [new Mesh(lineGeometry2, matRed), [0, 0, 0], [0, 0, - Math.PI / 2]]
             ],
             Y: [
-                [new Mesh(arrowGeometry, matGreen), [0, 1, 0]],
-                // [new Mesh(arrowGeometry, matGreen), [0, - 0.5, 0], [Math.PI, 0, 0]],
-                // [new Mesh(lineGeometry2, matGreen)]
+                //[new Mesh(arrowGeometry, matGreen), [0, 1, 0]],
+                [new Mesh(arrowGeometry, matGreen), [0, 0.5, 0], [0, -Math.PI/2, 0]],
+                [new Mesh(lineGeometry2, matGreen)]
             ],
             Z: [
-                [new Mesh(arrowGeometry, matBlue), [0, 0, 1], [Math.PI / 2, 0, 0]],
-                // [new Mesh(arrowGeometry, matBlue), [0, 0, - 0.5], [- Math.PI / 2, 0, 0]],
-                // [new Mesh(lineGeometry2, matBlue), null, [Math.PI / 2, 0, 0]]
+                //[new Mesh(arrowGeometry, matBlue), [0, 0, 1], [Math.PI / 2, 0, 0]],
+                [new Mesh(arrowGeometry, matBlue), [0, 0, 0.5], [Math.PI / 2, 0, 0]],
+                [new Mesh(lineGeometry2, matBlue), null, [Math.PI / 2, 0, 0]]
             ],
             XYZ: [
                 [new Mesh(new OctahedronGeometry(0.1, 0), matWhiteTransparent.clone()), [0, 0, 0]]
@@ -1025,13 +1025,13 @@ class TransformControlsGizmo extends Object3D {
                 [new Line(TranslateHelperGeometry(), matHelper), null, null, null, 'helper']
             ],
             X: [
-                [new Line(lineGeometry, matHelper.clone()), [- 1e3, 0, 0], null, [1e6, 1, 1], 'helper']
+                //[new Line(lineGeometry, matHelper.clone()), [- 1e3, 0, 0], null, [1e6, 1, 1], 'helper']
             ],
             Y: [
-                [new Line(lineGeometry, matHelper.clone()), [0, - 1e3, 0], [0, 0, Math.PI / 2], [1e6, 1, 1], 'helper']
+                //[new Line(lineGeometry, matHelper.clone()), [0, - 1e3, 0], [0, 0, Math.PI / 2], [1e6, 1, 1], 'helper']
             ],
             Z: [
-                [new Line(lineGeometry, matHelper.clone()), [0, 0, - 1e3], [0, - Math.PI / 2, 0], [1e6, 1, 1], 'helper']
+               //[new Line(lineGeometry, matHelper.clone()), [0, 0, - 1e3], [0, - Math.PI / 2, 0], [1e6, 1, 1], 'helper']
             ]
         };
 
@@ -1054,7 +1054,7 @@ class TransformControlsGizmo extends Object3D {
         };
 
         const helperRotate = {
-            AXIS: [
+            AXIS: [                
                 [new Line(lineGeometry, matHelper.clone()), [- 1e3, 0, 0], null, [1e6, 1, 1], 'helper']
             ]
         };
@@ -1612,7 +1612,7 @@ class TransformControlsPlane extends Mesh {
 
         super(
             new PlaneGeometry(100000, 100000, 2, 2),
-            new MeshBasicMaterial({ visible: false, wireframe: true, side: DoubleSide, transparent: true, opacity: 0.1, toneMapped: false })
+            new MeshBasicMaterial({ visible: false, wireframe: false, side: DoubleSide, transparent: true, opacity: 0.2, toneMapped: false })
         );
 
         this.type = 'TransformControlsPlane';
