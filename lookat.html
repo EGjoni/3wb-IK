@@ -60,7 +60,7 @@
         window.boxMesh = new THREE.Mesh(boxGeo, itxmat);
         window.scoreHintGeo = new THREE.BoxGeometry(0.03, 0.03, 0.03);
         window.scoreHintMat = new THREE.MeshBasicMaterial({color: 0x00ff00});
-        window.scoreHintMesh = new THREE.Mesh(scoreHintGeo, scoreHintMat)
+        window.scoreHintMesh = new THREE.Mesh(scoreHintGeo, scoreHintMat);
         const sphereGeo = new THREE.SphereGeometry(0.7,9,9);
         window.itxBound = new THREE.Mesh(sphereGeo, itxmat);
         const mouseCaster = new THREE.Raycaster();
@@ -94,8 +94,8 @@
         window.prepounce_r_targ3js = new THREE.Object3D();
         scene.add(prepounce_l_targ3js);
         scene.add(prepounce_r_targ3js);
-        let prepounce_l_targ = new ShadowNode(prepounce_l_targ3js);
-        let prepounce_r_targ = new ShadowNode(prepounce_r_targ3js);
+        window.prepounce_l_targ = new ShadowNode(prepounce_l_targ3js);
+        window.prepounce_r_targ = new ShadowNode(prepounce_r_targ3js);
         
 
         window.lookat=true;
@@ -122,18 +122,12 @@
         window.leftGoal = new IKTransform();
         window.rightGoal = new IKTransform();
         rightGoal.rotation.setFromVecs(any_Vec3(0, 0,1).normalize(), any_Vec3(1, 0, 0).normalize());
-        //window.leftGoal = new IKTransform(any_Vec3(0,0,0), any_Vec3(0,-1,0).normalize(), any_Vec3(0,0,1), any_Vec3(1,0,0).normalize());
-        //window.rightGoal = new IKTransform(any_Vec3(0,0,0), any_Vec3(0.707,0.707,0).normalize(), any_Vec3(0,0,1), any_Vec3(.707,-0.707,0).normalize());
-
+       
         async function init() {
             //load up a skeleton
             window.armature = await loadModel(0, ikify);
             armature.regenerateShadowSkeleton(true);
             unShy = Date.now();
-            //initControls(THREE, renderer);
-            //give the camera something interesting to look at.
-            //armature.bonetags["J_Bip_C_Spine"].getWorldPosition(orbitControls.target);
-            //orbitControls.update();
             animate();
         }
 
@@ -143,18 +137,9 @@
             armature.setDefaultIterations(15);
             armature.setDampening(0.8);
             armature.armatureNode.forceOrthonormality = false;
-            //window.armatures.push(armature);
-
-            //window.updateParseStream("Inferring Bone directions and appearance...", loadId);
-            //initPrettyBones(armature);
-            //window.updateParseStream("Addings constraints...", loadId);
+            
             initWolfGirl(armature, useLimiting, useRest, false);
             addElbowSuggestions(armature);
-            //initWolfGirlShortcuts(armature);
-            //initWolfGirlConstraints(armature);
-            //makePinsList(1, armature.armatureObj3d, armature, true, true);
-            //window.updateParseStream("UI stuff...", loadId);
-            //updateGlobalBoneLists();
             initPose(armature);
             armature.regenerateShadowSkeleton(true);
             //window.updateParseStream(null, loadId);
@@ -165,19 +150,20 @@
         
 
         function initPose(armature) {
+            armature.hip_pin = new IKPin(armature.bonetags["J_Bip_C_Hips"]);
+            armature.hip_pin.setInfluenceOpacity(0);
+            armature.hip_pin.setPinWeight(0.4);
             armature.hip_pin.target_threejs.position.y -= .2;
             armature.hip_pin.setInfluenceOpacity(1-0.8);
             armature.hip_pin.setPinWeight(0.4);
             armature.l_hand_pin.setPinWeight(1);
             armature.l_hand_pin.setPSTPriorities(1, 0.1, 0.2);
-            armature.l_hand.setAffectoredOffset(any_Vec3(0, 0.5, 0));
             armature.l_hand_pin.target_threejs.add(l_hand_pin_ax);
             armature.l_hand_pin.forBone.add(l_hand_ax);
             axHelp.visible = true; axHelp2.visible = true; axHelp3.visible = true; axHelp4.visible = true;
             axHelp5.visible = true; axHelp6.visible = true;
 
             armature.r_hand_pin.setPinWeight(1);
-            armature.r_hand.setAffectoredOffset(any_Vec3(0, 0.5, 0));
             armature.r_hand_pin.target_threejs.add(r_hand_pin_ax);
             armature.r_hand_pin.forBone.add(r_hand_ax);
 
@@ -191,7 +177,7 @@
             //    J_Bip_L_Hand_pin.target_threejs.rotateZ(-1.5); 
             //}
             prepounce_l_targ.alignGlobalsTo(armature.l_hand_pin.targetNode.mimic().getGlobalMBasis()).project();
-            leftInterpolator = new Interpolator(armature.l_hand_pin.targetNode, window.__tempVecPool);
+            leftInterpolator = new Interpolator(armature.l_hand_pin.targetNode, armature.persistentPool);
 
             let J_Bip_R_Hand_pin = armature.r_hand_pin;
             J_Bip_R_Hand_pin.target_threejs.position.set(0.22725199632250082, 1.1271629356945718, -0.109638346652234);
@@ -202,7 +188,7 @@
             //}
 
             prepounce_r_targ.alignGlobalsTo(armature.r_hand_pin.targetNode.mimic().getGlobalMBasis()).project();
-            rightInterpolator = new Interpolator(armature.r_hand_pin.targetNode, window.__tempVecPool);
+            rightInterpolator = new Interpolator(armature.r_hand_pin.targetNode, armature.persistentPool);
 
             let J_Bip_C_Head_pin = armature.head_pin;
             J_Bip_C_Head_pin.target_threejs.position.set(-0.048201991083735636, 1.4857808131871846, 0.029283233212733198);
@@ -402,7 +388,7 @@
                             leftHandResting = true; 
                             leftHandReturning  = false;
                             isMidPounce_left = false;
-                            armature.l_hand_pin.setSwingPriority(0.5);
+                            armature.l_hand_pin.swingPriority = 0.5; 
                             unShy = Date.now();
                             shyMin = 1000;
                             leftScored = false;
@@ -422,7 +408,7 @@
                         isMidPounce_right = false;
                         rightHandReturning = false;
                         shyMin = 1000;
-                        armature.r_hand_pin.setSwingPriority(0.5);
+                        armature.r_hand_pin.swingPriority = 0.5;
                         unShy = Date.now();
                         rightScored = false;
                     });
@@ -457,8 +443,8 @@
             camera.layers.set(0);
             if(itx.length>0 && lookat) {
                 boxMesh.position.copy(itx[0].point);
-                //maybePounce();
-                //glare(armature, boxMesh.position, 0.2, downadjust/*, (leftHandResting && rightHandResting) || (isMidPounce_left || isMidPounce_right)*/);
+                maybePounce();
+                glare(armature, boxMesh.position, 0.2, downadjust/*, (leftHandResting && rightHandResting) || (isMidPounce_left || isMidPounce_right)*/);
             }            
             window.renderer.render(scene, camera);
             window.renderer.clearDepth();

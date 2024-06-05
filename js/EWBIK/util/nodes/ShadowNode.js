@@ -204,7 +204,13 @@ export class ShadowNode extends IKNode{
             this.localMBasis.recompose();
             this.toTrack.matrix.copy(this.localMBasis.composedMatrix);
         }
+        this.onProject();
         return this;
+    }
+
+
+    onProject() {
+        return; 
     }
     
     setParent(par, requestedBy = undefined) {

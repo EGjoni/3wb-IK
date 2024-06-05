@@ -9,7 +9,7 @@ export class KusudamaHelper extends ConstraintHelper {
 
     static vertShade = kusudamaVertShader;
     static fragShade = kusudamaFragShader;
-    static baseShellColor = new THREE.Vector4(0.4, 0, 0.4, 1.0);
+    static baseShellColor = new THREE.Vector4(0.4, 0, 0.4, 0.5);
     static violationColor = new THREE.Vector4(1, 0, 0, 1);
     static desireGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
     static desiredMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('blue') });
@@ -32,7 +32,9 @@ export class KusudamaHelper extends ConstraintHelper {
         this.coneSeqMaterial = new THREE.ShaderMaterial({
             vertexShader: KusudamaHelper.vertShade,
             fragmentShader: KusudamaHelper.fragShade, // Your fragment shader code here
-            transparent: false,
+            transparent: true,
+            alphaHash: true,
+            opacity: 0.5,
             blending: THREE.NormalBlending,
             side: THREE.DoubleSide,
             uniforms: {

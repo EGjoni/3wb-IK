@@ -150,6 +150,7 @@ export class IKSkelHelper {
                     b.bonegeo.material = b.bonegeo.ikBoneMat ?? this.ikBoneMat.clone();
                     b.bonegeo.layers.set(this.ikBoneLayer);
                 } else {
+                    b.bonegeo.ikBoneMat = null;
                     b.bonegeo.material = this.irrelevantBoneMat;
                     b.bonegeo.layers.set(this.irrelevantBoneLayer);
                     layerChosen = this.irrelevantBoneLayer;
@@ -362,6 +363,7 @@ export class IKSkelHelper {
         } else {
             bone.bonegeo.layers.set(this.irrelevantBoneLayer);
             bone.bonegeo.material = this.irrelevantBoneMat;
+            bone.bonegeo.ikBoneMat = null;
         }
         
         

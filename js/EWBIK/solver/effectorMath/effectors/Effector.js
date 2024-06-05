@@ -245,6 +245,7 @@ export class Effector {
             tipHeadingsArray[currIdx].add(localizedTipOrig);
 
             writeCount+=2; currIdx += 2; nextIdx+=2
+
         }
         return writeCount;
     }
@@ -279,7 +280,7 @@ export class Effector {
         
         targetOrigin.lerp(tipOrigin, 1-painWeighted);
         
-        let distScaled = doScale ? 1+boneOrigin.dist(targetOrigin) : 1; 
+        let distScaled = doScale ? 1+boneOrigin.dist(tipOrigin) : 1; 
         
         
         const localizedOrig = headingsArray[currIdx].set(targetOrigin).sub(boneOrigin);

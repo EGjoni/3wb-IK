@@ -14,7 +14,7 @@
                 "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js",
                 "vrm" : "./js/three/jsm/three-vrm.module.js",
                 "mesh-bvh" : "./js/toys/Boxxy/modules/three-mesh-bvh/index.module.js",
-                "enviro" : "./js/environment.js"
+                "sceneStuff" : "./js/sceneStuff.js"
               }
         }
     </script>
@@ -41,10 +41,10 @@
 </head>
 
 <body>
-    <!--<script type="module" src="./js/UIelements.js"></script>-->
-    <script src="js/sceneStuff.js"></script>
+    
     <script type="module">
         import * as THREE from 'three';
+        import * as sceneStuff from 'sceneStuff';
         import { OrbitControls } from "./js/three/jsm/OrbitControls.js";
         import { TransformControls } from 'transformControls';
         import { mergeGeometries } from "./js/three/utils/BufferGeometryUtils.js";
@@ -134,12 +134,7 @@
             //snip the root bone (make it shorter).
             armature.c_hips.parent.position.y = armature.c_hips.position.y - 0.01;
             armature.c_hips.position.y = 0.01;
-            //initPrettyBones(armature);
             initHumanoidRestConstraints(armature);
-            //makePinsList(1, armature.armatureObj3d, armature, false, false);
-            //updateGlobalBoneLists();
-            //initIK(armature);
-            //initPrettyBones(armature);
             armature.regenerateShadowSkeleton();
             return armature;
         }
@@ -304,8 +299,8 @@
             window.framecount++;
             if (window.dowalk) {
                 for (let i = 0; i < updateCount; i++) {
-                    boxxy.inferredUpdate(armature.c_hips.trackedBy.origin());
-                    //boxxy.controlledUpdate(forwardVec, leftVec, i == 0);
+                    //boxxy.inferredUpdate(armature.c_hips.trackedBy.origin());
+                    boxxy.controlledUpdate(forwardVec, leftVec, i == 0);
                     window.physicsUpdateCount++;
                 }
             }
@@ -326,14 +321,6 @@
             const currentFog = scene.fog;
 
             renderer.render(scene, camera);
-            /*renderer.clearDepth();
-            
-            scene.background = null;
-            scene.fog = null;
-            camera.layers.set(1);
-            renderer.render(scene, camera);
-            scene.background = currentBackground;
-            scene.fog = currentFog;*/
 
         }
 

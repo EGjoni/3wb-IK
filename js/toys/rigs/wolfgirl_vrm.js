@@ -471,7 +471,8 @@ export function initWolfGirlRestConstraints(armature, withRootRest) {
         let rest = null;
         if (b.parent instanceof THREE.Bone) {
             if (!(b?.getConstraint()?.getTyped('Rest'))) {
-                new Rest(b);
+                let r = new Rest(b);
+                r.setPainfulness(0.5).setStockholmRate(0.5);
             }
 
             /*if (b.name == "J_Bip_L_Shoulder" || b.name == "J_Bip_R_Shoulder") {
@@ -515,6 +516,8 @@ export function initWolfGirlRestConstraints(armature, withRootRest) {
 }
 
 export function initWolfGirlShortcuts(armature) {
+    armature.l_hand = armature.bonetags["J_Bip_L_Hand"];
+    armature.r_hand = armature.bonetags["J_Bip_R_Hand"];
     armature.l_arm_upp = armature.bonetags["J_Bip_L_UpperArm"];
     armature.r_arm_upp = armature.bonetags["J_Bip_R_UpperArm"];
     armature.l_arm_lower = armature.bonetags["J_Bip_L_LowerArm"];

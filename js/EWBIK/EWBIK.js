@@ -227,11 +227,12 @@ export class EWBIK extends Saveable {
         this.rootBone.getStiffness = function () {
             return 1.0;
         }
-        this.rootBone.setStiffness = function (val) {
+    this.rootBone.setStiffness = function (val) {
             this.stiffness = val;
             this.getStiffness = function () { return this.stiffness; }
             this.setStiffness = function (val) {
                 this.stiffness = val;
+                this.parentArmature.updateShadowSkelRateInfo();
                 return this;
             }
             return this;

@@ -200,6 +200,7 @@ export class Constraint extends Saveable {
             this._invalidateCache();
             this?.forBone?.parentArmature.updateShadowSkelRateInfo(); 
         }
+        return this;
     }
 
     remove() {
@@ -231,6 +232,7 @@ export class Constraint extends Saveable {
         this.forBone?.parentArmature.updateShadowSkelRateInfo();  
         this.lastCalled = 0;
         this.forBone?.parentArmature?.noOp(); //just to give anything watching the armature truer info if its trying to update the pain display
+        return this;
     }
 
     enable() {
@@ -243,6 +245,7 @@ export class Constraint extends Saveable {
         this.forBone?.parentArmature.updateShadowSkelRateInfo();
         this.lastCalled = 0; 
         this.forBone?.parentArmature?.noOp(); //just to give anything watching the armature truer info if its trying to update the pain display
+        return this;
     }
 
     disable() {
@@ -257,6 +260,7 @@ export class Constraint extends Saveable {
         this.forBone?.parentArmature.updateShadowSkelRateInfo();
         this.lastCalled = 0; 
         this.forBone?.parentArmature?.noOp(); //just to give anything watching the armature truer info if its trying to update the pain display
+        return this;
     }
 
     /**creates a copy of this constraint, specifying the given bone or contraint as the copy's parent
@@ -277,6 +281,7 @@ export class Constraint extends Saveable {
     /**invalidates the ConstraintResult object maintained by this constraint (and all such child constraints*/
     markDirty() {
         this.constraintResult.markSet(false);
+        return this;
     }
 
     /**

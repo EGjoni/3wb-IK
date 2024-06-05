@@ -20,6 +20,26 @@ export class EffectorGroup {
         }
     }
 
+    /**applies the input rotation to the provided array of headings up to the provided length. (used mostly for deviation calculation) */
+    applyRotToHeadings(rot, headingsArray, length) {
+        for(let i = 0; i<length; i++) {
+            let v = headingsArray[i];
+            rot.applyToVec(v, v); 
+        }
+    }
+
+    /**returns the average distance between the vector pairs in the two sets */
+    measureDeviation(tipHeadings, targetHeadings, length) {
+        let totalDist = 0;
+        for(let i=0; i<length; i++) {
+            let tip=tipHeadings[i];
+            let targ=targetHeadings[i];
+            totalDist += tip.distSq(targ);
+        }
+        let sqmean = totalDist/length; 
+        return sqmean;
+    }
+
     /**unregisters this group from any effectors */
     kill() {
         for (let e of this.effectors) {
@@ -41,6 +61,21 @@ export class EffectorGroup {
         }
         this.bonelist = [..._boneSet];
         this.boneSet = _boneSet;
+    }
+
+    /**
+     * @param {[Vec3]} targHeadingsArray an array of vectors into which the target headings will be stored
+     * @param {[Vec3]} tipHeadingsArray an array of vectors into which the tip headings will be stored
+     * @param {[Number]} outWeightArray an array of numbers into which the relative weights of each heading will be stored 
+     * @param {Number} descendantPainTotal the total discomfort of all pinned descendant bones the requesting bone is attempting to solve for. This is used to scale the weights of this pin such that if the total pain tracked by affected bones toward this pin is less than the total pain across all descendant pins, then this pin loses priority, because it has more opportunity to reach the target via more comfortable bones.
+     * @param {Number} totalTargetCount number of targets the bone is attempting to solve for. This is used as part of the pain weighting calculation
+     * @param {Number} boneIdx the index of the entry corresponding to the requesting bone in this pin's wboneList array. This is used to determine the total pain with respect only to the descendants of the given bone
+     * @param {WorkingBone} boneRef a reference to the WorkingBone being solved for
+     * @param {Boolean} doScale Whether or not to scale the headings as per the targetScales parameter. This is basically just to prevent an outsized effect when translation and distanceBased orientation are both enabled.
+     * @returns the number of entries that were written into, such that @param startIdx + returned value yields the next index it would be safe to write into
+     */
+    updateHeadings() {
+
     }
 
     /**

@@ -41,6 +41,7 @@ export class WorkingBone {
     _acceptableRotBy = new Rot(1, 0, 0, 0);
     _comfortableRotBy = new Rot(1, 0, 0, 0);
     _tempRot = new Rot(1, 0, 0, 0);
+    localDesiredRotby = new Rot(1,0,0,0);
 
     effectorList = [];
     _tempEffectorList = [];
@@ -236,13 +237,12 @@ export class WorkingBone {
 
 
     fastUpdateOptimalRotationToPinnedDescendants(translate, skipConstraints, currentIteration) {
-        if (currentIteration < this.kickInStep) return;
-
+        
         let length = this.updateHeadings(!translate);
         //this.updateTipHeadings(!translate);
 
         //this.maybeRecordHeadings(this.chain.targetHeadings, this.chain.tipHeadings, currentIteration, 0);
-        this.updateOptimalRotationToPinnedDescendants(translate, skipConstraints, length);
+        this.updateOptimalRotationToPinnedDescendants(translate, length);
         if (this.springy && !skipConstraints) {
             this.constraint?.markDirty();
         }
@@ -255,45 +255,106 @@ export class WorkingBone {
     }
 
     /**returns the rotation that was applied (in local space), but does indeed apply it*/
-    updateOptimalRotationToPinnedDescendants(translate, skipConstraints, length) {
+    updateOptimalRotationToPinnedDescendants(translate, length) {
         let desiredRotation = this.chain.qcpConverger.weightedSuperpose(this.chain.tipHeadings, this.chain.targetHeadings, this.chain.weightArray, length, translate);
         desiredRotation.shorten();
 
-        const boneDamp = this.cosHalfDampen;
-
-
-        //the parent worldspace transform should already be updated at this point in the procedure so it should be safe to get its globalMBasis directly for a tiny perf boost
-        //less safe however might be the fact that this is using rawLocalOfRotation, which doesn't normalize anything. 
-        let localDesiredRotby = this.simLocalAxes.getParentAxes().globalMBasis.getRawLocalOfRotation(desiredRotation, this.chain.tempRot);
-        //localDesiredRotby.clampToCosHalfAngle(boneDamp);
+        //the parent worldspace transform should already be updated at this point in the procedure so it should be fast to get globalMBasis
+        //a bit dangerous however might be the fact that this is using rawLocalOfRotation, which doesn't normalize anything. 
+        this.localDesiredRotby = this.simLocalAxes.getParentAxes().getGlobalMBasis().getRawLocalOfRotation(desiredRotation, this.localDesiredRotby);
+        //this.localDesiredRotby.clampToCosHalfAngle(this.cosHalfDampen);
         //let reglobalizedRot = desiredRotation;
+        
+        return this.localDesiredRotby;
+    }
+
+    /**
+     * 
+     * @param {boolean} translate whether or not translation must be applied to this bone
+     * @param {Number} weighDown number from 0-1 approximately indicating how much to interpolate between the new rotation and the identity rotation. This should be 1 (indicating no interpolation) when solving from tip to root.
+     * When solving from root to tip, this should be some function of (the depth of the current bone)*(1-(currentIteration/totalIterations))
+     */
+    hardConstrain(translate, weighDown=1, skipConstraints) {
+        
         if (skipConstraints || !this.hasLimitingConstraint) {
             if (translate) {
                 const translateBy = this.chain.qcpConverger.getTranslation();
                 this.simLocalAxes.translateByGlobal(translateBy);
             }
-            localDesiredRotby.clampToCosHalfAngle(boneDamp);
-            this.simLocalAxes.rotateByLocal(localDesiredRotby);
+            this.localDesiredRotby.clampToCosHalfAngle(this.cosHalfDampen);
+            this.simLocalAxes.rotateByLocal(this.localDesiredRotby);
         } else if (this.hasLimitingConstraint) {
-            let rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, localDesiredRotby, this._acceptableRotBy);
-            rotBy.clampToCosHalfAngle(boneDamp);
-            //rotBy.applyAfter(localDesiredRotby, localDesiredRotby);
-            //apply twice, once unclamped to find the best region to teleport to. Then clamp the rotation that teleports use there to
-            //merely move in that direction, then constrain that clamped direction to make sure we don't walk somewhere forbidden.
-            //rotBy.clampToCosHalfAngle(boneDamp)
-            //rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, localDesiredRotby, this._acceptableRotBy);
+            let startDeviation = this.effectorGroup.measureDeviation(this.chain.tipHeadings, this.chain.targetHeadings, this.effectorGroup.pairCount);
+            let rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, this.localDesiredRotby, this._tempRot);
+            rotBy.clampToCosHalfAngle(this.cosHalfDampen);
+            rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, rotBy, this._acceptableRotBy);
+            /*rotBy.w *= weighDown;
+            rotBy.x *= weighDown; 
+            rotBy.y *= weighDown;
+            rotBy.z *= weighDown;
+            rotBy.w += 1-weighDown;
+            rotBy.normalize();*/
+
             this.currentHardPain = 0;
-            if (1 - Math.abs(rotBy.applyConjugateToRot(localDesiredRotby, this._tempRot).w) > 1e-6) {
+            if (1 - Math.abs(rotBy.applyConjugateToRot(this.localDesiredRotby, this._tempRot).w) > 1e-6) {
                 this.currentHardPain = 1; //violating a hard constraint should be maximally painful.
             }
-            this.simLocalAxes.rotateByLocal(rotBy);
+            let reglobalizedRot = this.simLocalAxes.localMBasis.rotation.applyAfter(rotBy, this._tempRot);
+            this.simLocalAxes.parent.globalMBasis.rotation.applyAfter(reglobalizedRot, reglobalizedRot);
+            reglobalizedRot = this.simLocalAxes.globalMBasis.rotation.getRotationTo(reglobalizedRot, reglobalizedRot);
+            this.effectorGroup.applyRotToHeadings(reglobalizedRot, this.chain.tipHeadings, this.effectorGroup.pairCount);
+            let endDeviation = this.effectorGroup.measureDeviation(this.chain.tipHeadings, this.chain.targetHeadings, this.effectorGroup.pairCount);
+            if(endDeviation/startDeviation > 1.000001) {
+                console.log(`${this.forBone.name} failed by: ${endDeviation - startDeviation}`)
+            } else {
+                this.simLocalAxes.rotateByLocal(rotBy);
+            }
+            
         }
-        return localDesiredRotby;
+    }
+
+
+    stabilizedHardConstrain(translate, weighDown=1) {
+        
+        if (!this.hasLimitingConstraint) {
+            if (translate) {
+                const translateBy = this.chain.qcpConverger.getTranslation();
+                this.simLocalAxes.translateByGlobal(translateBy);
+            }
+            //this.localDesiredRotby.clampToCosHalfAngle(boneDamp);
+            this.simLocalAxes.rotateByLocal(this.localDesiredRotby);
+        } else if (this.hasLimitingConstraint) {
+            let startDeviation = this.effectorGroup.measureDeviation(this.chain.tipHeadings, this.chain.targetHeadings, this.effectorGroup.pairCount);
+            let rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, this.localDesiredRotby, this._acceptableRotBy);
+            /*rotBy.w *= weighDown;
+            rotBy.x *= weighDown; 
+            rotBy.y *= weighDown;
+            rotBy.z *= weighDown;
+            rotBy.w += 1-weighDown;
+            rotBy.normalize();*/
+
+            this.currentHardPain = 0;
+            if (1 - Math.abs(rotBy.applyConjugateToRot(this.localDesiredRotby, this._tempRot).w) > 1e-6) {
+                this.currentHardPain = 1; //violating a hard constraint should be maximally painful.
+            }
+            let reglobalizedRot = this.simLocalAxes.localMBasis.rotation.applyAfter(rotBy, this._tempRot);
+            this.simLocalAxes.parent.globalMBasis.rotation.applyAfter(reglobalizedRot, reglobalizedRot);
+            reglobalizedRot = this.simLocalAxes.globalMBasis.rotation.getRotationTo(reglobalizedRot, reglobalizedRot);
+            this.effectorGroup.applyRotToHeadings(reglobalizedRot, this.chain.tipHeadings, this.effectorGroup.pairCount);
+            let endDeviation = this.effectorGroup.measureDeviation(this.chain.tipHeadings, this.chain.targetHeadings, this.effectorGroup.pairCount);
+            if(startDeviation < endDeviation) {
+                console.log("bad time!")
+            } else {
+                this.simLocalAxes.rotateByLocal(rotBy);
+            }
+        }
     }
 
     updateHeadings(scale) {
         let writeIdx = 0;
         let descendantsPain = this.updateDescendantPain();
+        //number of bones to the very deepest effector for weight on reverse-solve mode
+        this.deepestLength = 0; 
         for (let i = 0; i < this.effectorList.length; i++) {
             //this.effectorList[i].optimStep_Start(this, this.effectorBoneIndex[i]);
             let writtenCount = this.effectorList[i].updateHeadings(
@@ -307,8 +368,10 @@ export class WorkingBone {
                 this,
                 scale
             )
+            this.deepestLength = Math.max(this.effectorBoneIndex[i], this.deepestLength);
             writeIdx += writtenCount;
         }
+        this.effectorGroup.pairCount = writeIdx;
         return writeIdx;
     }
 

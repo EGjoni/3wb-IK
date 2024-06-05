@@ -214,7 +214,6 @@ vec4 colorAllowed(in vec3 normalDir,  in int coneCount, in float boundaryWidth) 
 }
 
 void main() {
-
     vec3 normalDir = normalize(vertNormal); // the vertex normal in Model Space.
     float basedir =  dot(vertViewNormal, vec3(0,0,1));
     float lightScalar = ((basedir+0.75)*.5)+.5;//abs(basedir*.75)+.25;
@@ -224,7 +223,7 @@ void main() {
     if(colorAllowed.a == 0.0) {
         discard;
     } else {             
-        vec4 mixedCol = vec4(sc.rgb+colorAllowed.rgb, colorAllowed.a);   
+        vec4 mixedCol = vec4(sc.rgb+colorAllowed.rgb, 0.5);//colorAllowed.a*0.5);   
         gl_FragColor = sc;
     }    
     /*colorAllowed += shellColor*(colorAllowed + fwidth(colorAllowed)); 

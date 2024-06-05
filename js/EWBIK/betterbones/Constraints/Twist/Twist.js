@@ -296,6 +296,7 @@ export class Twist extends LimitingReturnful {
         let clampedDesireTarget = this.swing.applyAfter(this.twist, this.tempOutRot);
         let frameToClampedTarget = clampedDesireTarget.applyAfter(this.frameCanonical.localMBasis.rotation, this.tempOutRot);
         let result = currentOrientation.getRotationTo(frameToClampedTarget, storeIn);
+        let resultOrientation = result.applyAfter(currentOrientation);
         return result;
     }
 

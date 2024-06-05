@@ -5,6 +5,7 @@ import { Twist } from "./EWBIK/betterbones/Constraints/Twist/Twist.js";*/
 console.log("hmmm?");
 
 import *  as THREE from "three";
+import * as sceneStuff from "sceneStuff";
 import { IKPin } from "./EWBIK/betterbones/IKpin.js";
 import { CallbacksSequence } from "./EWBIK/CallbacksSequence.js"
 import { Bone, Vector3 } from "three";
@@ -626,7 +627,8 @@ window.makeUI = async function () {
     }
 
 
-    window.bonestepcallbacks = new CallbacksSequence(
+    window.bonestepcallbacks = null;
+    /*new CallbacksSequence(
         {
             beforeIteration: (wb) => {
                 //if (bone == window.contextBone) {
@@ -671,7 +673,7 @@ window.makeUI = async function () {
                 wb.rotDraw.makeVisible();// = true; 
                 //}
             }
-        });
+        });*/
 
     window.bonestepDebug = () => {
         interactionSolve = false;
@@ -765,23 +767,24 @@ window.makeUI = async function () {
             } else if (window.contextBone != null) {
                 newPin = new IKPin(window.contextBone);
                 newPin.forBone.parentArmature.regenerateShadowSkeleton(true);
-                forBone.parentArmature.helper?.refreshSubHelpers();
+                newPin.forBone.parentArmature.helper?.refreshSubHelpers();
             }
-            updateSceneStuff();
+            sceneStuff.updateSceneStuff();
             if (diddisable) {
                 select(window.contextPin.forBone);
             } else {
+                window.selectedPinIdx = window.pinsList.indexOf(newPin);
                 select(newPin);
             }
         } else if (window.contextPin != null) {
             window.contextPin.disable();
             contextPin.forBone.parentArmature.regenerateShadowSkeleton(true); //force regeneration so we can update the preview
-            forBone.parentArmature.helper?.refreshSubHelpers();
+            contextPin.forBone.parentArmature.helper?.refreshSubHelpers();
             /*makePinsList(1, window.contextBone.parentArmature.armatureObj3d, window.contextBone.parentArmature);
             //window.contextBone.parentArmature.generateBoneMeshes(0.1, true);
             updateGlobalPinLists();
             updateGlobalBoneLists();*/
-            updateSceneStuff();
+            sceneStuff.updateSceneStuff();
             select(window.contextPin.forBone);
 
         }
@@ -1054,7 +1057,7 @@ window.makeUI = async function () {
             }
             emptyConstraintNode.remove();
             let constController = getMakeConstraint_DOMElem(contextBone.getConstraint());
-            htmlcontrols.byid("default-stack").appendChild(constController);
+            D.byid("#default-stack").appendChild(constController);
             let subcst = null;
             if (val == "kusudama") subcst = initKusudama(window.contextBone);
             if (val == "twist") subcst = initTwist(window.contextBone);
@@ -1189,6 +1192,11 @@ window.makeUI = async function () {
         let coneBefore = lcc.qs(".add-cone-before");
         lc.domControls = lcc;
         let fromPose = lcc.qs('.readDir');
+        let lccdel = lcc.qs(".remove-constraint");
+        lccdel.addEventListener('click', (event) => {
+            forKusudama.removeLimitCone(lc);
+            lcc.remove();
+        });
         fromPose.addEventListener('click', (event) => {
             //hack
             forKusudama.getViolationStatus()

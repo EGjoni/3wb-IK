@@ -922,8 +922,7 @@ export class Rot {
         this.workingInput.setComponents(this.x, this.y, this.z);
         let d = this.workingInput.dot(axis);
         twistOut.setComponents(this.w, axis.x * d, axis.y * d, axis.z * d, true);
-        //if (d < 0) twistOut.flip();
-
+        if (d < 0) twistOut.flip();
         swingOut.setFromRot(twistOut);
         swingOut.conjugate();
         swingOut = Rot.multiply(swingOut, this, swingOut);

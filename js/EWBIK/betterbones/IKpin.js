@@ -5,7 +5,7 @@ const THREE = await import('three');
 import { Object3D } from "three";
 import { Saveable } from "../util/loader/saveable.js";
 import { ShadowNode } from "../util/nodes/ShadowNode.js";
-import { NoPool } from "../util/vecs.js";
+import { NoPool, Vec3 } from "../util/vecs.js";
 import { notVector3 } from "../util/notVecs.js";
 
 
@@ -26,11 +26,15 @@ export class IKPin extends Saveable {
     _positionPriority = 1;
 
     _twistHeading = new notVector3(0,0,1);
-    _scaled_twist_heading = new Vec3(0,0,1);
-    _swingHeading = new notVector3(0,1,0);
-    _scaled_swing_heading = new Vec3(0,1,0);
+    _normalized_twist_heading = new Vec3(0,0,1);
+    _scaled_twist_heading = new Vec3(0,0, 0.5);    
 
-    normed_weights = [0.5,.25,.5,.25];
+    //_ortho_scaled_twist_heading = new Vec3(0.25,0,0);
+
+    _swingHeading = new notVector3(0,1,0);
+    _normalized_swing_heading = new Vec3(0,1,0);
+    _scaled_swing_heading = new Vec3(0,0.5,0);
+    
     pinModListeners = [];
     
     static XDir = 0b001;
@@ -137,22 +141,38 @@ export class IKPin extends Saveable {
         this.target_threejs.quaternion.__originalOnchange = this.target_threejs.quaternion._onChangeCallback; 
         this.target_threejs.quaternion._onChangeCallback = ()=>{this.target_threejs.quaternion.__originalOnchange(); this.targetNode.mimic()}; 
         this._swingHeading.setOnChange((x, y, z)=>{
-            this._scaled_swing_heading.setComponents(x, y, z);
-            this._scaled_swing_heading.normalize().mult(this.swingPriority*this.forBone.height*0.5); //divide by 2 to account for the fact that the solver doubles these up
+            this._normalized_swing_heading.setComponents(x, y, z).normalize();
+            this._scaled_swing_heading.set(this._normalized_swing_heading);
+            this._scaled_swing_heading.mult(this.swingPriority*this.forBone.height*0.5); //divide by 2 to account for the fact that the solver doubles these up
             this._swingMagnitude = this._scaled_swing_heading.mag(); //used to quickly determine if the solver should even bother
+            //this._updateOrthoTwist();
         });
         this._twistHeading.setOnChange((x, y, z)=>{
-            this._scaled_twist_heading.setComponents(x, y, z);
-            this._scaled_twist_heading.normalize().mult(this.twistPriority*this.forBone.height*0.5); //divide by 2 to account for the fact that the solver doubles these up
+            this._normalized_twist_heading.setComponents(x, y, z).normalize();
+            this._scaled_twist_heading.set(this._normalized_twist_heading);
+            this._scaled_twist_heading.mult(this.twistPriority*this.forBone.height*0.5); //divide by 4 to account for the fact that the solver doubles this up and adds an orthogonal component
             this._twistMagnitude = this._scaled_twist_heading.mag(); //used to quickly determine if the solver should even bother
+            //this._updateOrthoTwist();
         });
+
+        this.targetNode.onProject = () => {
+            this.position._x =this.target_threejs.position.x;
+            this.position._y =this.target_threejs.position.y;
+            this.position._z =this.target_threejs.position.z;
+
+            this.scale._x =this.target_threejs.scale.x;
+            this.scale._y =this.target_threejs.scale.y;
+            this.scale._z =this.target_threejs.scale.z;
+        }
 
         if(this.forBone.height == 0) 
             this.setPSTPriorities(1,0,0);
         else 
             this.setPSTPriorities(1, 1, 1);
 
-        return new Proxy(this, {
+        
+        
+        this.prox = new Proxy(this, {
             get: (target, prop, receiver) => {
                 // Check if property exists on IKPin; if not, forward to target_threejs
                 if (prop in target || typeof target[prop] === 'function') {
@@ -177,7 +197,7 @@ export class IKPin extends Saveable {
                 return result;
             }
         });
-
+        return this; 
         
     }
 
@@ -215,6 +235,11 @@ export class IKPin extends Saveable {
         this.enabled = false;
         this.forBone?.parentArmature?.regenerateShadowSkeleton();
     }
+
+    /*_updateOrthoTwist() {
+        this._normalized_swing_heading.cross(this._normalized_twist_heading, this._ortho_scaled_twist_heading);
+        this._ortho_scaled_twist_heading.normalize().mult(this.twistPriority*this.forBone.height*0.25);
+    }*/
 
     /**
      * register a listener to be notified whenever the parameters of this pin are modified.

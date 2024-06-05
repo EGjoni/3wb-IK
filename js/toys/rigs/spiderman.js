@@ -6,15 +6,21 @@ export function initSpidey(armature) {
     //fix weird heel orientation that came with the model
     armature.r_heel.rotateX(-Math.PI / 2);
     armature.l_heel.rotateX(-Math.PI / 2);
-    armature.c_hips.parent.position.z = armature.c_hips.position.y - 0.01;
-    armature.c_hips.position.y = 0.01;
+    armature.c_hips.rotateX(-Math.PI / 2);
+    armature.c_hips.parent.position.y = armature.c_hips.position.z;
+    armature.c_hips.parent.updateMatrix();
+    armature.c_hips.position.z = 0;
+    armature.c_hips.parent.height = armature.c_hips.position.y;
+    /*armature.c_hips.parent.position.z = armature.c_hips.position.z - 0.1;
+    armature.c_hips.position.z = 0.1;
     armature.c_hips.updateMatrix();
-    armature.c_hips.parent.trackedBy.mimic();
+    armature.c_hips.parent.updateMatrix();
+    armature.c_hips.parent?.trackedBy.mimic();
     //armature.c_hips.trackedBy.mimic();
-    armature.c_hips.parent.height = 0.01;
-    armature.c_hips.height = armature.bonetags['spine001_08'].position.y;
-    initSpideyPins(armature);
+    armature.c_hips.parent.height = 0.1;
+    armature.c_hips.height = armature.bonetags['spine001_08'].position.z;*/
     initSpideyConstraints(armature);
+    initSpideyPins(armature);
     armature.regenerateShadowSkeleton();
 }
 
@@ -44,14 +50,15 @@ export function initSpideyShortcuts(armature) {
     armature.l_foot = armature.bonetags["footL_059"];
     armature.l_toes = armature.bonetags["toeL_061"];
     armature.c_hips = armature.bonetags['spine_07'];
-    armature.c_hips.height = 1; //give it some more hip control.
+
     armature.r_heel = armature.bonetags['heel02R_056'];
     armature.l_heel = armature.bonetags['heel02L_062'];
+    //armature.inferOrientations();
 }
 
 export function initSpideyPins(armature) {
     let spine_07_pin = new IKPin(armature.bonetags["spine_07"]);
-    spine_07_pin.setPinWeight(0.5000);
+    spine_07_pin.setPinWeight(1);
     spine_07_pin.setPSTPriorities(1.0000, 1.0000, 1.0000);
     spine_07_pin.setInfluenceOpacity(0.2000);
     spine_07_pin.target_threejs.position.set(-0.23642553723725812, 0.9715177445808654, 4.568018425935675);
@@ -155,139 +162,149 @@ export function initSpideyPins(armature) {
 
 export function initSpideyConstraints(armature) {
 
-    new Kusudama(armature.bonetags["spine001_08"],  "Kusudama for spine001_08", armature.stablePool)
+
+    new Kusudama(armature.bonetags["spine001_08"], "Kusudama for spine001_08", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 1, 0), 0.70285);
 
     new Twist(armature.bonetags["spine001_08"], 0.84121, undefined,
         armature.stablePool.any_Vec3(0.03266493816063039, 0.9876899856707104, 0.15297546868944029),
-        0, 
-        "Twist for spine001_08", armature.stablePool);
+        0,
+        "Twist for spine001_08",
+        armature.stablePool).setPainfulness(0.51501).setStockholmRate(0.50253);
 
-    new Rest(armature.bonetags["spine001_08"], 
-        "Rest for spine001_08_on_bone_spine001_08_on_bone_spine001_08_on_bone_spine001_08", armature.stablePool).setPainfulness(0.36971)
-        .setStockholmRate(0.50897).boneFrameRest.setLocalOrientationTo(
+    new Rest(armature.bonetags["spine001_08"],
+        "Rest-0_on_bone_spine001_08", armature.stablePool).setPainfulness(0.36971)
+        .setStockholmRate(0.50897).disable()
+        .boneFrameRest.setLocalOrientationTo(
             new Rot(0.9984716567172718, -0.04682551355669378, 0.005688487418513466, -0.028798665304282343));
 
-    new Kusudama(armature.bonetags["spine002_09"],  "Kusudama for spine002_09", armature.stablePool)
-        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 1, 0), 1);
+    new Kusudama(armature.bonetags["spine002_09"], "Kusudama for spine002_09", armature.stablePool)
+        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 1, 0), 0.60515);
 
-    new Twist(armature.bonetags["spine002_09"], 1.95607, undefined,
+    new Twist(armature.bonetags["spine002_09"], 1.09266, undefined,
         armature.stablePool.any_Vec3(3.895379812138896e-8, 0.9831896981103287, -0.18258701358453502),
-        0, 
-        "Twist for spine002_09", armature.stablePool);
+        0,
+        "Twist for spine002_09",
+        armature.stablePool).setPainfulness(0.49422).setStockholmRate(0.49006);
 
-    new Rest(armature.bonetags["spine002_09"], 
-        "Rest for spine002_09_on_bone_spine002_09_on_bone_spine002_09_on_bone_spine002_09", armature.stablePool).setPainfulness(0.39667)
-        .setStockholmRate(0.59431)
+    new Rest(armature.bonetags["spine002_09"],
+        "Rest-0_on_bone_spine002_09", armature.stablePool).setPainfulness(0.39667)
+        .setStockholmRate(0.59431).disable()
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.9904212423665456, -0.11159212931151584, -0.08111519196898995, 0.0057693133616082085));
 
-    new Kusudama(armature.bonetags["spine003_010"],  "Kusudama for c_chest", armature.stablePool)
-        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 1, 0), 0.70285);
+    new Kusudama(armature.bonetags["spine003_010"], "Kusudama for c_chest", armature.stablePool)
+        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 1, 0), 0.58555);
 
-    new Twist(armature.bonetags["spine003_010"], 2.42176, undefined,
-        armature.stablePool.any_Vec3(2.2172618973788814e-8, 0.9974388759579416, -0.07152404300483499),
+    new Twist(armature.bonetags["spine003_010"], 1.35405, undefined,
+        armature.stablePool.any_Vec3(2.2172618973788817e-8, 0.9974388759579418, -0.071524043004835),
         0,
-        "Twist for c_chest", armature.stablePool);
+        "Twist for c_chest",
+        armature.stablePool).setPainfulness(0.45886).setStockholmRate(0.46926);
 
-    new Rest(armature.bonetags["spine003_010"], 
-        "Rest for spine003_010_on_bone_spine003_010_on_bone_spine003_010_on_bone_spine003_010", armature.stablePool).setPainfulness(0.5)
-        .setStockholmRate(0.49549)
+    new Rest(armature.bonetags["spine003_010"],
+        "Rest-0_on_bone_spine003_010", armature.stablePool).setPainfulness(0.5)
+        .setStockholmRate(0.49549).disable()
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.9999963997396956, 0.0006486532066778814, -0.0026037947358919147, 0.0000031045145093635297));
 
-    new Kusudama(armature.bonetags["spine004_011"],  "Kusudama for c_lower_neck", armature.stablePool)
-        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 0.9052689523516538, -0.42483893878520484), 0.02547).parentKusudama
+    new Kusudama(armature.bonetags["spine004_011"], "Kusudama for c_lower_neck", armature.stablePool)
+        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.017469440921533547, 0.9711428953251928, 0.23785772111346515), 0.02358).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0, 0.48165869849727655, 0.8763588866223185), 0.02547);
 
     new Twist(armature.bonetags["spine004_011"], 0.262, undefined,
         armature.stablePool.any_Vec3(-1.4924975765388679e-7, 0.7798242609044459, 0.6259985000819192),
         0,
-        "Twist for c_lower_neck", armature.stablePool);
+        "Twist for c_lower_neck",
+        armature.stablePool).setPainfulness(0.47342).setStockholmRate(0.47341);
 
-    new Rest(armature.bonetags["spine004_011"], 
-        "Rest for spine004_011_on_bone_spine004_011_on_bone_spine004_011_on_bone_spine004_011_on_bone_spine004_011", armature.stablePool).setPainfulness(0.5)
-        .setStockholmRate(0.82116)
+    new Rest(armature.bonetags["spine004_011"],
+        "Rest-0_on_bone_spine004_011", armature.stablePool).setPainfulness(0.5)
+        .setStockholmRate(0.82116).disable()
         .boneFrameRest.setLocalOrientationTo(
-            new Rot(0.9866762338722724, -0.16243775845379102, 0.005505668948073598, -0.007326100570635181));
+            new Rot(0.9866762338722722, -0.162437758453791, 0.005505668948073597, -0.007326100570635179));
 
-    new Kusudama(armature.bonetags["spine005_012"],  "Kusudama for c_neck", armature.stablePool)
-        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 1, 0), 0.2936);
+    new Kusudama(armature.bonetags["spine005_012"], "Kusudama for c_neck", armature.stablePool)
+        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.004460771958119392, 0.8602311688912108, -0.5098847297003501), 0.19348).parentKusudama
+        .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0, 1, 0), 0.2936);
 
     new Twist(armature.bonetags["spine005_012"], 1.21177, undefined,
         armature.stablePool.any_Vec3(-0.002777533058617893, 0.9963848455796898, -0.08490892066942271),
         0,
-        "Twist for J_Bip_C_Neck", armature.stablePool);
+        "Twist for J_Bip_C_Neck",
+        armature.stablePool).setPainfulness(0.50877).setStockholmRate(0.51917);
 
-    new Rest(armature.bonetags["spine005_012"], 
-        "Rest for spine005_012_on_bone_spine005_012_on_bone_spine005_012_on_bone_spine005_012_on_bone_spine005_012_on_bone_spine005_012", armature.stablePool).setPainfulness(0.5)
-        .setStockholmRate(0.49998)
+    new Rest(armature.bonetags["spine005_012"],
+        "Rest-0_on_bone_spine005_012", armature.stablePool).setPainfulness(0.5)
+        .setStockholmRate(0.49998).disable()
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.9999331144116137, 0.001936309034164334, -0.011402515682644757, 0.000006820702104287273));
 
-
-    new Kusudama(armature.bonetags["head_013"],  "Kusudama for c_head", armature.stablePool)
+    new Kusudama(armature.bonetags["head_013"], "Kusudama for c_head", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 0.9150314007508981, -0.40338261692820787), 0.11014).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0, 1, 0), 0.11014).parentKusudama
         .addLimitConeAtIndex(2, armature.stablePool.any_Vec3(0, 0.9922037621385162, 0.12462621874298734), 0.11014);
 
     new Twist(armature.bonetags["head_013"], 0.84121, undefined,
-        armature.stablePool.any_Vec3(-0.024010528784923227, 0.9985679350988987, -0.047807671976267056),
+        armature.stablePool.any_Vec3(-0.02401052878492322, 0.9985679350988985, -0.04780767197626704),
         0,
-        "Twist for c_head", armature.stablePool);
+        "Twist for c_head",
+        armature.stablePool).setPainfulness(0.98507).setStockholmRate(0.99964);
 
-    new Rest(armature.bonetags["head_013"], 
-        "Rest for head_013_on_bone_head_013_on_bone_head_013_on_bone_head_013_on_bone_head_013_on_bone_head_013", armature.stablePool).setPainfulness(0.49998)
-        .setStockholmRate(0.47977)
+    new Rest(armature.bonetags["head_013"],
+        "Rest-0_on_bone_head_013", armature.stablePool).setPainfulness(0.49998)
+        .setStockholmRate(0.47977).disable()
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.9857944461732232, 0.16559481843885981, -0.02796548789950936, -0.002365900837221805));
 
-
-    new Kusudama(armature.bonetags["shoulderR_014"],  "Kusudama for r_shoulder", armature.stablePool)
+    new Kusudama(armature.bonetags["shoulderR_014"], "Kusudama for r_shoulder", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.9234034614556849, 0.3796470573239536, -0.05651689337642643), 0.49822);
 
     new Twist(armature.bonetags["shoulderR_014"], 0.29084, undefined,
         armature.stablePool.any_Vec3(-0.9370660588579662, 0.20872939670328772, -0.2798914794849611),
         5.173925690745474,
-        "Twist for r_shoulder", armature.stablePool);
+        "Twist for r_shoulder",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["shoulderR_014"], 
-        "Rest for shoulderR_014_on_bone_shoulderR_014_on_bone_shoulderR_014_on_bone_shoulderR_014_on_bone_shoulderR_014", armature.stablePool).setPainfulness(0.69314)
+    new Rest(armature.bonetags["shoulderR_014"],
+        "Rest-0_on_bone_shoulderR_014", armature.stablePool).setPainfulness(0.69314)
         .setStockholmRate(0.85485)
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.5606789915577123, 0.524590446036241, -0.4133412901599029, -0.4894822879351933));
 
-    new Kusudama(armature.bonetags["upper_armR_015"],  "Kusudama for r_upper_arm", armature.stablePool)
+    new Kusudama(armature.bonetags["upper_armR_015"], "Kusudama for r_upper_arm", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.8186474380747609, 0.5382146563145274, -0.2003530779944895), 0.92).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.38672979272511104, 0.6016821382145863, -0.6988695672100168), 1.02743);
 
     new Twist(armature.bonetags["upper_armR_015"], 1.43, undefined,
         armature.stablePool.any_Vec3(-0.1931672404212556, 0.6649372752097965, -0.7214879328613947),
         1.6389929939502001,
-        "Twist for r_upper_arm", armature.stablePool);
+        "Twist for r_upper_arm",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["upper_armR_015"], 
-        "Rest for upper_armR_015_on_bone_upper_armR_015_on_bone_upper_armR_015_on_bone_upper_armR_015", armature.stablePool).setPainfulness(0.5449)
+    new Rest(armature.bonetags["upper_armR_015"],
+        "Rest-0_on_bone_upper_armR_015", armature.stablePool).setPainfulness(0.5449)
         .setStockholmRate(0.89303)
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.5638651833497202, 0.4064607799340044, 0.6517313592928767, -0.3034665133020226));
 
-    new Kusudama(armature.bonetags["forearmR_016"],  "kusudama for r_lower_arm", armature.stablePool)
+    new Kusudama(armature.bonetags["forearmR_016"], "kusudama for r_lower_arm", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.16618547478186, 0.98097177500336, 0.10038308930435011), 0.05).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.20139736184234602, -0.8191561141602648, 0.5370496841790323), 0.05);
 
     new Twist(armature.bonetags["forearmR_016"], 3, undefined,
         armature.stablePool.any_Vec3(0.14084953614985116, 0.9465392690011472, 0.2902151278020251),
         0.12536180249386888,
-        "Twist for r_lower_arm", armature.stablePool);
+        "Twist for r_lower_arm",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["forearmR_016"], 
-        "Rest for forearmR_016_on_bone_forearmR_016_on_bone_forearmR_016", armature.stablePool).setPainfulness(0.49774)
+    new Rest(armature.bonetags["forearmR_016"],
+        "Rest-0_on_bone_forearmR_016", armature.stablePool).setPainfulness(0.49774)
         .setStockholmRate(0.50447)
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.8200181130268782, -0.5668719761481581, -0.0763331938899079, 0.01999251050483447));
 
-    new Kusudama(armature.bonetags["handR_017"],  "Kusudama for r_hand", armature.stablePool)
+    new Kusudama(armature.bonetags["handR_017"], "Kusudama for r_hand", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.9959155399431063, -0.005407659407767647, -0.09012765679612746), 0.11014).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0, 1, 0), 0.45589).parentKusudama
         .addLimitConeAtIndex(2, armature.stablePool.any_Vec3(-0.8236815497888856, 0.5651134455268308, -0.046856143910624294), 0.13131);
@@ -295,59 +312,63 @@ export function initSpideyConstraints(armature) {
     new Twist(armature.bonetags["handR_017"], 0.40374, undefined,
         armature.stablePool.any_Vec3(-0.2288399053062053, 0.9725239003646371, 0.04277336740310202),
         6.1926262035523365,
-        "Twist for r_hand", armature.stablePool);
+        "Twist for r_hand",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["handR_017"], 
-        "Rest for handR_017_on_bone_handR_017_on_bone_handR_017", armature.stablePool).setPainfulness(0.5)
+    new Rest(armature.bonetags["handR_017"],
+        "Rest-0_on_bone_handR_017", armature.stablePool).setPainfulness(0.5)
         .setStockholmRate(0.49549)
         .boneFrameRest.setLocalOrientationTo(
-            new Rot(0.9881927822592214, 0.12822902294374391, 0.07466886864153756, -0.03816939639900814));
+            new Rot(0.9881927822592216, 0.12822902294374394, 0.07466886864153757, -0.03816939639900815));
 
-    new Kusudama(armature.bonetags["shoulderL_033"],  "Kusudama for l_shoulder", armature.stablePool)
+    new Kusudama(armature.bonetags["shoulderL_033"], "Kusudama for l_shoulder", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.9234034614556849, 0.3796470573239536, -0.05651689337642643), 0.49822);
 
     new Twist(armature.bonetags["shoulderL_033"], 0.38963, undefined,
         armature.stablePool.any_Vec3(0.9370661889569261, 0.2087292950201291, -0.2798911197486311),
         1.1092598334783703,
-        "Twist for l_shoulder", armature.stablePool);
+        "Twist for l_shoulder",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["shoulderL_033"], 
-        "Rest for shoulderL_033_on_bone_shoulderL_033_on_bone_shoulderL_033_on_bone_shoulderL_033_on_bone_shoulderL_033", armature.stablePool).setPainfulness(0.69314)
+    new Rest(armature.bonetags["shoulderL_033"],
+        "Rest-0_on_bone_shoulderL_033", armature.stablePool).setPainfulness(0.69314)
         .setStockholmRate(0.85485)
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.5606789915577123, 0.524590446036241, 0.4133412901599029, 0.4894822879351933));
 
-    new Kusudama(armature.bonetags["upper_armL_034"],  "Kusudama for l_arm_upp", armature.stablePool)
+    new Kusudama(armature.bonetags["upper_armL_034"], "Kusudama for l_arm_upp", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.8186474380747609, 0.5382146563145274, -0.2003530779944895), 0.92).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.38672979272511104, 0.6016821382145863, -0.6988695672100168), 1.02743);
 
     new Twist(armature.bonetags["upper_armL_034"], 1.43, undefined,
         armature.stablePool.any_Vec3(0.19316721280701363, 0.6649370926058562, -0.7214881085459698),
         4.644192267206221,
-        "Twist for l_arm_upp", armature.stablePool);
+        "Twist for l_arm_upp",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["upper_armL_034"], 
-        "Rest for upper_armL_034_on_bone_upper_armL_034_on_bone_upper_armL_034_on_bone_upper_armL_034", armature.stablePool).setPainfulness(0.39891)
+    new Rest(armature.bonetags["upper_armL_034"],
+        "Rest-0_on_bone_upper_armL_034", armature.stablePool).setPainfulness(0.39891)
         .setStockholmRate(0.43934)
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.5638651833497202, 0.4064607799340044, -0.6517313592928767, 0.3034665133020226));
 
-    new Kusudama(armature.bonetags["forearmL_035"],  "Kusudama for l_lower_arm", armature.stablePool)
+    new Kusudama(armature.bonetags["forearmL_035"], "Kusudama for l_lower_arm", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.16618547478186, 0.98097177500336, 0.10038308930435011), 0.05).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.20139736184234602, -0.8191561141602648, 0.5370496841790323), 0.05);
 
     new Twist(armature.bonetags["forearmL_035"], 3, undefined,
         armature.stablePool.any_Vec3(-0.14084948568621355, 0.9465393040346164, 0.2902150380314456),
         6.157823438805987,
-        "Twist for l_lower_arm", armature.stablePool);
+        "Twist for l_lower_arm",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["forearmL_035"], 
-        "Rest for forearmL_035_on_bone_forearmL_035_on_bone_forearmL_035", armature.stablePool).setPainfulness(0.49774)
+    new Rest(armature.bonetags["forearmL_035"],
+        "Rest-0_on_bone_forearmL_035", armature.stablePool).setPainfulness(0.49774)
         .setStockholmRate(0.50447)
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.8200181130268782, -0.5668719761481581, -0.0763331938899079, -0.01999251050483447));
 
-    new Kusudama(armature.bonetags["handL_036"],  "Kusudama for l_hand", armature.stablePool)
+    new Kusudama(armature.bonetags["handL_036"], "Kusudama for l_hand", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.9959155399431063, -0.005407659407767647, -0.09012765679612746), 0.11014).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0, 1, 0), 0.45589).parentKusudama
         .addLimitConeAtIndex(2, armature.stablePool.any_Vec3(0.8236815497888856, 0.5651134455268308, -0.046856143910624294), 0.13131);
@@ -355,13 +376,14 @@ export function initSpideyConstraints(armature) {
     new Twist(armature.bonetags["handL_036"], 0.20617, undefined,
         armature.stablePool.any_Vec3(0.2288389556851379, 0.972524122184945, 0.04277340446279551),
         0.09055904598202616,
-        "Twist for l_hand", armature.stablePool);
+        "Twist for l_hand",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["handL_036"], 
-        "Rest for handL_036_on_bone_handL_036_on_bone_handL_036", armature.stablePool).setPainfulness(0.5)
+    new Rest(armature.bonetags["handL_036"],
+        "Rest-0_on_bone_handL_036", armature.stablePool).setPainfulness(0.5)
         .setStockholmRate(0.49549)
         .boneFrameRest.setLocalOrientationTo(
-            new Rot(0.9881927822592214, 0.12822902294374391, 0.07466886864153756, 0.03816939639900814));
+            new Rot(0.9881927822592216, 0.12822902294374394, 0.07466886864153757, 0.03816939639900815));
 
     new Kusudama(armature.bonetags["thighR_052"], "Kusudama for r_leg_upp", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.014892771401686659, -0.06417385102644547, 0.9978276014444644), 1.09799).parentKusudama
@@ -371,55 +393,59 @@ export function initSpideyConstraints(armature) {
     new Twist(armature.bonetags["thighR_052"], 1.85728, undefined,
         armature.stablePool.any_Vec3(-0.16431468592523216, -0.7820391941069262, 0.6011783286761772),
         0.5713840621698555,
-        "Twist for r_leg_upp", armature.stablePool);
+        "Twist for r_leg_upp",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["thighR_052"], 
-        "Rest for thighR_052_on_bone_thighR_052_on_bone_thighR_052_on_bone_thighR_052", armature.stablePool).setPainfulness(0.18)
-        .setStockholmRate(0.49549)
+    new Rest(armature.bonetags["thighR_052"],
+        "Rest-0_on_bone_thighR_052", armature.stablePool).setPainfulness(0.49006)
+        .setStockholmRate(0.49214)
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.4162025843253697, -0.8283367222054085, 0.0780558284280931, -0.36679827030029377));
 
-    new Kusudama(armature.bonetags["shinR_053"],  "Kusudama for r_leg_lower", armature.stablePool)
-        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.0769067586253415, -0.9469168519976967, 0.312143918538414), 0.1).parentKusudama
+    new Kusudama(armature.bonetags["shinR_053"], "Kusudama for r_leg_lower", armature.stablePool)
+        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.07690675862534149, -0.9469168519976965, 0.31214391853841394), 0.1).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.07185886843191087, 0.9971602774691865, 0.022531845580433706), 0.12425);
 
     new Twist(armature.bonetags["shinR_053"], 0.34729, undefined,
         armature.stablePool.any_Vec3(-0.022972587367652612, -0.08066099212852779, 0.9964768259114094),
         0.14704423846165482,
-        "Twist for r_leg_lower", armature.stablePool);
+        "Twist for r_leg_lower",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["shinR_053"], 
-        "Rest for shinR_053_on_bone_shinR_053_on_bone_shinR_053", armature.stablePool).setPainfulness(0.5)
+    new Rest(armature.bonetags["shinR_053"],
+        "Rest-0_on_bone_shinR_053", armature.stablePool).setPainfulness(0.5)
         .setStockholmRate(0.491)
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.6761577047209142, -0.7341356715561713, 0.04980232630781775, 0.03708506963245671));
 
-    new Kusudama(armature.bonetags["footR_054"],  "Kusudama for r_foot", armature.stablePool)
+    new Kusudama(armature.bonetags["footR_054"], "Kusudama for r_foot", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 0.5256465905493974, -0.8507030397522946), 0.75224).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.047340884224711915, -0.29343155472142435, -0.9548071864908592), 0.47);
 
     new Twist(armature.bonetags["footR_054"], 0.78672, undefined,
-        armature.stablePool.any_Vec3(0.4549196789984788, 0.46351401984243357, -0.7603965012211912),
+        armature.stablePool.any_Vec3(0.4549196789984789, 0.4635140198424337, -0.7603965012211914),
         0.5276532006468533,
-        "Twist for r_foot", armature.stablePool);
+        "Twist for r_foot",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["footR_054"], 
-        "Rest for footR_054_on_bone_footR_054_on_bone_footR_054", armature.stablePool).setPainfulness(0.5)
+    new Rest(armature.bonetags["footR_054"],
+        "Rest-0_on_bone_footR_054", armature.stablePool).setPainfulness(0.5)
         .setStockholmRate(0.4079)
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.7304635443844361, 0.6663802840906733, 0.14952340271849687, 0.0017548048446571574));
 
-    new Kusudama(armature.bonetags["toeR_055"],  "Kusudama for toeR_055", armature.stablePool)
+    new Kusudama(armature.bonetags["toeR_055"], "Kusudama for toeR_055", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(-0.02349273366215407, -0.09127689545495776, -0.995548401546195), 0.1).parentKusudama
-        .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.1659521606610461, 0.9270718400120874, 0.3361512811644971), 0.1);
+        .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(0.16595216066104612, 0.9270718400120876, 0.33615128116449716), 0.1);
 
     new Twist(armature.bonetags["toeR_055"], 1.06701, undefined,
-        armature.stablePool.any_Vec3(0.1527067176216259, 0.8846859847327725, -0.44046721422897545),
-        3.093676205955352, 
-        "Twist for toeR_055", armature.stablePool);
+        armature.stablePool.any_Vec3(0.15270671762162588, 0.8846859847327723, -0.44046721422897533),
+        3.093676205955352,
+        "Twist for toeR_055",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["toeR_055"], 
-        "Rest for toeR_055_on_bone_toeR_055_on_bone_toeR_055", armature.stablePool).setPainfulness(0.5)
+    new Rest(armature.bonetags["toeR_055"],
+        "Rest-0_on_bone_toeR_055", armature.stablePool).setPainfulness(0.5)
         .setStockholmRate(0.491)
         .boneFrameRest.setLocalOrientationTo(
             new Rot(-0.003650933762032213, -0.08047435459875212, -0.9790419997730844, 0.18704895512913045));
@@ -430,54 +456,65 @@ export function initSpideyConstraints(armature) {
         .addLimitConeAtIndex(2, armature.stablePool.any_Vec3(0.28105419447131186, -0.9405433403409607, -0.1907531512461847), 0.74518);
 
     new Twist(armature.bonetags["thighL_057"], 1.80083, undefined,
-        armature.stablePool.any_Vec3(0.07994702412592922, -0.8259102555475127, 0.5581045808043955),
+        armature.stablePool.any_Vec3(0.07994702412592923, -0.825910255547513, 0.5581045808043956),
         5.9358332056669125,
-        "Twist for l_leg_upp", armature.stablePool);
+        "Twist for l_leg_upp",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["thighL_057"], 
-        "Rest for thighL_057_on_bone_thighL_057_on_bone_thighL_057_on_bone_thighL_057", armature.stablePool).setPainfulness(0.18)
-        .setStockholmRate(0.49549)
+    new Rest(armature.bonetags["thighL_057"],
+        "Rest-0_on_bone_thighL_057", armature.stablePool).setPainfulness(0.47342)
+        .setStockholmRate(0.47758)
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.4373218612077899, -0.8779742397689779, -0.015025054984347048, 0.19412643234386484));
 
-    new Kusudama(armature.bonetags["shinL_058"],  "Kusudama for l_leg_lower", armature.stablePool)
-        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.0769067586253415, -0.9469168519976967, 0.312143918538414), 0.1).parentKusudama
+    new Kusudama(armature.bonetags["shinL_058"], "Kusudama for l_leg_lower", armature.stablePool)
+        .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.07690675862534149, -0.9469168519976965, 0.31214391853841394), 0.1).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.07185886843191087, 0.9971602774691865, 0.022531845580433706), 0.12425);
 
     new Twist(armature.bonetags["shinL_058"], 0.34729, undefined,
         armature.stablePool.any_Vec3(-0.014621313263945862, 0.186054353391157, 0.9824306564753749),
         6.161227381495821,
-        "Twist for l_leg_lower", armature.stablePool);
+        "Twist for l_leg_lower",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["shinL_058"], 
-        "Rest for shinL_058_on_bone_shinL_058_on_bone_shinL_058", armature.stablePool).setPainfulness(0.5)
+    new Rest(armature.bonetags["shinL_058"],
+        "Rest-0_on_bone_shinL_058", armature.stablePool).setPainfulness(0.5)
         .setStockholmRate(0.50447)
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.7201725815710638, -0.6905153712241814, -0.050333426071133516, -0.04479420806691718));
 
-    new Kusudama(armature.bonetags["footL_059"],  "Kusudama for l_foot", armature.stablePool)
+    new Kusudama(armature.bonetags["footL_059"], "Kusudama for l_foot", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 0.5256465905493974, -0.8507030397522946), 0.75224).parentKusudama
         .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.047340884224711915, -0.29343155472142435, -0.9548071864908592), 0.47);
 
     new Twist(armature.bonetags["footL_059"], 0.78672, undefined,
-        armature.stablePool.any_Vec3(-0.17178970460967813, 0.6114593225819802, -0.7724026114777871),
+        armature.stablePool.any_Vec3(-0.17178970460967816, 0.6114593225819803, -0.7724026114777873),
         6.252441065186171,
-        "Twist for l_foot", armature.stablePool);
+        "Twist for l_foot",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Kusudama(armature.bonetags["toeL_061"],  "Kusudama for toeL_061", armature.stablePool)
+    new Kusudama(armature.bonetags["toeL_061"], "Kusudama for toeL_061", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0.02349273366215407, -0.09127689545495776, -0.995548401546195), 0.1).parentKusudama
-        .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.1659521606610461, 0.9270718400120874, 0.3361512811644971), 0.1);
+        .addLimitConeAtIndex(1, armature.stablePool.any_Vec3(-0.16595216066104612, 0.9270718400120876, 0.33615128116449716), 0.1);
 
     new Twist(armature.bonetags["toeL_061"], 1.06, undefined,
-        armature.stablePool.any_Vec3(0.1527067176216259, 0.8846859847327725, -0.44046721422897545),
-        3.093676205955352, 
-        "Twist for toeL_061", armature.stablePool);
+        armature.stablePool.any_Vec3(0.15270671762162588, 0.8846859847327723, -0.44046721422897533),
+        3.093676205955352,
+        "Twist for toeL_061",
+        armature.stablePool).setPainfulness(0).setStockholmRate(0);
 
-    new Rest(armature.bonetags["toeL_061"], 
-        "Rest for toeL_061_on_bone_toeL_061_on_bone_toeL_061", armature.stablePool).setPainfulness(0.5)
+    new Rest(armature.bonetags["toeL_061"],
+        "Rest-0_on_bone_toeL_061", armature.stablePool).setPainfulness(0.5)
         .setStockholmRate(0.491)
         .boneFrameRest.setLocalOrientationTo(
             new Rot(0.0565727766870359, -0.08209347921764229, -0.9745988959571698, 0.20054219906774481));
+
+    new Rest(armature.bonetags["spine_07"],
+        "Rest-0_on_bone_spine_07", armature.stablePool).setPainfulness(0.95948)
+        .setStockholmRate(0.99162).disable()
+        .boneFrameRest.setLocalOrientationTo(
+            new Rot(0.9888114030314727, 0.02041145838631558, -0.1477111677839966, -0.004097866928307208));
+
 
 
 }

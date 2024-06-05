@@ -35,8 +35,10 @@
         import { IKSkelHelper } from "./js/EWBIK/helpers/IKSkelHelper.js"; 
         import { getMeshDescendants, initEnvironment, addToEnvironment, setShadowD, setLuminosity} from "enviro";
         import { initWolfGirl, initSneakPinPose, addElbowSuggestions} from "./js/toys/rigs/wolfgirl_vrm.js";
-        import {initSpidey} from "./js/toys/rigs/spiderman.js";
+        import {initSpidey, initSpideyPins} from "./js/toys/rigs/spiderman.js";
        
+        window.sceneStuff = sceneStuff;
+        window.initSpideyPins = initSpideyPins;
         window.OrbitControls = OrbitControls;
         window.TransformControls = TransformControls;
         window.IKPin = IKPin;
@@ -56,7 +58,7 @@
 
         let selectedBone = null;
         let rootBone = null;
-        let armature = null;
+        window.armature = null;
         window.frameCount = 0;
         window.instances = [];
 
@@ -95,8 +97,8 @@
             setShadowD(5);
             sceneStuff.snapToFocus(armatures[0].c_head, 5);
             armature.solve();
-            render();
             helper.setDisplayLayers();
+            animate();
         }
 
         async function loadModel(position, loadId, onloaded) {
@@ -108,6 +110,8 @@
             );
             let startAt = sceneStuff.findBone(glb.scene).parent;
             scene.add(startAt);
+            startAt.rotateX(Math.PI/2);
+            startAt.rotateY(-Math.PI);
             window.updateParseStream("Scene instaniated...", loadId);
             return ikify(startAt, loadId);
         }
@@ -117,36 +121,16 @@
             window.updateParseStream("Building IK Armature...", loadId);
             let armature = new EWBIK(inst);
             armature.armatureNode.forceOrthonormality = false;
-            armature.armatureObj3d.rotateX(Math.PI/2);
-            armature.armatureObj3d.rotateY(-Math.PI);
             armature.armatureNode.mimic();
 
             window.armatures.push(armature);
             window.updateParseStream("Adding constraints...", loadId);
             initSpidey(armature);
             window.updateParseStream("UI stuff...", loadId);
-            
-           
             return armature;
         }
 
-        function initBoneConstraints(armature) {
-            
-
-            for (let b of armature.bones) {
-                if (b.parent instanceof THREE.Bone) {
-                    if (b.getConstraint() != null) {
-                        b.getConstraint().layers?.set(1);
-                        continue;
-                    }
-                    let restconst = new Rest(b);
-                    
-                }
-            }
-        }
-
-       
-
+        
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
@@ -163,7 +147,7 @@
 
 
         init();
-        animate();
+        ///animate();
     </script>
 </body>
 

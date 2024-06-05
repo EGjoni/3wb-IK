@@ -247,17 +247,17 @@ export function updateSceneStuff(armaHelpers = window.armatureHelpers) {
     for (let ah of armaHelpers) {
         window.armHelpersMap.set(ah.armature, ah);
     }
-    updateGlobalPinLists(armaHelpers);
-    updateGlobalBoneLists(armaHelpers);
+    updateGlobalPinLists();
+    updateGlobalBoneLists();
     window?.setDOMtoInternalState();
 }
 
 
-export function updateGlobalPinLists(armaHelpers) {
+export function updateGlobalPinLists() {
     pinHelperList.splice(0, pinHelperList.length);
     pinsList.splice(0, pinsList.length);
     targetsMeshList.splice(0, targetsMeshList.length);
-    for (let ah of armaHelpers) {
+    for (let [a, ah] of armHelpersMap) {
         for (let [p, ph] of ah.pinHelpers) {
             pinHelperList.push(ph);
             pinsList.push(p);
@@ -267,10 +267,10 @@ export function updateGlobalPinLists(armaHelpers) {
     }
 }
 
-export function updateGlobalBoneLists(armaHelpers) {
+export function updateGlobalBoneLists() {
     boneMeshList.splice(0, boneMeshList.length);
     boneList.splice(0, boneList.length);
-    for (let ah of armaHelpers) {
+    for (let [a, ah] of armHelpersMap) {
         for (let bm of ah.boneMeshList) {
             boneMeshList.push(bm);
             boneList.push(bm.forBone);
@@ -294,23 +294,27 @@ export function defuckify(obj) {
 
 window.doSolve = async function(bone = null, interacted = false, preSolveCallback = null, inSolveCallback = null, solveCompleteCallback = null) {
     /**@type {[EWBIK]} */
-    let armatures = window.armatures ?? null;
+    let armatures = window.armatures == null || window.armatures.length == 0 ? [window.armature] : window.armatures;
     if (bone != null) armatures = [bone.parentArmature];
-
+    let awaiting = [];
     //we loop through all armatures in the scene because some of the demos have multiple armatures interacting with one another
     for (let a of armatures) {
-        if (autoSolve) {
-            /*null indicates we're solving the whole armature*/
-            await a.solve(null, undefined, 0, null, undefined, undefined, window.frameCount);
-        }
-        else if (interacted && interactionSolve) {
-            await a.solve(bone, undefined, 0, null, undefined, undefined, window.frameCount);// callbacks);
-        } else if (interacted && !interactionSolve) {
-            //this is just to display the amount of pain a bone is in when interacting without solving.
-            await a.noOp(bone);
-        }        
+        awaiting.push(solveArmature(a));
     }
+    await Promise.all(awaiting);
+}
 
+export async function solveArmature(a, interacted = false, preSolveCallback = null, inSolveCallback = null, solveCompleteCallback = null) {
+    if (autoSolve) {
+        /*null indicates we're solving the whole armature*/
+        await a.solve(null, undefined, 0, null, undefined, undefined, window.frameCount);
+    }
+    else if (interacted && interactionSolve) {
+        await a.solve(bone, undefined, 0, null, undefined, undefined, window.frameCount);// callbacks);
+    } else if (interacted && !interactionSolve) {
+        //this is just to display the amount of pain a bone is in when interacting without solving.
+        await a.noOp(bone);
+    } 
 }
 
 

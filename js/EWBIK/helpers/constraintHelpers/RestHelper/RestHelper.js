@@ -24,11 +24,11 @@ export class RestHelper extends ConstraintHelper {
         let r = this.forRest.boneFrameRest.localMBasis.rotation.toArray();
         let result = `new Rest(${parname}, 
                 "Rest-${this.forRest.instanceNumber}_on_bone_${tag}", armature.stablePool).setPainfulness(${this.forRest.getPainfulness()})
-                .setStockholmRate(${this.forRest.getStockholmRate()})
-                .boneFrameRest.setLocalOrientationTo(
-                    new Rot(${r[0]}, ${r[1]}, ${r[2]}, ${r[3]}))`;
+                .setStockholmRate(${this.forRest.getStockholmRate()})`;
         if(this.forRest.enabled == false) 
-            result += '.disable()';
+            result += '.disable()';   
+        result += `.boneFrameRest.setLocalOrientationTo(
+                    new Rot(${r[0]}, ${r[1]}, ${r[2]}, ${r[3]}))`;
         result+=';\n';
         if(this.forRest.autoGen) result = '';
         if(doPrint) 
