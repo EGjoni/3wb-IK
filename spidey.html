@@ -42,7 +42,7 @@
         window.OrbitControls = OrbitControls;
         window.TransformControls = TransformControls;
         window.IKPin = IKPin;
-        window.autoSolve = true;
+        window.autoSolve = false;
 
 
         let camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -96,7 +96,7 @@
             );
             setShadowD(5);
             sceneStuff.snapToFocus(armatures[0].c_head, 5);
-            armature.solve();
+            //armature.solve();
             helper.setDisplayLayers();
             animate();
         }
@@ -108,10 +108,12 @@
                 (xhr, otherParam) => { window.updateLoadStream(xhr, loadId) },
                 (error) => { window.notifyStreamError(error, loadId) }
             );
-            let startAt = sceneStuff.findBone(glb.scene).parent;
+            let rbone = sceneStuff.findBone(glb.scene)
+            let startAt = rbone.parent;
             scene.add(startAt);
             startAt.rotateX(Math.PI/2);
             startAt.rotateY(-Math.PI);
+            rbone.rotateX(Math.PI/2);
             window.updateParseStream("Scene instaniated...", loadId);
             return ikify(startAt, loadId);
         }

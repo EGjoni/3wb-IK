@@ -403,10 +403,11 @@ export class Limiting extends Constraint {
      * @param {IKNode} currentBoneOrientation the node corresponding to the physical bone orientation, should be a child of @param currentState. 
      * @param {Rot} desiredRotation the local space rotation you are attempting to apply to currentState.
      * @param {Rot} storeIn an optional Rot object in which to store the result 
+     * @param {Function} resultOverride an optional callback function which takes as an argument the rectified rotation as per this contraint, and returns a rotation this constraint should suggest instead. This is useful primarily for making further corrections, or for rejecting both a desired and suggested rotation altogether in favor of an identity rotation
      * @param {WorkingBone} calledBy a reference to the current solver's internal representation of the bone, in case you're maing a custom constraint that goes deep into the rabbit hole
      * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring it to.
      */
-    getAcceptableRotation (currentState, currentBoneOrientation, desiredRotation, storeIn, calledBy = null) {
+    getAcceptableRotation (currentState, currentBoneOrientation, desiredRotation, storeIn, resultOverride = (suggestedRot)=>{return suggestedRot}, calledBy = null) {
         /**to be overriden by child classes */
         return desiredRotation; 
     }
@@ -657,10 +658,11 @@ export class LimitingReturnful extends Returnful {
      * @param {IKNode} currentBoneOrientation the node corresponding to the physical bone orientation, should be a child of @param currentState. 
      * @param {Rot} desiredRotation the local space rotation you are attempting to apply to currentState.
      * @param {Rot} storeIn an optional Rot object in which to store the result
+     * @param {Function} resultOverride an optional callback function which takes as an argument the rectified rotation as per this contraint, and returns a rotation this constraint should suggest instead. This is useful primarily for making further corrections, or for rejecting both a desired and suggested rotation altogether in favor of an identity rotation
      * @param {WorkingBone} calledBy a reference to the current solver's internal representation of the bone, in case you're maing a custom constraint that goes deep into the rabbit hole
      * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring it to.
      */
-    getAcceptableRotation (currentState, currentBoneOrientation, desiredRotation, calledBy = null) {
+    getAcceptableRotation (currentState, currentBoneOrientation, desiredRotation, storeIn, resultOverride = (suggestedRot)=>{return suggestedRot}, calledBy = null) {
         /**to be overriden by child classes */
         return desiredRotation; 
     }
@@ -1035,18 +1037,29 @@ export class ConstraintStack extends LimitingReturnful {
         return false;
     }
 
-    getAcceptableRotation(currentState, currentBoneOrientation, desiredRotation, calledBy, cosHalfReturnfullness, angleReturnfullness) {
+     /**
+     * @param {IKNode} currentState the node to constrain, ideally prior to any potentially objectionable rotation being applied. 
+     * @param {IKNode} currentBoneOrientation the node corresponding to the physical bone orientation, should be a child of @param currentState. 
+     * @param {Rot} desiredRotation the local space rotation you are attempting to apply to currentState.
+     * @param {Rot} storeIn an optional Rot object in which to store the result
+     * @param {Function} resultOverride an optional callback function which takes as an argument the rectified rotation as per this contraint, and returns a rotation this constraint should suggest instead. This is useful primarily for making further corrections, or for rejecting both a desired and suggested rotation altogether in favor of an identity rotation.
+     * @param {WorkingBone} calledBy a reference to the current solver's internal representation of the bone, in case you're maing a custom constraint that goes deep into the rabbit hole
+     * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring it to.
+     */
+    getAcceptableRotation(currentState, currentBoneOrientation, desiredRotation, storeIn, resultOverride = (suggestedRot, storeIn)=>{return suggestedRot}, calledBy) {
         if(this.limiting_array.length == 1) { //skip the rigamarole when there's no point
-            return this.limiting_array[0].getAcceptableRotation(currentState, currentBoneOrientation, desiredRotation, calledBy, cosHalfReturnfullness, angleReturnfullness);
+            let resRot = this.limiting_array[0].getAcceptableRotation(currentState, currentBoneOrientation, desiredRotation, storeIn, resultOverride, calledBy);
+            return resultOverride(resRot, resRot);
         } else {
             this.lastLimitState.localMBasis.approxAdoptValues(currentState.localMBasis);
             this.lastLimitBoneOrientation.localMBasis.approxAdoptValues(currentBoneOrientation.localMBasis);
             
-            let accumulatedRot = this.tempOutRot.setFromRot(desiredRotation);
+            let accumulatedRot = storeIn.setFromRot(desiredRotation);
             let c = null;
             for(let i = 0;  i<this.limiting_array.length; i++) {
                 c = this.limiting_array[i];
-                let allowableRot = c.getAcceptableRotation(this.lastLimitState, this.lastLimitBoneOrientation, accumulatedRot, calledBy);
+                let allowableRot = c.getAcceptableRotation(this.lastLimitState, this.lastLimitBoneOrientation, accumulatedRot, this.tempRot1, resultOverride, calledBy);
+                resultOverride(allowableRot, allowableRot);
                 accumulatedRot.setFromRot(allowableRot);
             }
             return accumulatedRot;

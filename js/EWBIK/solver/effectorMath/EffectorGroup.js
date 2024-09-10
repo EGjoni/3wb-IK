@@ -10,6 +10,7 @@ export class EffectorGroup {
     boneSet = null;
     deduped = false;
     effectorSet = null;
+    startDeviation = Infinity;
 
     constructor(effectorList) {
         this.effectors = effectorList;

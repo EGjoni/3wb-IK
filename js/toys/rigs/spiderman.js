@@ -166,7 +166,7 @@ export function initSpideyConstraints(armature) {
     new Kusudama(armature.bonetags["spine001_08"], "Kusudama for spine001_08", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 1, 0), 0.70285);
 
-    new Twist(armature.bonetags["spine001_08"], 0.84121, undefined,
+    new Twist(armature.bonetags["spine001_08"], 0.4, undefined,
         armature.stablePool.any_Vec3(0.03266493816063039, 0.9876899856707104, 0.15297546868944029),
         0,
         "Twist for spine001_08",
@@ -181,7 +181,7 @@ export function initSpideyConstraints(armature) {
     new Kusudama(armature.bonetags["spine002_09"], "Kusudama for spine002_09", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 1, 0), 0.60515);
 
-    new Twist(armature.bonetags["spine002_09"], 1.09266, undefined,
+    new Twist(armature.bonetags["spine002_09"], 0.4, undefined,
         armature.stablePool.any_Vec3(3.895379812138896e-8, 0.9831896981103287, -0.18258701358453502),
         0,
         "Twist for spine002_09",
@@ -196,7 +196,7 @@ export function initSpideyConstraints(armature) {
     new Kusudama(armature.bonetags["spine003_010"], "Kusudama for c_chest", armature.stablePool)
         .addLimitConeAtIndex(0, armature.stablePool.any_Vec3(0, 1, 0), 0.58555);
 
-    new Twist(armature.bonetags["spine003_010"], 1.35405, undefined,
+    new Twist(armature.bonetags["spine003_010"], 0.4, undefined,
         armature.stablePool.any_Vec3(2.2172618973788817e-8, 0.9974388759579418, -0.071524043004835),
         0,
         "Twist for c_chest",

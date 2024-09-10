@@ -238,11 +238,17 @@ export class WorkingBone {
 
     fastUpdateOptimalRotationToPinnedDescendants(translate, skipConstraints, currentIteration) {
         
-        let length = this.updateHeadings(!translate);
+        let runAgain = true;
+        let runCount = 0;
+        while (runAgain && runCount < 2) {
+            runCount++;
+            let length = this.updateHeadings(!translate);
         //this.updateTipHeadings(!translate);
 
         //this.maybeRecordHeadings(this.chain.targetHeadings, this.chain.tipHeadings, currentIteration, 0);
-        this.updateOptimalRotationToPinnedDescendants(translate, length);
+            runAgain = this.updateOptimalRotationToPinnedDescendants(translate, length, skipConstraints);
+            
+        }
         if (this.springy && !skipConstraints) {
             this.constraint?.markDirty();
         }
@@ -254,8 +260,10 @@ export class WorkingBone {
         }*/
     }
 
+    //subConstrainedUpdated()
+
     /**returns the rotation that was applied (in local space), but does indeed apply it*/
-    updateOptimalRotationToPinnedDescendants(translate, length) {
+    updateOptimalRotationToPinnedDescendants(translate, length, skipConstraints) {
         let desiredRotation = this.chain.qcpConverger.weightedSuperpose(this.chain.tipHeadings, this.chain.targetHeadings, this.chain.weightArray, length, translate);
         desiredRotation.shorten();
 
@@ -265,7 +273,7 @@ export class WorkingBone {
         //this.localDesiredRotby.clampToCosHalfAngle(this.cosHalfDampen);
         //let reglobalizedRot = desiredRotation;
         
-        return this.localDesiredRotby;
+        return this.hardConstrain(translate, skipConstraints);
     }
 
     /**
@@ -274,7 +282,7 @@ export class WorkingBone {
      * @param {Number} weighDown number from 0-1 approximately indicating how much to interpolate between the new rotation and the identity rotation. This should be 1 (indicating no interpolation) when solving from tip to root.
      * When solving from root to tip, this should be some function of (the depth of the current bone)*(1-(currentIteration/totalIterations))
      */
-    hardConstrain(translate, weighDown=1, skipConstraints) {
+    hardConstrain(translate, skipConstraints) {
         
         if (skipConstraints || !this.hasLimitingConstraint) {
             if (translate) {
@@ -283,8 +291,10 @@ export class WorkingBone {
             }
             this.localDesiredRotby.clampToCosHalfAngle(this.cosHalfDampen);
             this.simLocalAxes.rotateByLocal(this.localDesiredRotby);
+            this.effectorGroup.startDeviation = this.effectorGroup.measureDeviation(this.chain.tipHeadings, this.chain.targetHeadings, this.effectorGroup.pairCount);
+            return false;
         } else if (this.hasLimitingConstraint) {
-            let startDeviation = this.effectorGroup.measureDeviation(this.chain.tipHeadings, this.chain.targetHeadings, this.effectorGroup.pairCount);
+            //let startDeviation = this.effectorGroup.measureDeviation(this.chain.tipHeadings, this.chain.targetHeadings, this.effectorGroup.pairCount);
             let rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, this.localDesiredRotby, this._tempRot);
             rotBy.clampToCosHalfAngle(this.cosHalfDampen);
             rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, rotBy, this._acceptableRotBy);
@@ -304,10 +314,12 @@ export class WorkingBone {
             reglobalizedRot = this.simLocalAxes.globalMBasis.rotation.getRotationTo(reglobalizedRot, reglobalizedRot);
             this.effectorGroup.applyRotToHeadings(reglobalizedRot, this.chain.tipHeadings, this.effectorGroup.pairCount);
             let endDeviation = this.effectorGroup.measureDeviation(this.chain.tipHeadings, this.chain.targetHeadings, this.effectorGroup.pairCount);
-            if(endDeviation/startDeviation > 1.000001) {
-                console.log(`${this.forBone.name} failed by: ${endDeviation - startDeviation}`)
+            this.simLocalAxes.rotateByLocal(rotBy);
+            if(endDeviation <= this.effectorGroup.startDeviation * 1.0001) {
+                this.effectorGroup.startDeviation = endDeviation; 
+                return false;//console.log(`${this.forBone.name} failed by: ${endDeviation - startDeviation}`)
             } else {
-                this.simLocalAxes.rotateByLocal(rotBy);
+                return true;
             }
             
         }
@@ -324,7 +336,7 @@ export class WorkingBone {
             //this.localDesiredRotby.clampToCosHalfAngle(boneDamp);
             this.simLocalAxes.rotateByLocal(this.localDesiredRotby);
         } else if (this.hasLimitingConstraint) {
-            let startDeviation = this.effectorGroup.measureDeviation(this.chain.tipHeadings, this.chain.targetHeadings, this.effectorGroup.pairCount);
+            this.startDeviation = this.effectorGroup.measureDeviation(this.chain.tipHeadings, this.chain.targetHeadings, this.effectorGroup.pairCount);
             let rotBy = this.constraint.getAcceptableRotation(this.simLocalAxes, this.simBoneAxes, this.localDesiredRotby, this._acceptableRotBy);
             /*rotBy.w *= weighDown;
             rotBy.x *= weighDown; 
@@ -337,16 +349,22 @@ export class WorkingBone {
             if (1 - Math.abs(rotBy.applyConjugateToRot(this.localDesiredRotby, this._tempRot).w) > 1e-6) {
                 this.currentHardPain = 1; //violating a hard constraint should be maximally painful.
             }
-            let reglobalizedRot = this.simLocalAxes.localMBasis.rotation.applyAfter(rotBy, this._tempRot);
-            this.simLocalAxes.parent.globalMBasis.rotation.applyAfter(reglobalizedRot, reglobalizedRot);
-            reglobalizedRot = this.simLocalAxes.globalMBasis.rotation.getRotationTo(reglobalizedRot, reglobalizedRot);
-            this.effectorGroup.applyRotToHeadings(reglobalizedRot, this.chain.tipHeadings, this.effectorGroup.pairCount);
-            let endDeviation = this.effectorGroup.measureDeviation(this.chain.tipHeadings, this.chain.targetHeadings, this.effectorGroup.pairCount);
-            if(startDeviation < endDeviation) {
-                console.log("bad time!")
-            } else {
-                this.simLocalAxes.rotateByLocal(rotBy);
-            }
+            
+        }
+    }
+
+    acceptanceCriteria(suggestedRot, storeIn) {
+        let reglobalizedRot = this.simLocalAxes.localMBasis.rotation.applyAfter(rotBy, suggestedRot);
+        this.simLocalAxes.parent.globalMBasis.rotation.applyAfter(reglobalizedRot, reglobalizedRot);
+        reglobalizedRot = this.simLocalAxes.globalMBasis.rotation.getRotationTo(reglobalizedRot, reglobalizedRot);
+        this.effectorGroup.applyRotToHeadings(reglobalizedRot, this.chain.tipHeadings, this.effectorGroup.pairCount);
+        let endDeviation = this.effectorGroup.measureDeviation(this.chain.tipHeadings, this.chain.targetHeadings, this.effectorGroup.pairCount);
+        if(startDeviation < endDeviation) {
+            console.log("bad time!");
+            this.pullbacks_pending = 0;
+        } else {
+            this.simLocalAxes.rotateByLocal(rotBy);
+            this.pullbacks_pending = 1;
         }
     }
 
@@ -444,10 +462,11 @@ export class WorkingBone {
      * @param {Number} completionT iteration / totalIterations  (this is to avoid recomputing each time)
      */
     pullBackTowardAllowableRegion(iteration, totalIterations, completionT, callbacks) {
-        if (this.springy && iteration >= this.kickInStep) {          
+        if (this.springy && iteration >= this.kickInStep && this.pullbacks_pending > 0) {          
             this.updatePain(iteration, totalIterations, completionT); //this function already calls getClampedPreferenceRotation
             this.simLocalAxes.rotateByLocal(this.lastReturnfulResult.clampedRotation);
             this.constraint.markDirty(); 
+            this.pullbacks_pending--;
         }
     }
 
