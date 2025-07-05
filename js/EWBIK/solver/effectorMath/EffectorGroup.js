@@ -11,6 +11,7 @@ export class EffectorGroup {
     deduped = false;
     effectorSet = null;
     startDeviation = Infinity;
+    endDeviation = Infinity;
 
     constructor(effectorList) {
         this.effectors = effectorList;

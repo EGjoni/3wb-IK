@@ -84,6 +84,7 @@ const stackInnards = `
     <option value = "rest"> Rest Orientation </option>
     <option value = "stack"> Subconstraints </option>
 </select> <button class="add-constraint">Add</button>
+<label class="visibility-force"><input type="checkbox">Keep visible</label>
 </div>
 <div class="subconstraints"> 
 </div>`
@@ -362,7 +363,7 @@ window.makeUI = async function () {
         <div>Name: <span id="bone-name"></span> (<span id="internal-bone-name"></span>)</div>
         <form class="stiffness-form slider-container">
             <label for="stiffness">Stiffness:</label>
-            <input type="range" id="stiffness" name="stiffness" min="0" max="4.1" step="0.0001" value="0">
+            <input type="range" id="stiffness" name="stiffness" min="0" max="1" step="0.0001" value="0">
             <output class="un-exp-output">0</output>
         </form>
         <fieldset>
@@ -794,8 +795,8 @@ window.makeUI = async function () {
         if(contextBone == null) return;
         const unexp = event.target.parentNode.qs('.un-exp-output');
         let sliderVal = parseFloat(event.target.value);
-        let logged = 0.46*Math.PI*Math.log(sliderVal/(Math.PI*0.64));
-        contextBone.setStiffness(Math.min(Math.max(-10, logged),1));
+        //let logged = 0.46*Math.PI*Math.log(sliderVal/(Math.PI*0.64));
+        contextBone.setStiffness(sliderVal);//Math.min(Math.max(-10, logged),1));
         unexp.value = window.contextBone.getStiffness().toFixed(4);
         window.doSolve(contextBone, true);
     });
@@ -1098,11 +1099,12 @@ window.makeUI = async function () {
         if (c instanceof Returnful) {
             contains = createGenericReturnfulConfig(c);
             result.appendChild(contains);
-        }
+        }        
         result.refresh = () => {
             enabled.checked = c.isEnabled();
             contains?.refresh();
         }
+        
         return result;
     }
 
@@ -1271,6 +1273,7 @@ window.makeUI = async function () {
             }
             oldRefresh();
         }
+        
         return genericContainer;
     }
 
@@ -1308,8 +1311,7 @@ window.makeUI = async function () {
             <label class="slider-label" for="base">Base: </label>
             <output name="base-result" for="base" class="slider-value base-output">0.1</output>
         </form>
-    </fieldset>'
-    `;
+    </fieldset>`;
 
     window.createTwistDomElem = function (forTwist) {
         let wrapper = createGenericConstraintContainer(forTwist);
@@ -1347,6 +1349,8 @@ window.makeUI = async function () {
             range.qs(".slider").value = forTwist.getRange();
             rangeOutput.value = forTwist.getRange();
         }
+
+        forTwist.registerModListener(result.refresh);
         
         return wrapper;
     }
@@ -1448,7 +1452,7 @@ window.updateInfoPanel = async function (item) {
         D.byid("bone-name").innerText = window.contextBone.name;
         D.byid("internal-bone-name").innerText = window.contextBone.ikd;
         let base = window.contextBone.getStiffness();
-        D.byid("stiffness").value =  Math.PI*0.64 * Math.pow(Math.E, base/Math.PI/0.46);
+        D.byid("stiffness").value =  base;//Math.PI*0.64 * Math.pow(Math.E, base/Math.PI/0.46);
         D.byid('stiffness').parentNode.qs('.un-exp-output').value = window.contextBone.getStiffness().toFixed(4);
         constraintStackControls.remove();
     }
@@ -1686,7 +1690,15 @@ document.getElementById(window.autoSolve ? 'auto-solve' : 'interaction-solve').c
 function pinsVisible(){return window.allPinsToggle.checked};
 function constraintsVisible(){return window.constraintToggle.checked};
 function contextConstraintCondition(forConstraint, forBone) {
-    return (forConstraint == window?.contextConstraint || forConstraint?.parentConstraint == window?.contextConstraint) && constraintsVisible();
+    
+    if(forBone != null) {
+        let constraintDom = getMakeConstraint_DOMElem(forBone.getConstraint());
+        let alwaysShow = constraintDom?.querySelector(".visibility-force input")?.checked;
+        if(alwaysShow) return true;
+        
+        return (forConstraint == window?.contextConstraint 
+            || forConstraint?.parentConstraint == window?.contextConstraint) && constraintsVisible();
+    } else return false;
 }
 function contextPinCondition (forPin, forBone) {return pinsVisible();}
 export {

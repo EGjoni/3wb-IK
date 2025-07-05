@@ -148,17 +148,17 @@
             b1.add(b2);
             b2.add(b3);
             scene.add(root);
-            window.armature = new EWBIK(root); 
-            window.b1Twist = new Twist(b1).setRange(0.3);
-            window.b2Twist = new Twist(b2).setRange(0.3);
-            window.b3Twist = new Twist(b3).setRange(0.1);
+            window.armature = new EWBIK(root);             
             window.kusub1 = new Kusudama(b1);
             kusub1.addLimitConeAtIndex(0, new Vec3(0,1,0), 0.1);
             window.kusub2 = new Kusudama(b2);
             kusub2.addLimitConeAtIndex(0, new Vec3(0,1,0), 0.1);
-
             window.kusub3 = new Kusudama(b3);
             kusub3.addLimitConeAtIndex(0, new Vec3(0,1,0), 0.1);
+
+            window.b1Twist = new Twist(b1).setRange(0.3);
+            window.b2Twist = new Twist(b2).setRange(0.3);
+            window.b3Twist = new Twist(b3).setRange(0.1);
             
             
             sceneStuff.initControls(window.renderer);

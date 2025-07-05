@@ -112,7 +112,7 @@ export class Effector {
         return conflictList;
     }
 
-    /**update the list containing how visible this pin is to each ancestor bone 
+    /**update the list containing how visible this effector is to each of its ancestor bone 
      * @return {boolean} indicates if the need for regeneration was detected. If this returns true, some topological change has occurred without a proper call to regenerateShadowSkeleton.
      * TODO: decide if it's reasonable to automatically regenerate the shadow skeleton on mismatch detection, or whether to throw an error instead
      */

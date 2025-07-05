@@ -20,6 +20,7 @@ export class ArmatureEffectors {
     targetHeadings = [];
     effectorPool = null;
     poolSize = 0;
+    /**@type {Effector[]}*/
     all_effectors = [];
     effectorGroups = [];
     activeShadowSkel = null;

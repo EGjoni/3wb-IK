@@ -206,13 +206,18 @@ export class Constraint extends Saveable {
     remove() {
         this.lastCalled = 0;
         if(this.parentConstraint != null) {
-            this.parentConstraint.remove(this);
+            let removeFrom = this.parentConstraint;
             this.parentConstraint = null;
+            if(removeFrom != null)
+                removeFrom.remove(this);
+            
         }
         else if(this.forBone != null) {
             this.invalidateCache();
             this.invalidatePain();
-            this.forBone.constraint = null;
+            if(this.forBone.getConstraint() == this) {
+                this.forBone.constraint = null;
+            }
         }
         this.forBone = null;
         this.constraintUpdateNotification(this);
@@ -408,8 +413,8 @@ export class Limiting extends Constraint {
      * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring it to.
      */
     getAcceptableRotation (currentState, currentBoneOrientation, desiredRotation, storeIn, resultOverride = (suggestedRot)=>{return suggestedRot}, calledBy = null) {
-        /**to be overriden by child classes */
-        return desiredRotation; 
+        /**this result is expected to be overriden by child classes. So by default we just return whatever was desired as being acceptable*/
+        return storeIn.setFromRot(desiredRotation); 
     }
 
     getBasisAxes() {
@@ -794,6 +799,7 @@ export class ConstraintStack extends LimitingReturnful {
     remove(...subconstraints) {
         for(let c of subconstraints) {
             this.allconstraints.delete(c);
+            c.parentConstraint = null;
             c.remove();
         }
         this.allconstraints_array = [...this.allconstraints];
@@ -1038,13 +1044,15 @@ export class ConstraintStack extends LimitingReturnful {
     }
 
      /**
+      * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring currentState to.
+      * 
      * @param {IKNode} currentState the node to constrain, ideally prior to any potentially objectionable rotation being applied. 
      * @param {IKNode} currentBoneOrientation the node corresponding to the physical bone orientation, should be a child of @param currentState. 
      * @param {Rot} desiredRotation the local space rotation you are attempting to apply to currentState.
      * @param {Rot} storeIn an optional Rot object in which to store the result
      * @param {Function} resultOverride an optional callback function which takes as an argument the rectified rotation as per this contraint, and returns a rotation this constraint should suggest instead. This is useful primarily for making further corrections, or for rejecting both a desired and suggested rotation altogether in favor of an identity rotation.
      * @param {WorkingBone} calledBy a reference to the current solver's internal representation of the bone, in case you're maing a custom constraint that goes deep into the rabbit hole
-     * @return {Rot} the rotation which, if applied to currentState, would bring it as close as this constraint allows to the orientation that applying desired rotation would bring it to.
+     * 
      */
     getAcceptableRotation(currentState, currentBoneOrientation, desiredRotation, storeIn, resultOverride = (suggestedRot, storeIn)=>{return suggestedRot}, calledBy) {
         if(this.limiting_array.length == 1) { //skip the rigamarole when there's no point

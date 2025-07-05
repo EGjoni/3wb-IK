@@ -36,7 +36,7 @@
         import { Rest } from "./js/EWBIK/betterbones/Constraints/Rest/Rest.js";
         import {getMeshDescendants, initEnvironment} from "enviro";
         //import { Rest } from "./js/EWBIK/betterbones/Constraints/Rest/Rest.js"
-        addDebugFuncs(THREE);
+        //addDebugFuncs(THREE);
         window.Rest = Rest;
         window.OrbitControls = OrbitControls;
         window.TransformControls = TransformControls;
@@ -149,7 +149,7 @@
 
         async function animate() {
             requestAnimationFrame(animate);
-            if(incrFrame) frameCount++;
+            //if(incrFrame) frameCount++;
             doSolve();
             render();
         }

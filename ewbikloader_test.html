@@ -222,7 +222,7 @@
             for (let b of armature.bones) {
                 if (b.parent instanceof THREE.Bone) {
                     //let restconst = new Rest(b);
-                    let twistConst = new Twist(b, 1.1).setVisibilityCondition((twist, bone) => { return bone == window.contextBone });
+                    let twistConst = new Twist(b, 1.1);
                     twistConst.layers.set(window.boneLayer);
                     /*if (b == armature.bonetags["J_Bip_C_Head"]) {
                         restconst.setPainfulness(0.7);

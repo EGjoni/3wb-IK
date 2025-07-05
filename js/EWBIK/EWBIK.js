@@ -124,6 +124,7 @@ export class EWBIK extends Saveable {
     /**@type {Promise} prevents calling the solver before it's done*/
     activeSolve = null;
     pendingSolve = null;
+    queuedSolve = null;
     lastFrameNumber = 0;
     /**
      * Whether to treat the last end effector as if it has max orientation priorities.
@@ -227,7 +228,7 @@ export class EWBIK extends Saveable {
         this.rootBone.getStiffness = function () {
             return 1.0;
         }
-    this.rootBone.setStiffness = function (val) {
+        this.rootBone.setStiffness = function (val) {
             this.stiffness = val;
             this.getStiffness = function () { return this.stiffness; }
             this.setStiffness = function (val) {
@@ -340,34 +341,31 @@ export class EWBIK extends Saveable {
      * this will cause any solve requests beyond the first one in a frame to be ignored. Please be mindful that -- due to the limits of javascript 64-bit integers,
      * any animation running at 120 frames per second will integer overflow after approximately 4.9 million years, and so this feature is not appropriate for animations intended to run longer than that.
      */
-    async solve(bone, iterations = this.getDefaultIterations(), stabilizingPasses = this.getDefaultStabilizingPassCount(), stopOn = null, onComplete = (wb) => this.solveCompleted(wb), debug_callbacks, frameNumber = this.lastFrameNumber + 1) {
+    async solve(bone, iterations = this.getDefaultIterations(), stabilizingPasses = this.getDefaultStabilizingPassCount(), stopOn = null, onComplete = (wb) => this.solveCompleted(wb), debug_callbacks, frameNumber = null) {
         let literal = stopOn != null;
         debug_callbacks?.__initStep((callme, wb) => this.stepWiseUpdateResult(callme, wb));
         if (stopOn != null) bone = stopOn;
-        this.pendingSolve = async function (armature, bone, literal, iterations, stabilizingPasses, onComplete, debug_callbacks) {
-            return await armature.__solve(bone, literal, iterations, stabilizingPasses, onComplete, debug_callbacks);
-        };
-        if (this.lastFrameNumber >= frameNumber) {
-            this.activeSolve = this.pendingSolve;
-        }
-        if (this.pendingSolve != null) {
-            const doSolve = this.pendingSolve;
-            this.pendingSolve = null;
-            if (this.shadowSkel == null) this.regenerateShadowSkeleton(true);
-            if (bone == null || this.shadowSkel.isSolvable(bone)) {
-                if (frameNumber > this.lastFrameNumber) {
-                    this.stablePool.finalize(); //just to be sure.
-                    this.activeSolve = doSolve(this, bone, literal, iterations, stabilizingPasses, onComplete, debug_callbacks);
-                }
-                this.lastFrameNumber = frameNumber;
+        
+        const doSolve = async (armature, bone, literal, iterations, stabilizingPasses, onComplete, debug_callbacks, frameNumber) => {
+            let result = null;
+            if (armature.shadowSkel == null) armature.regenerateShadowSkeleton(true);
+            
+            if (bone == null || armature.shadowSkel.isSolvable(bone)) {
+                armature.stablePool.finalize();
+                result = await armature.__solve(bone, literal, iterations, stabilizingPasses, onComplete, debug_callbacks);
+                armature.pendingSolve = null;
+                if(frameNumber != null) this.lastFrameNumber = frameNumber;
             }
-            this.activeSolve = null;
+            return result;
+        };
+       
+        this.queuedSolve = async () => {await doSolve(this, bone, literal, iterations, stabilizingPasses, onComplete, debug_callbacks, frameNumber)};
+        if(this.pendingSolve == null) {
+            if(frameNumber == null || this.lastFrameNumber < frameNumber) {
+                this.pendingSolve = this.queuedSolve();            
+            }
         }
-        if (this.activeSolve != null) {
-            return await this.activeSolve;
-        } else {
-            return;
-        }
+        return this.pendingSolve;
     }
 
     noOp(fromBone = null, iterations = this.getDefaultIterations(), callbacks) {
@@ -407,7 +405,7 @@ export class EWBIK extends Saveable {
 
         this.shadowSkel.solve(
             iterations == -1 ? this.getDefaultIterations() : iterations,
-            stabilizingPasses == -2 ? this.getDefaultStabilizingPassCount : stabilizingPasses,
+            stabilizingPasses == -2 ? this.getDefaultStabilizingPassCount() : stabilizingPasses,
             bone,
             literal,
             onComplete,
@@ -512,7 +510,7 @@ export class EWBIK extends Saveable {
     regenerateShadowSkeleton(force) {
         this.dirtyShadowSkel = true;
         console.log('dirty');
-        this.pendingSolve = null; //invalidate any pending solve
+        this.queuedSolve = null; //invalidate any pending solve
         if (force)
             this._regenerateShadowSkeleton();
         this.dirtyRate = true;
@@ -723,7 +721,7 @@ export class EWBIK extends Saveable {
      */
     updateShadowSkelRateInfo(force = false, iterations = this.previousIterations) {
         this.dirtyRate = true;
-        this.pendingSolve = null; //invalidate any pending solve
+        this.queuedSolve = null; //invalidate any pending solve
         if (force) this._updateShadowSkelRateInfo(iterations);
     }
 
@@ -846,7 +844,7 @@ export class EWBIK extends Saveable {
         callbacks?.__initStep((callme, wb) => this.stepWiseUpdateResult(callme, wb));
         let doalign = (wb) => this.solveCompleted(wb);
 
-        this.shadowSkel.solveToTargets(this.getDefaultStabilizingPassCount(), endOnIndex, doalign, callbacks, ds.currentIteration);
+        this.shadowSkel.solveToTargets(this.getDefaultStabilizingPassCount(), true, endOnIndex, doalign, callbacks, ds.currentIteration);
         this.stablePool.releaseTemp();
         this.volatilePool.releaseTemp();
         console.log('solve#: ' + ds.solveCalls + '\t:: itr :: ' + ds.currentIteration);

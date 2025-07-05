@@ -125,7 +125,7 @@ export class Rest extends Returnful {
         if(this.enabled == false) 
             result += '.disable()';
         result+=';\n';
-        if(this.forRest.autoGen) result = '';
+        if(this.autoGen) result = '';
         if(doPrint) 
             console.log(result);
         else return result;

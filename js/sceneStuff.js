@@ -292,26 +292,27 @@ export function defuckify(obj) {
     });
 }
 
-window.doSolve = async function(bone = null, interacted = false, preSolveCallback = null, inSolveCallback = null, solveCompleteCallback = null) {
+window.doSolve = async function(bone = null, interacted = false, preSolveCallback = undefined, inSolveCallback = undefined, solveCompleteCallback = undefined) {
     /**@type {[EWBIK]} */
     let armatures = window.armatures == null || window.armatures.length == 0 ? [window.armature] : window.armatures;
     if (bone != null) armatures = [bone.parentArmature];
     let awaiting = [];
     //we loop through all armatures in the scene because some of the demos have multiple armatures interacting with one another
     for (let a of armatures) {
-        awaiting.push(solveArmature(a));
+        awaiting.push(solveArmature(a, interacted, preSolveCallback, inSolveCallback, solveCompleteCallback));
     }
     await Promise.all(awaiting);
 }
 
-export async function solveArmature(a, interacted = false, preSolveCallback = null, inSolveCallback = null, solveCompleteCallback = null) {
+export async function solveArmature(a, interacted = false, preSolveCallback = undefined, inSolveCallback = undefined, solveCompleteCallback = undefined) {
     if (autoSolve) {
         /*null indicates we're solving the whole armature*/
-        await a.solve(null, undefined, 0, null, undefined, undefined, window.frameCount);
+        await a.solve(null, undefined, undefined, null, undefined, undefined, window.frameCount);
     }
     else if (interacted && interactionSolve) {
-        await a.solve(bone, undefined, 0, null, undefined, undefined, window.frameCount);// callbacks);
+        await a.solve(bone, undefined, undefined, null, undefined, undefined, window.frameCount);// callbacks);
     } else if (interacted && !interactionSolve) {
+        let bone = selectedBone ?? selectedPin?.forBone;
         //this is just to display the amount of pain a bone is in when interacting without solving.
         await a.noOp(bone);
     } 

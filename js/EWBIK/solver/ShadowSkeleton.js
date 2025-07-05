@@ -97,8 +97,8 @@ export class ShadowSkeleton {
 
         for (let i = 0; i < iterations; i++) {
 
-            this.pullBackAll(iterations, endOnIndex, callbacks, i);
-            this.solveToTargets(stabilizationPasses, translate, endOnIndex, null, callbacks, i, i/iterations);
+            //this.pullBackAll(iterations, endOnIndex, callbacks, i);
+            this.solveToTargets(stabilizationPasses, translate, endOnIndex, i, iterations, i/iterations, null, callbacks);
         }
         this.stablePool.releaseTemp();
         this.volatilePool.releaseTemp();
@@ -220,13 +220,13 @@ export class ShadowSkeleton {
         }*/
     }
 
-    pullBackAll(iterations, endOnIndex, callbacks = null, currentIteration) {
+    pullBackAll(iterations, endOnIndex, callbacks = null, currentIteration, totalIterations, solveRatio) {
         if (this.traversalArray?.length == 0) return;
         this.updateReturnfulnessDamps(iterations);
         this.accumulatingPain = 0;
         this.maxPain = 0;
         for (let j = 0; j <= endOnIndex; j++) {
-            this.traversalArray[j].pullBackTowardAllowableRegion(currentIteration, callbacks);
+            this.traversalArray[j].pullBackTowardAllowableRegion(currentIteration, totalIterations, solveRatio, callbacks);
             let bonepain = this.traversalArray[j].getOwnPain();
             if (bonepain > this.maxPain) {
                 this.maxPain = bonepain;
@@ -253,11 +253,12 @@ export class ShadowSkeleton {
        * @param notifier a (potentially threaded) function to call every time the solver has updated the transforms for a given bone. 
        * Called once per solve, per bone. NOT once per iteration.
        */
-    solveToTargets(stabilizationPasses, doTranslate, endOnIndex, onComplete, callbacks, currentIteration, solveRatio) {
+    solveToTargets(stabilizationPasses, doTranslate, endOnIndex, 
+                    currentIteration, totalIterations, solveRatio, onComplete, callbacks) {
         let skipConstraints = stabilizationPasses < 0;
         if (doTranslate) { //special case. translate and rotate the rootbone first to minimize deviation from innermost targets
             this.traversalArray[endOnIndex].fastUpdateOptimalRotationToPinnedDescendants(doTranslate, true, currentIteration);
-            this.traversalArray[endOnIndex].hardConstrain(doTranslate, 1);
+            //this.traversalArray[endOnIndex].hardConstrain(doTranslate, 1);
         }
         //if(window.perfing) performance.mark("solveToTargetsp1 end");
         //if(window.perfing) performance.measure("solveToTargetsp1", "solveToTargetsp1 start", "solveToTargetsp1 end");  
@@ -268,14 +269,15 @@ export class ShadowSkeleton {
             const wb = this.traversalArray[j];
             //this.notifyBoneStart(j, currentIteration);
             //callbacks?.beforeIteration(wb.forBone, wb.forBone.getFrameTransform(), wb);
-            //wb.pullBackTowardAllowableRegion(currentIteration, callbacks);
+            
             if(currentIteration >= wb.kickInStep) {
+                wb.pullBackTowardAllowableRegion(currentIteration, totalIterations, solveRatio, callbacks);
                 wb.fastUpdateOptimalRotationToPinnedDescendants(doTranslate && j === endOnIndex, skipConstraints, currentIteration);
-                wb.hardConstrain(
+                /*wb.hardConstrain(
                     doTranslate && j === endOnIndex,
-                    this.lerp((1/(wb.deepestLength+1)), 1, 1-solveRatio),
-                    skipConstraints
-                );
+                    skipConstraints,
+                    this.lerp((1/(wb.deepestLength+1)), 1, 1-solveRatio)
+                );*/
             }
             let bonepain = wb.getOwnPain();
             if (bonepain > this.maxPain) {
@@ -541,6 +543,7 @@ export class ShadowSkeleton {
     debug_bone_solveToTargets(stabilizationPasses, translate, endOnIndex, onComplete, callbacks, ds = this.debugState) {
         ds.incrStep_start();
         const wb = this.traversalArray[ds.currentTraversalIndex];
+        
         if (ds.steps[ds.currentStep] == 'pullback') {
             wb.pullBackTowardAllowableRegion(ds.currentIteration, callbacks);
             ds.incrStep_end();
@@ -687,6 +690,7 @@ export class DebugState {
 
     incrStep_start(totalIterationsPerSolve = this.shadowSkel.parentArmature.defaultIterations) {
         this.currentStep++;
+        //console.log(">> doing "+ds.steps[this.currentStep]+", for bone " + this.shadowSkel.traversalArray[this.currentTraversalIndex]+ "\t iteration = "+this.currentIteration);
         if (this.completedBone || this.currentStep == 0) {
             this.incrBone_start(totalIterationsPerSolve);
         }

@@ -8,7 +8,8 @@
           "imports": {
             "three": "https://unpkg.com/three@latest/build/three.module.js",
             "orbitControls": "https://unpkg.com/three/examples/jsm/controls/OrbitControls.js",
-            "transformControls": "https://unpkg.com/three/examples/jsm/controls/TransformControls.js"
+            "transformControls": "https://unpkg.com/three/examples/jsm/controls/TransformControls.js",
+            "convexGeo": "./js/EWBIK/util/mathdump/ConvexHull.js"
           }
         }
     </script>
@@ -29,7 +30,7 @@
         import { TransformControls } from 'transformControls';
         import { OrbitControls } from 'orbitControls';
         import { EWBIK } from "./js/EWBIK/EWBIK.js";
-        import { IKNode, TrackingNode } from "./js/EWBIK/util/IKNodes.js";
+        import { IKNode, TrackingNode } from "./js/EWBIK/util/nodes/IKNodes.js";
         import { IKPin } from "./js/EWBIK/betterbones/IKpin.js";
 
         let camera, renderer;
