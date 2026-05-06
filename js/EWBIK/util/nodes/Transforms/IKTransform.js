@@ -810,7 +810,7 @@ export class IKTransform extends Saveable {
             this._xHeading.readFrom(this.composedMatrix_e, 0);
             this._xRay.p2.readFrom(this.composedMatrix_e, 0).add(this.translate); 
             this._yHeading.readFrom(this.composedMatrix_e, 4);           
-            this._xRay.p2.readFrom(this.composedMatrix_e, 4).add(this.translate);
+            this._yRay.p2.readFrom(this.composedMatrix_e, 4).add(this.translate);
             this._zHeading.readFrom(this.composedMatrix_e, 8);
             this._zRay.p2.readFrom(this.composedMatrix_e, 8).add(this.translate);
         }
